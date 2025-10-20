@@ -114,6 +114,16 @@ function ConfirmModal({ message, onConfirm, onClose, confirmText = "Sim", cancel
   );
 }
 
+// *** NOSSO NOVO PRELOADER ***
+function FullScreenPreloader() {
+  return (
+    <div className="fixed inset-0 bg-gray-100 flex items-center justify-center z-[9999]">
+      {/* Este é um spinner simples feito com Tailwind */}
+      <div className="w-16 h-16 border-4 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
+    </div>
+  );
+}
+
 
 // Componente: Tela de Login e Cadastro
 function LoginScreen({ onLogin, setUsers, addToast, addLog }) {
@@ -123,44 +133,60 @@ function LoginScreen({ onLogin, setUsers, addToast, addLog }) {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
 
+  // --- NOVA LINHA ---
+  const [isLoading, setIsLoading] = useState(false); // Para o spinner do botão
+  // --- FIM DA NOVA LINHA ---
+
   const handleAuth = (e) => {
     e.preventDefault();
     setError('');
+    setIsLoading(true); // Ativa o spinner
 
     if (isLogin) {
-      // Lógica de Login (simulada)
-      const user = MOCK_USERS.find(u => u.email === email && u.password === password);
-      if (user) {
-          if (user.status === 'pending') {
+      // Lógica de Login (simulada com setTimeout)
+      setTimeout(() => {
+        const user = MOCK_USERS.find(u => u.email === email && u.password === password);
+        if (user) {
+            if (user.status === 'pending') {
               setError('Sua conta está pendente de aprovação.');
+              setIsLoading(false); // Para o spinner
               return;
-          }
-          if (user.status === 'inactive') {
+            }
+            if (user.status === 'inactive') {
               setError('Sua conta está desativada. Entre em contato com o administrador.');
+              setIsLoading(false); // Para o spinner
               return;
-          }
-        onLogin({ ...user, token: `fake-jwt-token-for-${user.id}` });
-      } else {
-        setError('Credenciais inválidas.');
-      }
+            }
+          onLogin({ ...user, token: `fake-jwt-token-for-${user.id}` });
+          // Não precisamos do setIsLoading(false) aqui, pois a tela vai mudar
+        } else {
+          setError('Credenciais inválidas.');
+          setIsLoading(false); // Para o spinner
+        }
+      }, 1000); // 1 segundo de simulação
+
     } else {
-      // Lógica de Cadastro (simulada)
-      if (MOCK_USERS.some(u => u.email === email)) {
-        setError('Este e-mail já está em uso.');
-        return;
-      }
-      const newUser = {
-        id: Date.now(),
-        name,
-        email,
-        password,
-        role: 'profissional', // Permissão padrão
-        status: 'pending',
-      };
-      setUsers(prev => [...prev, newUser]);
-      addToast('Cadastro realizado com sucesso! Aguarde a aprovação do administrador.', 'success');
-      addLog('Novo Usuário', `realizou o cadastro e aguarda aprovação.`);
-      setIsLogin(true);
+      // Lógica de Cadastro (simulada com setTimeout)
+      setTimeout(() => {
+        if (MOCK_USERS.some(u => u.email === email)) {
+          setError('Este e-mail já está em uso.');
+          setIsLoading(false); // Para o spinner
+          return;
+        }
+        const newUser = {
+          id: Date.now(),
+          name,
+          email,
+          password,
+          role: 'profissional', // Permissão padrão
+          status: 'pending',
+        };
+        setUsers(prev => [...prev, newUser]);
+        addToast('Cadastro realizado com sucesso! Aguarde a aprovação do administrador.', 'success');
+        addLog('Novo Usuário', `realizou o cadastro e aguarda aprovação.`);
+        setIsLogin(true);
+        setIsLoading(false); // Para o spinner
+      }, 1000); // 1 segundo de simulação
     }
   };
 
@@ -212,16 +238,31 @@ function LoginScreen({ onLogin, setUsers, addToast, addLog }) {
           </div>
           {error && <p className="text-red-500 text-xs italic mb-4">{error}</p>}
           <div className="flex flex-col items-center justify-between">
+            
+            {/* --- BOTÃO MODIFICADO --- */}
             <button
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-300"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-300 flex items-center justify-center disabled:opacity-75"
               type="submit"
+              disabled={isLoading} // Desabilita o botão enquanto carrega
             >
-              {isLogin ? 'Entrar' : 'Cadastrar'}
+              {isLoading ? (
+                // Ícone de spinner SVG
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              ) : (
+                // Texto normal
+                isLogin ? 'Entrar' : 'Cadastrar'
+              )}
             </button>
+            {/* --- FIM DA MODIFICAÇÃO DO BOTÃO --- */}
+
             <button
               type="button"
               onClick={() => setIsLogin(!isLogin)}
               className="inline-block align-baseline font-bold text-sm text-blue-600 hover:text-blue-800 mt-4"
+              disabled={isLoading} // Desabilita este botão também
             >
               {isLogin ? 'Não tem uma conta? Cadastre-se' : 'Já tem uma conta? Faça login'}
             </button>
@@ -269,10 +310,10 @@ function PatientForm({ patient, onSave, onClose }) {
         })
         .join(' ');
   };
-  
+ 
   const handleChange = (e) => {
     let { name, value } = e.target;
-    
+   
     if (name === 'cpf') {
         value = formatCPF(value);
     }
@@ -282,7 +323,7 @@ function PatientForm({ patient, onSave, onClose }) {
      if (name === 'susCard') {
         value = value.replace(/\D/g, ''); // Apenas números
     }
-    
+   
     setFormData(prev => ({ ...prev, [name]: value }));
     // Limpa o erro do campo ao ser modificado
     if (errors[name]) {
@@ -383,7 +424,7 @@ function MedicationForm({ medication, onSave, onClose }) {
             setError('Esta medicação já existe.');
             return;
         }
-        
+       
         onSave({ ...medication, name: name.trim() });
     }
 
@@ -431,7 +472,7 @@ function UserForm({ user, onSave, onClose, users }) {
     if (!user && !formData.password) { // Senha obrigatória para novos usuários
         newErrors.password = 'A senha é obrigatória para novos usuários.';
     }
-    
+   
     // Verifica se o e-mail já está em uso por outro usuário
     const emailExists = users.some(u => u.id !== (user && user.id) && u.email.toLowerCase() === formData.email.trim().toLowerCase());
     if(emailExists){
@@ -467,10 +508,10 @@ function UserForm({ user, onSave, onClose, users }) {
         </div>
         {!user && ( // Apenas mostra o campo de senha para novos usuários
              <div>
-              <label className="block text-gray-700">Senha</label>
-              <input type="password" name="password" value={formData.password} onChange={handleChange} className={`w-full p-2 border rounded ${errors.password ? 'border-red-500' : 'border-gray-300'}`} />
-              {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password}</p>}
-            </div>
+               <label className="block text-gray-700">Senha</label>
+               <input type="password" name="password" value={formData.password} onChange={handleChange} className={`w-full p-2 border rounded ${errors.password ? 'border-red-500' : 'border-gray-300'}`} />
+               {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password}</p>}
+             </div>
         )}
         <div>
           <label className="block text-gray-700">Função</label>
@@ -636,7 +677,7 @@ function BarChart({ data, title }) {
 function AnnualBudgetChart({ totalSpent, budgetLimit }) {
   const numericTotalSpent = Number(totalSpent) || 0;
   const numericBudgetLimit = Number(budgetLimit) || 0;
-  
+ 
   const formatCurrency = (value) => {
       return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   }
@@ -667,14 +708,14 @@ function AnnualBudgetChart({ totalSpent, budgetLimit }) {
               style={{ width: `${Math.min(percentage, 100)}%` }}
             >
             </div>
-             {isOverBudget && (
-               <div className="absolute top-0 left-full ml-2 flex items-center">
-                  <div className="w-0 h-0 border-t-4 border-t-transparent border-b-4 border-b-transparent border-r-4 border-r-red-500 -ml-2"></div>
-                  <span className="bg-red-500 text-white text-xs font-bold px-1 py-0.5 rounded-r-md">
-                    {formatCurrency(remainingBudget)}
-                  </span>
-               </div>
-             )}
+               {isOverBudget && (
+                 <div className="absolute top-0 left-full ml-2 flex items-center">
+                     <div className="w-0 h-0 border-t-4 border-t-transparent border-b-4 border-b-transparent border-r-4 border-r-red-500 -ml-2"></div>
+                     <span className="bg-red-500 text-white text-xs font-bold px-1 py-0.5 rounded-r-md">
+                       {formatCurrency(remainingBudget)}
+                     </span>
+                 </div>
+               )}
           </div>
         </div>
       </div>
@@ -850,7 +891,7 @@ function ProfessionalDashboard({ user, activeTab, setActiveTab, addToast, ...pro
       }
       addToast('Paciente excluído com sucesso!', 'success');
   };
-  
+ 
   const handleDeleteRecord = (recordId) => {
     setRecords(records.filter(r => r.id !== recordId));
     addToast('Registro excluído com sucesso!', 'success');
@@ -920,14 +961,14 @@ function ProfessionalDashboard({ user, activeTab, setActiveTab, addToast, ...pro
   const getPatientNameById = (patientId) => {
     return patients.find(p => p.id === patientId)?.name || 'Desconhecido';
   };
-  
+ 
   const handleQuickAddRecord = (e, patient) => {
       e.stopPropagation();
       setSelectedPatient(patient);
       setEditingRecord(null);
       setIsRecordModalOpen(true);
   }
-  
+ 
   const handleViewPatientHistory = (patientId) => {
       const patient = patients.find(p => p.id === patientId);
       if(patient) {
@@ -1047,65 +1088,65 @@ function ProfessionalDashboard({ user, activeTab, setActiveTab, addToast, ...pro
       case 'historico':
         return (
            <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-xl font-semibold mb-4">Histórico de Entradas</h3>
-             <div className="bg-gray-50 p-4 rounded-lg mb-4">
+             <h3 className="text-xl font-semibold mb-4">Histórico de Entradas</h3>
+               <div className="bg-gray-50 p-4 rounded-lg mb-4">
                  <h4 className="font-semibold mb-2">Adicionar Novo Registro Rápido</h4>
                  <div className="flex items-center gap-4">
-                    <select onChange={(e) => setQuickAddPatientId(e.target.value)} value={quickAddPatientId} className="flex-grow p-2 border rounded-lg">
-                        <option value="">Selecione um paciente...</option>
-                        {patients.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    </select>
-                    <button onClick={openQuickAddModal} disabled={!quickAddPatientId} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400">
-                        Adicionar
-                    </button>
+                   <select onChange={(e) => setQuickAddPatientId(e.target.value)} value={quickAddPatientId} className="flex-grow p-2 border rounded-lg">
+                       <option value="">Selecione um paciente...</option>
+                       {patients.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                   </select>
+                   <button onClick={openQuickAddModal} disabled={!quickAddPatientId} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400">
+                       Adicionar
+                   </button>
                  </div>
-             </div>
-            <div className="overflow-x-auto">
-                <table className="min-w-full bg-white">
-                    <thead className="bg-gray-100">
-                        <tr>
-                            <th className="text-left py-2 px-4">Paciente</th>
-                            <th className="text-left py-2 px-4">Data de Entrada</th>
-                            <th className="text-left py-2 px-4">Medicações</th>
-                            <th className="text-left py-2 px-4">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {[...records].sort((a,b) => new Date(b.entryDate) - new Date(a.entryDate)).map(record => (
-                            <tr key={record.id} className="border-b">
-                                <td className="py-2 px-4 font-semibold">
-                                    <button onClick={() => handleViewPatientHistory(record.patientId)} className="text-blue-600 hover:underline">
-                                      {getPatientNameById(record.patientId)}
-                                    </button>
-                                </td>
-                                <td className="py-2 px-4">{new Date(record.entryDate).toLocaleString('pt-BR')}</td>
-                                <td className="py-2 px-4 text-sm">
-                                    {record.medications.map(m => `${getMedicationName(m.medicationId, medications)} (${m.quantity})`).join(', ')}
-                                </td>
-                                <td className="py-2 px-4 flex gap-2 items-center">
-                                    {record.status === 'Pendente' ? (
-                                        <>
-                                            <button onClick={() => setAttendingRecord(record)} className="px-3 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600">Atendido</button>
-                                            <button onClick={() => setConfirmation({ isOpen: true, message: 'Quer mesmo cancelar o registro?', onConfirm: () => handleCancelRecordStatus(record.id)})} className="px-3 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600">Cancelar</button>
-                                        </>
-                                    ) : <StatusBadge status={record.status} /> }
-                                     <button onClick={() => { 
+               </div>
+             <div className="overflow-x-auto">
+                 <table className="min-w-full bg-white">
+                     <thead className="bg-gray-100">
+                         <tr>
+                             <th className="text-left py-2 px-4">Paciente</th>
+                             <th className="text-left py-2 px-4">Data de Entrada</th>
+                             <th className="text-left py-2 px-4">Medicações</th>
+                             <th className="text-left py-2 px-4">Ações</th>
+                         </tr>
+                     </thead>
+                     <tbody>
+                         {[...records].sort((a,b) => new Date(b.entryDate) - new Date(a.entryDate)).map(record => (
+                             <tr key={record.id} className="border-b">
+                                 <td className="py-2 px-4 font-semibold">
+                                     <button onClick={() => handleViewPatientHistory(record.patientId)} className="text-blue-600 hover:underline">
+                                       {getPatientNameById(record.patientId)}
+                                     </button>
+                                 </td>
+                                 <td className="py-2 px-4">{new Date(record.entryDate).toLocaleString('pt-BR')}</td>
+                                 <td className="py-2 px-4 text-sm">
+                                     {record.medications.map(m => `${getMedicationName(m.medicationId, medications)} (${m.quantity})`).join(', ')}
+                                 </td>
+                                 <td className="py-2 px-4 flex gap-2 items-center">
+                                     {record.status === 'Pendente' ? (
+                                         <>
+                                             <button onClick={() => setAttendingRecord(record)} className="px-3 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600">Atendido</button>
+                                             <button onClick={() => setConfirmation({ isOpen: true, message: 'Quer mesmo cancelar o registro?', onConfirm: () => handleCancelRecordStatus(record.id)})} className="px-3 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600">Cancelar</button>
+                                         </>
+                                     ) : <StatusBadge status={record.status} /> }
+                                      <button onClick={() => { 
                                          const patientForRecord = patients.find(p => p.id === record.patientId);
                                          if(patientForRecord) {
-                                            setSelectedPatient(patientForRecord);
-                                            setEditingRecord(record);
-                                            setIsRecordModalOpen(true);
+                                           setSelectedPatient(patientForRecord);
+                                           setEditingRecord(record);
+                                           setIsRecordModalOpen(true);
                                          }
-                                     }} className="p-1 text-gray-500 hover:text-blue-600">{icons.edit}</button>
-                                    <button onClick={() => setConfirmation({ isOpen: true, message: 'Quer mesmo excluir o registro?', onConfirm: () => handleDeleteRecord(record.id)})} className="p-1 text-gray-500 hover:text-red-600">{icons.trash}</button>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-                {records.length === 0 && <p className="text-center text-gray-500 py-4">Nenhuma entrada no momento.</p>}
-            </div>
-        </div>
+                                      }} className="p-1 text-gray-500 hover:text-blue-600">{icons.edit}</button>
+                                     <button onClick={() => setConfirmation({ isOpen: true, message: 'Quer mesmo excluir o registro?', onConfirm: () => handleDeleteRecord(record.id)})} className="p-1 text-gray-500 hover:text-red-600">{icons.trash}</button>
+                                 </td>
+                             </tr>
+                         ))}
+                     </tbody>
+                 </table>
+                 {records.length === 0 && <p className="text-center text-gray-500 py-4">Nenhuma entrada no momento.</p>}
+             </div>
+         </div>
         );
       case 'deliveries':
         return <RecentDeliveriesTab records={records} patients={patients} medications={medications} />;
@@ -1147,28 +1188,28 @@ function SecretaryDashboard({ annualBudget, patients, records, medications, acti
 
   const allRecordsSorted = useMemo(() => {
     let filtered = [...records];
-    
+   
     if(filterPeriod !== 'all') {
         const days = parseInt(filterPeriod, 10);
         const cutoffDate = new Date();
         cutoffDate.setDate(cutoffDate.getDate() - days);
         filtered = filtered.filter(r => new Date(r.entryDate) >= cutoffDate);
     }
-    
+   
     if(filterStatus !== 'all') {
         filtered = filtered.filter(r => r.status === filterStatus);
     }
-    
+   
     if (reportSearchTerm) {
         filtered = filtered.filter(r => getPatientNameById(r.patientId).toLowerCase().includes(reportSearchTerm.toLowerCase()));
     }
-    
+   
     return filtered.sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate));
 
   }, [records, patients, filterPeriod, filterStatus, reportSearchTerm, medications]);
 
   const recordsByYear = useMemo(() => records.filter(r => new Date(r.entryDate).getFullYear() === filterYear), [records, filterYear]);
-  
+ 
   const monthlyAttendance = useMemo(() => {
       const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
       const attendanceByMonth = Array(12).fill(0).map(() => new Set());
@@ -1186,7 +1227,7 @@ function SecretaryDashboard({ annualBudget, patients, records, medications, acti
           value: attendanceByMonth[index].size
       }));
   }, [recordsByYear]);
-  
+ 
   const handleExportPDF = () => {
       const reportTitle = "Relatório de Entregas";
       const printWindow = window.open('', '', 'height=600,width=800');
@@ -1195,13 +1236,13 @@ function SecretaryDashboard({ annualBudget, patients, records, medications, acti
       printWindow.document.write('</head><body>');
       printWindow.document.write('<h1>' + reportTitle + '</h1>');
       printWindow.document.write('<table><thead><tr><th>Paciente</th><th>Data de Entrada</th><th>Data do Atendimento</th><th>Medicações</th><th>Status</th></tr></thead><tbody>');
-      
+     
       allRecordsSorted.forEach(record => {
           const patientName = getPatientNameById(record.patientId);
           const entryDate = new Date(record.entryDate).toLocaleString('pt-BR');
           const deliveryDate = record.deliveryDate ? new Date(record.deliveryDate).toLocaleString('pt-BR') : '---';
           const meds = record.medications.map(m => `${getMedicationName(m.medicationId, medications)} (${m.quantity})`).join(', ');
-          
+         
           printWindow.document.write('<tr>');
           printWindow.document.write(`<td>${patientName}</td>`);
           printWindow.document.write(`<td>${entryDate}</td>`);
@@ -1210,7 +1251,7 @@ function SecretaryDashboard({ annualBudget, patients, records, medications, acti
           printWindow.document.write(`<td>${record.status}</td>`);
           printWindow.document.write('</tr>');
       });
-      
+     
       printWindow.document.write('</tbody></table></body></html>');
       printWindow.document.close();
       printWindow.focus();
@@ -1219,7 +1260,7 @@ function SecretaryDashboard({ annualBudget, patients, records, medications, acti
           printWindow.close();
       }, 250);
   };
-  
+ 
   const renderContent = () => {
      switch(activeTab) {
         case 'dashboard':
@@ -1237,101 +1278,101 @@ function SecretaryDashboard({ annualBudget, patients, records, medications, acti
        case 'records':
          return (
            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-1 bg-white p-6 rounded-lg shadow flex flex-col">
-                     <h3 className="text-xl font-bold mb-4">Buscar Paciente</h3>
-                     <div className="relative mb-4">
-                        <input type="text" placeholder="Nome, CPF ou SUS..." className="w-full p-2 pl-10 border rounded-lg" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-                        <div className="absolute left-3 top-2.5 text-gray-400">{icons.search}</div>
-                     </div>
-                     <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 flex-grow">
-                        {filteredPatients.map(p => (
-                            <div key={p.id} className={`p-3 rounded-lg cursor-pointer ${selectedPatient?.id === p.id ? 'bg-blue-100' : 'hover:bg-gray-100'}`} onClick={() => setSelectedPatient(p)}>
-                                <p className="font-bold">{p.name}</p>
-                                <p className="text-sm text-gray-500">{p.cpf || p.susCard}</p>
-                            </div>
-                        ))}
-                     </div>
-                </div>
-                <div className="lg:col-span-2 bg-white p-6 rounded-lg shadow">
-                    {selectedPatient ? (
-                        <div>
-                            <h3 className="text-xl font-bold mb-4 text-left">Histórico de Entregas: {selectedPatient.name}</h3>
-                            <PatientRecordsTable records={patientRecords} medications={medications} />
-                        </div>
-                    ) : (
-                        <div className="flex flex-col items-center justify-center h-full text-center text-gray-500">
-                            <div className="mb-4 text-gray-300 scale-150">{icons.clipboard}</div>
-                            <h2 className="text-xl">Selecione um Paciente</h2>
-                            <p>Escolha um paciente na lista para ver seu histórico de entregas.</p>
-                        </div>
-                    )}
-                </div>
-            </div>
+               <div className="lg:col-span-1 bg-white p-6 rounded-lg shadow flex flex-col">
+                   <h3 className="text-xl font-bold mb-4">Buscar Paciente</h3>
+                   <div className="relative mb-4">
+                     <input type="text" placeholder="Nome, CPF ou SUS..." className="w-full p-2 pl-10 border rounded-lg" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                     <div className="absolute left-3 top-2.5 text-gray-400">{icons.search}</div>
+                   </div>
+                   <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 flex-grow">
+                     {filteredPatients.map(p => (
+                         <div key={p.id} className={`p-3 rounded-lg cursor-pointer ${selectedPatient?.id === p.id ? 'bg-blue-100' : 'hover:bg-gray-100'}`} onClick={() => setSelectedPatient(p)}>
+                             <p className="font-bold">{p.name}</p>
+                             <p className="text-sm text-gray-500">{p.cpf || p.susCard}</p>
+                         </div>
+                     ))}
+                   </div>
+               </div>
+               <div className="lg:col-span-2 bg-white p-6 rounded-lg shadow">
+                   {selectedPatient ? (
+                       <div>
+                           <h3 className="text-xl font-bold mb-4 text-left">Histórico de Entregas: {selectedPatient.name}</h3>
+                           <PatientRecordsTable records={patientRecords} medications={medications} />
+                       </div>
+                   ) : (
+                       <div className="flex flex-col items-center justify-center h-full text-center text-gray-500">
+                           <div className="mb-4 text-gray-300 scale-150">{icons.clipboard}</div>
+                           <h2 className="text-xl">Selecione um Paciente</h2>
+                           <p>Escolha um paciente na lista para ver seu histórico de entregas.</p>
+                       </div>
+                   )}
+               </div>
+           </div>
          );
-        case 'all_history':
-          return (
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
-                <h3 className="text-xl font-semibold">Relatório Avançado de Entradas</h3>
-                <button onClick={handleExportPDF} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
-                    {icons.download} Exportar para PDF
-                </button>
-              </div>
-               <div className="flex flex-wrap gap-4 items-center mb-4 p-4 bg-gray-50 rounded-lg">
-                    <div className="flex-grow">
-                        <label className="text-sm font-medium text-gray-700">Buscar por Paciente</label>
-                        <input type="text" placeholder="Nome do paciente..." value={reportSearchTerm} onChange={e => setReportSearchTerm(e.target.value)} className="w-full p-2 border rounded-lg mt-1" />
-                    </div>
-                    <div>
-                        <label className="text-sm font-medium text-gray-700">Período</label>
-                        <select value={filterPeriod} onChange={e => setFilterPeriod(e.target.value)} className="w-full p-2 border rounded-lg mt-1">
-                            <option value="all">Todos</option>
-                            <option value="7">Últimos 7 dias</option>
-                            <option value="30">Últimos 30 dias</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label className="text-sm font-medium text-gray-700">Status</label>
-                        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="w-full p-2 border rounded-lg mt-1">
-                            <option value="all">Todos</option>
-                            <option value="Atendido">Atendido</option>
-                            <option value="Pendente">Pendente</option>
-                            <option value="Cancelado">Cancelado</option>
-                        </select>
-                    </div>
-                </div>
-              <div className="overflow-x-auto">
-                  <table className="min-w-full bg-white">
-                      <thead className="bg-gray-100">
-                          <tr>
-                              <th className="text-left py-2 px-4">Paciente</th>
-                              <th className="text-left py-2 px-4">Data de Entrada</th>
-                              <th className="text-left py-2 px-4">Medicações</th>
-                              <th className="text-left py-2 px-4">Status</th>
-                          </tr>
-                      </thead>
-                      <tbody>
-                          {allRecordsSorted.map(record => (
-                              <tr key={record.id} className="border-b">
-                                  <td className="py-2 px-4 font-semibold">{getPatientNameById(record.patientId)}</td>
-                                  <td className="py-2 px-4">{new Date(record.entryDate).toLocaleString('pt-BR')}</td>
-                                  <td className="py-2 px-4 text-sm">
-                                      {record.medications.map(m => `${getMedicationName(m.medicationId, medications)} (${m.quantity})`).join(', ')}
-                                  </td>
-                                  <td className="py-2 px-4">
-                                      <StatusBadge status={record.status} />
-                                  </td>
-                              </tr>
-                          ))}
-                      </tbody>
-                  </table>
-                  {allRecordsSorted.length === 0 && <p className="text-center text-gray-500 py-4">Nenhuma entrada encontrada para os filtros selecionados.</p>}
-              </div>
-          </div>
-          );
-        case 'deliveries':
-        default:
-          return <RecentDeliveriesTab records={records} patients={patients} medications={medications} />;
+       case 'all_history':
+         return (
+           <div className="bg-white rounded-lg shadow p-6">
+             <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
+               <h3 className="text-xl font-semibold">Relatório Avançado de Entradas</h3>
+               <button onClick={handleExportPDF} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
+                   {icons.download} Exportar para PDF
+               </button>
+             </div>
+              <div className="flex flex-wrap gap-4 items-center mb-4 p-4 bg-gray-50 rounded-lg">
+                   <div className="flex-grow">
+                       <label className="text-sm font-medium text-gray-700">Buscar por Paciente</label>
+                       <input type="text" placeholder="Nome do paciente..." value={reportSearchTerm} onChange={e => setReportSearchTerm(e.target.value)} className="w-full p-2 border rounded-lg mt-1" />
+                   </div>
+                   <div>
+                       <label className="text-sm font-medium text-gray-700">Período</label>
+                       <select value={filterPeriod} onChange={e => setFilterPeriod(e.target.value)} className="w-full p-2 border rounded-lg mt-1">
+                           <option value="all">Todos</option>
+                           <option value="7">Últimos 7 dias</option>
+                           <option value="30">Últimos 30 dias</option>
+                       </select>
+                   </div>
+                   <div>
+                       <label className="text-sm font-medium text-gray-700">Status</label>
+                       <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="w-full p-2 border rounded-lg mt-1">
+                           <option value="all">Todos</option>
+                           <option value="Atendido">Atendido</option>
+                           <option value="Pendente">Pendente</option>
+                           <option value="Cancelado">Cancelado</option>
+                       </select>
+                   </div>
+               </div>
+             <div className="overflow-x-auto">
+                 <table className="min-w-full bg-white">
+                     <thead className="bg-gray-100">
+                         <tr>
+                             <th className="text-left py-2 px-4">Paciente</th>
+                             <th className="text-left py-2 px-4">Data de Entrada</th>
+                             <th className="text-left py-2 px-4">Medicações</th>
+                             <th className="text-left py-2 px-4">Status</th>
+                         </tr>
+                     </thead>
+                     <tbody>
+                         {allRecordsSorted.map(record => (
+                             <tr key={record.id} className="border-b">
+                                 <td className="py-2 px-4 font-semibold">{getPatientNameById(record.patientId)}</td>
+                                 <td className="py-2 px-4">{new Date(record.entryDate).toLocaleString('pt-BR')}</td>
+                                 <td className="py-2 px-4 text-sm">
+                                     {record.medications.map(m => `${getMedicationName(m.medicationId, medications)} (${m.quantity})`).join(', ')}
+                                 </td>
+                                 <td className="py-2 px-4">
+                                     <StatusBadge status={record.status} />
+                                 </td>
+                             </tr>
+                         ))}
+                     </tbody>
+                 </table>
+                 {allRecordsSorted.length === 0 && <p className="text-center text-gray-500 py-4">Nenhuma entrada encontrada para os filtros selecionados.</p>}
+             </div>
+         </div>
+         );
+       case 'deliveries':
+       default:
+         return <RecentDeliveriesTab records={records} patients={patients} medications={medications} />;
      }
   };
 
@@ -1429,12 +1470,12 @@ function AdminDashboard({ user, activeTab, setActiveTab, annualBudget, onUpdateB
       setIsMedicationModalOpen(false);
       setEditingMedication(null);
   }
-  
+ 
   const handleDeleteMedication = (medId) => {
       setMedications(medications.filter(m => m.id !== medId));
       addToast('Medicação excluída com sucesso!', 'success');
   }
-  
+ 
   const handleSaveUser = (userData) => {
       if(userData.id) {
           setUsers(users.map(u => u.id === userData.id ? userData : u));
@@ -1447,7 +1488,7 @@ function AdminDashboard({ user, activeTab, setActiveTab, annualBudget, onUpdateB
       setIsUserModalOpen(false);
       setEditingUser(null);
   }
-  
+ 
   const handleToggleUserStatus = (userId) => {
       setUsers(users.map(u => u.id === userId ? {...u, status: u.status === 'active' ? 'inactive' : 'active'} : u));
       addToast('Status do usuário alterado com sucesso!', 'success');
@@ -1477,18 +1518,18 @@ function AdminDashboard({ user, activeTab, setActiveTab, annualBudget, onUpdateB
         r.id === recordId ? { ...r, status: 'Cancelado', deliveryDate: null } : r
     ));
   };
-  
+ 
   const handleBudgetSave = () => {
       onUpdateBudget(parseFloat(newBudgetValue));
   }
-  
+ 
   const handleQuickAddRecord = (e, patient) => {
       e.stopPropagation();
       setSelectedPatient(patient);
       setEditingRecord(null);
       setIsRecordModalOpen(true);
   }
-  
+ 
   const handleViewPatientHistory = (patientId) => {
       const patient = patients.find(p => p.id === patientId);
       if(patient) {
@@ -1535,21 +1576,21 @@ function AdminDashboard({ user, activeTab, setActiveTab, annualBudget, onUpdateB
           case 'dashboard':
               return (
                  <div className="space-y-6">
-                    <h2 className="text-3xl font-bold text-gray-800">Dashboard</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                   <h2 className="text-3xl font-bold text-gray-800">Dashboard</h2>
+                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                       <div className="bg-white p-6 rounded-lg shadow">
+                           <h3 className="text-lg font-semibold">Usuários no Sistema</h3>
+                           <p className="text-3xl font-bold mt-2">{users.length}</p>
+                       </div>
                         <div className="bg-white p-6 rounded-lg shadow">
-                            <h3 className="text-lg font-semibold">Usuários no Sistema</h3>
-                            <p className="text-3xl font-bold mt-2">{users.length}</p>
-                        </div>
-                         <div className="bg-white p-6 rounded-lg shadow">
-                            <h3 className="text-lg font-semibold">Pacientes Ativos</h3>
-                            <p className="text-3xl font-bold mt-2">{patients.filter(p => p.status === 'Ativo').length}</p>
-                        </div>
-                         <div className="bg-white p-6 rounded-lg shadow">
-                            <h3 className="text-lg font-semibold">Entradas Pendentes</h3>
-                            <p className="text-3xl font-bold mt-2">{pendingRecords.length}</p>
-                        </div>
-                    </div>
+                           <h3 className="text-lg font-semibold">Pacientes Ativos</h3>
+                           <p className="text-3xl font-bold mt-2">{patients.filter(p => p.status === 'Ativo').length}</p>
+                       </div>
+                        <div className="bg-white p-6 rounded-lg shadow">
+                           <h3 className="text-lg font-semibold">Entradas Pendentes</h3>
+                           <p className="text-3xl font-bold mt-2">{pendingRecords.length}</p>
+                       </div>
+                   </div>
                  </div>
               );
           case 'patients':
@@ -1583,24 +1624,24 @@ function AdminDashboard({ user, activeTab, setActiveTab, annualBudget, onUpdateB
                       {selectedPatient ? (
                         <div>
                            <div className="flex justify-between items-start mb-4 pb-4 border-b">
-                            <div>
-                              <h2 className="text-2xl font-bold">{selectedPatient.name}</h2>
-                              <p className="text-gray-500">CPF: {selectedPatient.cpf || 'Não informado'}</p>
-                              <p className="text-gray-500">SUS: {selectedPatient.susCard || 'Não informado'}</p>
-                              <p className="mt-2 text-sm"><strong>Observações:</strong> {selectedPatient.observations || 'Nenhuma'}</p>
-                            </div>
-                            <div className="flex gap-2">
-                              <button onClick={() => { setEditingPatient(selectedPatient); setIsPatientModalOpen(true); }} className="p-2 text-gray-600 hover:text-blue-600">{icons.edit}</button>
-                              <button onClick={() => setConfirmation({ isOpen: true, message: 'Tem certeza que deseja excluir este paciente e todos os seus registros?', onConfirm: () => handleDeletePatient(selectedPatient.id) })} className="p-2 text-gray-600 hover:text-red-600">{icons.trash}</button>
-                            </div>
-                          </div>
-                          <div className="flex justify-between items-center mt-4">
-                            <h3 className="text-xl font-semibold">Histórico Completo</h3>
-                            <button onClick={() => { setIsRecordModalOpen(true); setEditingRecord(null);}} className="flex items-center gap-2 px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">
-                              {icons.plus} Novo Registro
-                            </button>
-                          </div>
-                           <div className="space-y-4 max-h-[40vh] overflow-y-auto pr-2 mt-4">
+                             <div>
+                               <h2 className="text-2xl font-bold">{selectedPatient.name}</h2>
+                               <p className="text-gray-500">CPF: {selectedPatient.cpf || 'Não informado'}</p>
+                               <p className="text-gray-500">SUS: {selectedPatient.susCard || 'Não informado'}</p>
+                               <p className="mt-2 text-sm"><strong>Observações:</strong> {selectedPatient.observations || 'Nenhuma'}</p>
+                             </div>
+                             <div className="flex gap-2">
+                               <button onClick={() => { setEditingPatient(selectedPatient); setIsPatientModalOpen(true); }} className="p-2 text-gray-600 hover:text-blue-600">{icons.edit}</button>
+                               <button onClick={() => setConfirmation({ isOpen: true, message: 'Tem certeza que deseja excluir este paciente e todos os seus registros?', onConfirm: () => handleDeletePatient(selectedPatient.id) })} className="p-2 text-gray-600 hover:text-red-600">{icons.trash}</button>
+                             </div>
+                           </div>
+                           <div className="flex justify-between items-center mt-4">
+                             <h3 className="text-xl font-semibold">Histórico Completo</h3>
+                             <button onClick={() => { setIsRecordModalOpen(true); setEditingRecord(null);}} className="flex items-center gap-2 px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">
+                               {icons.plus} Novo Registro
+                             </button>
+                           </div>
+                            <div className="space-y-4 max-h-[40vh] overflow-y-auto pr-2 mt-4">
                               {patientRecords.length > 0 ? patientRecords.map(record => (
                                 <div key={record.id} className="bg-gray-50 p-3 rounded-lg">
                                   <div className="flex justify-between items-start">
@@ -1634,36 +1675,36 @@ function AdminDashboard({ user, activeTab, setActiveTab, annualBudget, onUpdateB
         case 'historico':
            return (
              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-xl font-semibold mb-4">Histórico de Entradas</h3>
-                <div className="overflow-x-auto">
-                    <table className="min-w-full bg-white">
-                        <thead className="bg-gray-100">
-                            <tr>
-                                <th className="text-left py-2 px-4">Paciente</th>
-                                <th className="text-left py-2 px-4">Data de Entrada</th>
-                                <th className="text-left py-2 px-4">Medicações</th>
-                                <th className="text-left py-2 px-4">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {[...records].sort((a,b) => new Date(b.entryDate) - new Date(a.entryDate)).map(record => (
-                                <tr key={record.id} className="border-b">
-                                    <td className="py-2 px-4 font-semibold">
-                                       <button onClick={() => handleViewPatientHistory(record.patientId)} className="text-blue-600 hover:underline">
-                                          {getPatientNameById(record.patientId)}
-                                       </button>
-                                    </td>
-                                    <td className="py-2 px-4">{new Date(record.entryDate).toLocaleString('pt-BR')}</td>
-                                    <td className="py-2 px-4 text-sm">
-                                        {record.medications.map(m => `${getMedicationName(m.medicationId, medications)} (${m.quantity})`).join(', ')}
-                                    </td>
-                                    <td className="py-2 px-4 flex items-center gap-2">
-                                         {record.status === 'Pendente' ? (
-                                        <>
-                                            <button onClick={() => setAttendingRecord(record)} className="px-3 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600">Atendido</button>
-                                            <button onClick={() => setConfirmation({ isOpen: true, message: 'Quer mesmo cancelar o registro?', onConfirm: () => handleCancelRecordStatus(record.id)})} className="px-3 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600">Cancelar</button>
-                                        </>
-                                    ) : <StatusBadge status={record.status} /> }
+                 <h3 className="text-xl font-semibold mb-4">Histórico de Entradas</h3>
+                 <div className="overflow-x-auto">
+                     <table className="min-w-full bg-white">
+                         <thead className="bg-gray-100">
+                             <tr>
+                                 <th className="text-left py-2 px-4">Paciente</th>
+                                 <th className="text-left py-2 px-4">Data de Entrada</th>
+                                 <th className="text-left py-2 px-4">Medicações</th>
+                                 <th className="text-left py-2 px-4">Ações</th>
+                             </tr>
+                         </thead>
+                         <tbody>
+                             {[...records].sort((a,b) => new Date(b.entryDate) - new Date(a.entryDate)).map(record => (
+                                 <tr key={record.id} className="border-b">
+                                     <td className="py-2 px-4 font-semibold">
+                                        <button onClick={() => handleViewPatientHistory(record.patientId)} className="text-blue-600 hover:underline">
+                                           {getPatientNameById(record.patientId)}
+                                        </button>
+                                     </td>
+                                     <td className="py-2 px-4">{new Date(record.entryDate).toLocaleString('pt-BR')}</td>
+                                     <td className="py-2 px-4 text-sm">
+                                         {record.medications.map(m => `${getMedicationName(m.medicationId, medications)} (${m.quantity})`).join(', ')}
+                                     </td>
+                                     <td className="py-2 px-4 flex items-center gap-2">
+                                          {record.status === 'Pendente' ? (
+                                         <>
+                                             <button onClick={() => setAttendingRecord(record)} className="px-3 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600">Atendido</button>
+                                             <button onClick={() => setConfirmation({ isOpen: true, message: 'Quer mesmo cancelar o registro?', onConfirm: () => handleCancelRecordStatus(record.id)})} className="px-3 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600">Cancelar</button>
+                                         </>
+                                     ) : <StatusBadge status={record.status} /> }
                                           <button
                                             onClick={() => {
                                                 const patientForRecord = patients.find(p => p.id === record.patientId);
@@ -1677,141 +1718,141 @@ function AdminDashboard({ user, activeTab, setActiveTab, annualBudget, onUpdateB
                                           >
                                             {icons.edit}
                                           </button>
-                                          <button onClick={() => setConfirmation({ isOpen: true, message: 'Quer mesmo excluir o registro?', onConfirm: () => handleDeleteRecord(record.id)})} className="p-1 text-gray-500 hover:text-red-600">{icons.trash}</button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                    {records.length === 0 && <p className="text-center text-gray-500 py-4">Nenhuma entrada no momento.</p>}
-                </div>
-            </div>
-           );
-         case 'medications':
-            return (
-                <div className="bg-white rounded-lg shadow p-6">
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-xl font-semibold">Gerenciar Medicações</h3>
-                        <button onClick={() => { setEditingMedication(null); setIsMedicationModalOpen(true);}} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                          {icons.plus} Nova Medicação
-                        </button>
-                    </div>
-                    <div className="overflow-x-auto">
-                       <table className="min-w-full bg-white">
-                        <thead className="bg-gray-100">
-                          <tr>
-                            <th className="text-left py-2 px-4">Nome da Medicação</th>
-                            <th className="text-left py-2 px-4">Data de Cadastro</th>
-                            <th className="text-left py-2 px-4">Ações</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {medications.map(med => (
-                            <tr key={med.id} className="border-b">
-                              <td className="py-2 px-4">{med.name}</td>
-                              <td className="py-2 px-4">{new Date(med.createdAt + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
-                              <td className="py-2 px-4 flex gap-2">
-                                <button onClick={() => { setEditingMedication(med); setIsMedicationModalOpen(true);}} className="p-1 text-gray-500 hover:text-blue-600">{icons.edit}</button>
-                                <button onClick={() => setConfirmation({isOpen: true, message: 'Deseja excluir esta medicação?', onConfirm: () => handleDeleteMedication(med.id)})} className="p-1 text-gray-500 hover:text-red-600">{icons.trash}</button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                     {isMedicationModalOpen && <MedicationForm medication={editingMedication} onSave={handleSaveMedication} onClose={() => setIsMedicationModalOpen(false)} />}
-                </div>
-            );
-        case 'deliveries':
-            return <RecentDeliveriesTab records={records} patients={patients} medications={medications} />;
-        case 'reports':
-            return (
-                 <div className="space-y-6">
-                    <div className="bg-white p-6 rounded-lg shadow">
-                      <BarChart data={monthlyAttendance} title="Pacientes Únicos Atendidos por Mês (2025)" />
-                    </div>
+                                         <button onClick={() => setConfirmation({ isOpen: true, message: 'Quer mesmo excluir o registro?', onConfirm: () => handleDeleteRecord(record.id)})} className="p-1 text-gray-500 hover:text-red-600">{icons.trash}</button>
+                                     </td>
+                                 </tr>
+                             ))}
+                         </tbody>
+                     </table>
+                     {records.length === 0 && <p className="text-center text-gray-500 py-4">Nenhuma entrada no momento.</p>}
                  </div>
-            );
-        case 'settings':
-            return (
-              <div className="space-y-6">
-                 <div className="border-b border-gray-200">
-                    <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-                        <button onClick={() => setSettingsSubTab('budget')} className={`${settingsSubTab === 'budget' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>
-                           Orçamento
-                        </button>
-                        <button onClick={() => setSettingsSubTab('users')} className={`${settingsSubTab === 'users' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>
-                           Usuários
-                        </button>
-                        <button onClick={() => setSettingsSubTab('log')} className={`${settingsSubTab === 'log' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>
-                           Log de Atividades
-                        </button>
-                    </nav>
+             </div>
+           );
+        case 'medications':
+           return (
+               <div className="bg-white rounded-lg shadow p-6">
+                   <div className="flex justify-between items-center mb-4">
+                       <h3 className="text-xl font-semibold">Gerenciar Medicações</h3>
+                       <button onClick={() => { setEditingMedication(null); setIsMedicationModalOpen(true);}} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                         {icons.plus} Nova Medicação
+                       </button>
+                   </div>
+                   <div className="overflow-x-auto">
+                      <table className="min-w-full bg-white">
+                         <thead className="bg-gray-100">
+                           <tr>
+                             <th className="text-left py-2 px-4">Nome da Medicação</th>
+                             <th className="text-left py-2 px-4">Data de Cadastro</th>
+                             <th className="text-left py-2 px-4">Ações</th>
+                           </tr>
+                         </thead>
+                         <tbody>
+                           {medications.map(med => (
+                             <tr key={med.id} className="border-b">
+                               <td className="py-2 px-4">{med.name}</td>
+                               <td className="py-2 px-4">{new Date(med.createdAt + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+                               <td className="py-2 px-4 flex gap-2">
+                                 <button onClick={() => { setEditingMedication(med); setIsMedicationModalOpen(true);}} className="p-1 text-gray-500 hover:text-blue-600">{icons.edit}</button>
+                                 <button onClick={() => setConfirmation({isOpen: true, message: 'Deseja excluir esta medicação?', onConfirm: () => handleDeleteMedication(med.id)})} className="p-1 text-gray-500 hover:text-red-600">{icons.trash}</button>
+                               </td>
+                             </tr>
+                           ))}
+                         </tbody>
+                       </table>
+                   </div>
+                    {isMedicationModalOpen && <MedicationForm medication={editingMedication} onSave={handleSaveMedication} onClose={() => setIsMedicationModalOpen(false)} />}
+               </div>
+           );
+        case 'deliveries':
+           return <RecentDeliveriesTab records={records} patients={patients} medications={medications} />;
+        case 'reports':
+           return (
+                <div className="space-y-6">
+                   <div className="bg-white p-6 rounded-lg shadow">
+                     <BarChart data={monthlyAttendance} title="Pacientes Únicos Atendidos por Mês (2025)" />
+                   </div>
                 </div>
+           );
+        case 'settings':
+           return (
+             <div className="space-y-6">
+                 <div className="border-b border-gray-200">
+                   <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+                       <button onClick={() => setSettingsSubTab('budget')} className={`${settingsSubTab === 'budget' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>
+                           Orçamento
+                       </button>
+                       <button onClick={() => setSettingsSubTab('users')} className={`${settingsSubTab === 'users' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>
+                           Usuários
+                       </button>
+                       <button onClick={() => setSettingsSubTab('log')} className={`${settingsSubTab === 'log' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>
+                           Log de Atividades
+                       </button>
+                   </nav>
+                 </div>
 
-                {settingsSubTab === 'budget' && (
-                    <div className="bg-white rounded-lg shadow p-6 max-w-lg mx-auto">
-                        <h3 className="text-xl font-semibold mb-4">Orçamento Anual</h3>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-gray-700 font-medium mb-1">Valor do Orçamento (R$)</label>
-                                <input 
-                                    type="number"
-                                    value={newBudgetValue}
-                                    onChange={(e) => setNewBudgetValue(e.target.value)}
-                                    className="w-full p-2 border rounded border-gray-300"
-                                    placeholder="ex: 5000.00"
-                                />
-                            </div>
-                            <button 
-                                onClick={handleBudgetSave}
-                                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                            >
-                                Salvar Orçamento
-                            </button>
-                        </div>
-                    </div>
-                )}
-                {settingsSubTab === 'users' && (
-                    <div className="bg-white rounded-lg shadow p-6">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-xl font-semibold">Gerenciar Usuários</h3>
-                            <button onClick={() => { setEditingUser(null); setIsUserModalOpen(true);}} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                              {icons.plus} Novo Usuário
-                            </button>
-                        </div>
-                        <div className="overflow-x-auto">
-                           <table className="min-w-full bg-white">
-                            <thead className="bg-gray-100">
-                              <tr>
-                                <th className="text-left py-2 px-4">Nome</th>
-                                <th className="text-left py-2 px-4">Email</th>
-                                <th className="text-left py-2 px-4">Função</th>
-                                <th className="text-left py-2 px-4">Status</th>
-                                 <th className="text-left py-2 px-4">Ações</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {users.map(u => (
-                                <tr key={u.id} className="border-b">
-                                  <td className="py-2 px-4">{u.name}</td>
-                                  <td className="py-2 px-4">{u.email}</td>
-                                  <td className="py-2 px-4 capitalize">{u.role}</td>
-                                  <td className="py-2 px-4">
-                                    <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${u.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{u.status === 'active' ? 'Ativo' : 'Inativo'}</span>
-                                  </td>
-                                  <td className="py-2 px-4 flex gap-2">
-                                    <button onClick={() => { setEditingUser(u); setIsUserModalOpen(true);}} className="p-1 text-gray-500 hover:text-blue-600">{icons.edit}</button>
-                                    <button onClick={() => setConfirmation({ isOpen: true, message: `Deseja ${u.status === 'active' ? 'desativar' : 'reativar'} este usuário?`, onConfirm: () => handleToggleUserStatus(u.id)})} className={`p-1 text-gray-500 ${u.status === 'active' ? 'hover:text-red-600' : 'hover:text-green-600'}`}>{u.status === 'active' ? icons.trash : icons.plus}</button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                    </div>
-                )}
-                 {settingsSubTab === 'log' && (
+                 {settingsSubTab === 'budget' && (
+                   <div className="bg-white rounded-lg shadow p-6 max-w-lg mx-auto">
+                       <h3 className="text-xl font-semibold mb-4">Orçamento Anual</h3>
+                       <div className="space-y-4">
+                           <div>
+                               <label className="block text-gray-700 font-medium mb-1">Valor do Orçamento (R$)</label>
+                               <input 
+                                   type="number"
+                                   value={newBudgetValue}
+                                   onChange={(e) => setNewBudgetValue(e.target.value)}
+                                   className="w-full p-2 border rounded border-gray-300"
+                                   placeholder="ex: 5000.00"
+                               />
+                           </div>
+                           <button 
+                               onClick={handleBudgetSave}
+                               className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                           >
+                               Salvar Orçamento
+                           </button>
+                       </div>
+                   </div>
+                 )}
+                 {settingsSubTab === 'users' && (
+                   <div className="bg-white rounded-lg shadow p-6">
+                       <div className="flex justify-between items-center mb-4">
+                           <h3 className="text-xl font-semibold">Gerenciar Usuários</h3>
+                           <button onClick={() => { setEditingUser(null); setIsUserModalOpen(true);}} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                             {icons.plus} Novo Usuário
+                           </button>
+                       </div>
+                       <div className="overflow-x-auto">
+                          <table className="min-w-full bg-white">
+                           <thead className="bg-gray-100">
+                             <tr>
+                               <th className="text-left py-2 px-4">Nome</th>
+                               <th className="text-left py-2 px-4">Email</th>
+                               <th className="text-left py-2 px-4">Função</th>
+                               <th className="text-left py-2 px-4">Status</th>
+                                <th className="text-left py-2 px-4">Ações</th>
+                             </tr>
+                           </thead>
+                           <tbody>
+                             {users.map(u => (
+                               <tr key={u.id} className="border-b">
+                                 <td className="py-2 px-4">{u.name}</td>
+                                 <td className="py-2 px-4">{u.email}</td>
+                                 <td className="py-2 px-4 capitalize">{u.role}</td>
+                                 <td className="py-2 px-4">
+                                   <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${u.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{u.status === 'active' ? 'Ativo' : 'Inativo'}</span>
+                                 </td>
+                                 <td className="py-2 px-4 flex gap-2">
+                                   <button onClick={() => { setEditingUser(u); setIsUserModalOpen(true);}} className="p-1 text-gray-500 hover:text-blue-600">{icons.edit}</button>
+                                   <button onClick={() => setConfirmation({ isOpen: true, message: `Deseja ${u.status === 'active' ? 'desativar' : 'reativar'} este usuário?`, onConfirm: () => handleToggleUserStatus(u.id)})} className={`p-1 text-gray-500 ${u.status === 'active' ? 'hover:text-red-600' : 'hover:text-green-600'}`}>{u.status === 'active' ? icons.trash : icons.plus}</button>
+                                 </td>
+                               </tr>
+                             ))}
+                           </tbody>
+                         </table>
+                       </div>
+                   </div>
+                 )}
+                  {settingsSubTab === 'log' && (
                     <div className="bg-white rounded-lg shadow p-6">
                         <h3 className="text-xl font-semibold mb-4">Log de Atividades do Sistema</h3>
                         <div className="overflow-y-auto max-h-[60vh]">
@@ -1825,10 +1866,10 @@ function AdminDashboard({ user, activeTab, setActiveTab, annualBudget, onUpdateB
                             </ul>
                         </div>
                     </div>
-                 )}
-              </div>
-            );
-        default:
+                  )}
+             </div>
+           );
+          default:
             return null;
       }
   }
@@ -1859,7 +1900,7 @@ const MainLayout = ({ user, handleLogout, ...props }) => {
             .reduce((sum, item) => sum + (item.totalValue || 0), 0), 
         [records, filterYear]
     );
-    
+   
     const getRoleName = (role) => {
         const names = {
             profissional: "Profissional",
@@ -1875,14 +1916,14 @@ const MainLayout = ({ user, handleLogout, ...props }) => {
         { id: 'historico', label: 'Histórico de Entradas', icon: icons.history },
         { id: 'patients', label: 'Gerenciar Pacientes', icon: icons.users },
     ];
-    
+   
     const secretaryMenu = [
         { id: 'dashboard', label: 'Dashboard', icon: icons.dashboard },
         { id: 'deliveries', label: 'Entregas Recentes', icon: icons.clipboard },
         { id: 'all_history', label: 'Relatório Geral', icon: icons.reports },
         { id: 'records', label: 'Histórico por Paciente', icon: icons.history },
     ];
-    
+   
     const adminMenu = [
         { id: 'dashboard', label: 'Dashboard', icon: icons.dashboard },
         { id: 'deliveries', label: 'Entregas Recentes', icon: icons.clipboard },
@@ -1898,7 +1939,7 @@ const MainLayout = ({ user, handleLogout, ...props }) => {
         secretario: secretaryMenu,
         admin: adminMenu,
     }[user.role];
-    
+   
     const ViewComponent = useMemo(() => {
       const components = {
         profissional: ProfessionalDashboard,
@@ -1933,21 +1974,21 @@ const MainLayout = ({ user, handleLogout, ...props }) => {
                 </nav>
                 <div className="p-4 border-t">
                      <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 p-2 text-sm bg-red-50 hover:bg-red-100 text-red-700 rounded-md">
-                      {icons.logout}
-                      <span>Sair</span>
-                    </button>
+                       {icons.logout}
+                       <span>Sair</span>
+                     </button>
                 </div>
             </aside>
-            
+           
             <div className="flex-1 flex flex-col overflow-hidden">
                  <header className="bg-white shadow-sm p-4 flex justify-between items-center flex-shrink-0 z-20">
                     <div className="flex items-center gap-4">
                         <span className="text-sm">Olá, <strong>{user.name}</strong></span>
                     </div>
-                    
+                   
                     {(user.role === 'admin' || user.role === 'secretario') && (
                         <div className="flex-grow flex items-center justify-center px-4 gap-4">
-                             <AnnualBudgetChart totalSpent={totalSpentForYear} budgetLimit={annualBudget} />
+                            <AnnualBudgetChart totalSpent={totalSpentForYear} budgetLimit={annualBudget} />
                         </div>
                     )}
 
@@ -1963,10 +2004,10 @@ const MainLayout = ({ user, handleLogout, ...props }) => {
                             </div>
                         }
                     </div>
-                </header>
-                <main className="flex-grow p-6 overflow-auto">
+                 </header>
+                 <main className="flex-grow p-6 overflow-auto">
                     {ViewComponent && <ViewComponent {...{ user, activeTab: activeView, setActiveTab: setActiveView, filterYear, ...props }} />}
-                </main>
+                 </main>
             </div>
         </div>
     );
@@ -1985,11 +2026,16 @@ export default function App() {
   const [activityLog, setActivityLog] = useState([]);
   const [showCookieBanner, setShowCookieBanner] = useState(false);
 
+  // --- NOSSAS NOVAS LINHAS ---
+  const [isInitializing, setIsInitializing] = useState(true); // Para o loading inicial
+  const [isLoggingOut, setIsLoggingOut] = useState(false);  // Para o loading de sair
+  // --- FIM DAS NOVAS LINHAS ---
+
   const addToast = (message, type = 'success') => {
     const id = Date.now() + Math.random();
     setToasts(prevToasts => [...prevToasts, { id, message, type }]);
   };
-  
+ 
   const removeToast = (id) => {
     setToasts(prevToasts => prevToasts.filter(toast => toast.id !== id));
   }
@@ -2009,16 +2055,32 @@ export default function App() {
     if (consent !== 'true') {
         setShowCookieBanner(true);
     }
-  }, []);
+    
+    // --- NOSSO NOVO CÓDIGO ---
+    // Simula a verificação de um token no localStorage ao abrir o app
+    setTimeout(() => {
+      // No futuro, aqui você verificaria um token de verdade.
+      // Se tivesse um token, você faria setUser(tokenData)
+      setIsInitializing(false); // Termina o loading inicial
+    }, 1500); // 1.5 segundos de simulação
+    // --- FIM DO NOVO CÓDIGO ---
+    
+  }, []); // O array vazio [] garante que isso só rode UMA VEZ
 
   const handleLogin = (userData) => {
     setUser(userData);
   };
 
+  // --- VAMOS MODIFICAR O LOGOUT ---
   const handleLogout = () => {
-    setUser(null);
+    setIsLoggingOut(true); // Ativa o preloader
+    // Simula uma chamada de API para invalidar o token
+    setTimeout(() => {
+      setUser(null);
+      setIsLoggingOut(false); // Desativa o preloader
+    }, 1000); // 1 segundo de simulação
   };
-  
+ 
   const handleUpdateBudget = (newBudget) => {
       setAnnualBudget(newBudget);
       addToast('Orçamento atualizado com sucesso!', 'success');
@@ -2030,10 +2092,16 @@ export default function App() {
         setShowCookieBanner(false);
     };
 
+  // --- VAMOS MODIFICAR O RETURN PRINCIPAL ---
+  // Se estiver inicializando ou fazendo logout, mostra o preloader
+  if (isInitializing || isLoggingOut) {
+    return <FullScreenPreloader />;
+  }
+
   return (
     <>
         <ToastContainer toasts={toasts} removeToast={removeToast} />
-        
+       
         {!user ? (
             <LoginScreen onLogin={handleLogin} setUsers={setUsers} addToast={addToast} addLog={addLog} />
         ) : (
@@ -2065,4 +2133,3 @@ export default function App() {
     </>
   );
 }
-
