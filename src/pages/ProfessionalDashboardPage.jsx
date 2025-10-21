@@ -1,77 +1,70 @@
 // src/pages/ProfessionalDashboardPage.jsx
 import React, { useState, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom'; // Para navegação
+import { useNavigate } from 'react-router-dom';
 
 // --- Imports de Componentes ---
-import { Modal, ConfirmModal } from '../components/common/Modal'; // Ajuste o caminho se Modal.jsx estiver em outra subpasta
+// Certifique-se que os caminhos e os exports (default ou named {}) estão corretos!
+import { Modal, ConfirmModal } from '../components/common/Modal';
 import PatientForm from '../components/forms/PatientForm';
 import RecordForm from '../components/forms/RecordForm';
-import MedicationForm from '../components/forms/MedicationForm'; // Necessário para o RecordForm
+import MedicationForm from '../components/forms/MedicationForm';
 import { StatusBadge } from '../components/common/StatusBadge';
-import AttendRecordModal  from '../components/common/AttendRecordModal';
-import { RecentDeliveriesTab } from '../components/common/RecentDeliveriesTab'; // Importa a tab de entregas
-import icons from '../utils/icons'
-import { getMedicationName } from '../utils/helpers'; // Importa da pasta utils
+import  AttendRecordModal  from '../components/common/AttendRecordModal';
+import { RecentDeliveriesTab } from '../components/common/RecentDeliveriesTab';
+import { PatientRecordsTable } from '../components/common/PatientRecordsTable';
+// Importe os ícones
+import icons from '../utils/icons'; // Ajuste o caminho
+
+// --- Imports de Utils ---
+import { getMedicationName } from '../utils/helpers';
 
 // --- Componente da Página ---
-// Recebe props do App.jsx (passadas pelo Outlet ou diretamente na Rota)
-// activeTabForced é uma prop especial que passamos na definição da Rota no App.jsx
-export default  function ProfessionalDashboardPage({
+export default function ProfessionalDashboardPage({
     user,
-    patients = [], setPatients, // Adiciona valores padrão
+    patients = [], setPatients,
     records = [], setRecords,
     medications = [], setMedications,
     addToast,
-    addLog, // Recebe addLog se precisar registrar ações específicas daqui
-    activeTabForced // Indica qual visão mostrar (ex: 'patients', 'historico')
+    addLog,
+    activeTabForced // Usado pelo App.jsx para forçar uma view específica
 }) {
-  const navigate = useNavigate(); // Hook para navegação programática
+  const navigate = useNavigate();
 
-  // --- Estados Internos da Página ---
-  const [currentView, setCurrentView] = useState('dashboard'); // Estado local para a visão ativa
+  // --- Estados Internos ---
+  const [currentView, setCurrentView] = useState('dashboard');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
   const [editingPatient, setEditingPatient] = useState(null);
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
-  const [confirmation, setConfirmation] = useState({ isOpen: false, message: '', onConfirm: null });
-  const [quickAddPatientId, setQuickAddPatientId] = useState(''); // Para o select de adição rápida
-  const [attendingRecord, setAttendingRecord] = useState(null); // Para o modal de confirmar atendimento
+  const [confirmation, setConfirmation] = useState({ isOpen: false, message: '', data: null, onConfirm: null });
+  const [quickAddPatientId, setQuickAddPatientId] = useState('');
+  const [attendingRecord, setAttendingRecord] = useState(null);
 
   // --- Efeito para atualizar a visão baseado na prop da Rota ---
-  // Isso permite que links externos (ou o App.jsx) definam qual parte mostrar
   useEffect(() => {
-    if (activeTabForced) {
-      setCurrentView(activeTabForced);
-    } else {
-        setCurrentView('dashboard'); // Padrão se nenhuma forçada
-    }
+    setCurrentView(activeTabForced || 'dashboard');
   }, [activeTabForced]);
 
-  // --- Funções Helper Internas ---
-  const closeConfirmation = () => setConfirmation({ isOpen: false, message: '', onConfirm: null });
+  // --- Funções Helper ---
+  const closeConfirmation = () => setConfirmation({ isOpen: false, message: '', data: null, onConfirm: null });
+  const getPatientNameById = (patientId) => patients.find(p => p.id === patientId)?.name || 'Desconhecido';
 
-  // Pega o nome do paciente (pode vir de utils se usada em mais lugares)
-  const getPatientNameById = (patientId) => {
-    const patient = patients.find(p => p.id === patientId);
-    return patient?.name || 'Desconhecido';
-  };
-
-  // --- Memos para dados derivados ---
+  // --- Memos ---
   const filteredPatients = useMemo(() =>
     patients.filter(p =>
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (p.cpf && String(p.cpf).includes(searchTerm)) || // Garante que cpf é string
-      (p.susCard && String(p.susCard).includes(searchTerm)) // Garante que susCard é string
-    ).sort((a, b) => a.name.localeCompare(b.name)), // Ordena por nome
+      p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p.cpf && String(p.cpf).includes(searchTerm)) ||
+      (p.susCard && String(p.susCard).includes(searchTerm))
+    ).sort((a, b) => a.name?.localeCompare(b.name || '') || 0),
     [patients, searchTerm]);
 
   const patientRecords = useMemo(() => {
-    if (!selectedPatient) return [];
+    if (!selectedPatient?.id) return [];
     return records
       .filter(r => r.patientId === selectedPatient.id)
-      .sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate)); // Mais recentes primeiro
+      .sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate));
   }, [records, selectedPatient]);
 
   const pendingRecords = useMemo(() =>
@@ -79,17 +72,17 @@ export default  function ProfessionalDashboardPage({
            .sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate)),
   [records]);
 
-  // --- Funções de Manipulação de Dados (CRUD) ---
-  // Usam as funções (setPatients, etc.) recebidas via props
+  // --- Funções CRUD ---
+  // (Estas funções devem estar completas como você já tinha)
   const handleSavePatient = (patientData) => {
     let message = '';
     if (patientData.id) {
-      setPatients(prev => prev.map(p => p.id === patientData.id ? { ...p, ...patientData } : p)); // Atualiza
+      setPatients(prev => prev.map(p => p.id === patientData.id ? { ...p, ...patientData } : p));
       message = 'Paciente atualizado com sucesso!';
       addLog?.(user?.name, `atualizou dados do paciente ${patientData.name} (ID: ${patientData.id})`);
     } else {
-      const newPatient = { ...patientData, id: Date.now(), createdAt: new Date().toISOString().slice(0, 10), status: 'Ativo' }; // ID temporário
-      setPatients(prev => [...prev, newPatient].sort((a, b) => a.name.localeCompare(b.name))); // Adiciona e re-ordena
+      const newPatient = { ...patientData, id: Date.now(), createdAt: new Date().toISOString().slice(0, 10), status: 'Ativo' };
+      setPatients(prev => [...prev, newPatient].sort((a, b) => a.name.localeCompare(b.name)));
       message = 'Paciente cadastrado com sucesso!';
       addLog?.(user?.name, `cadastrou novo paciente ${newPatient.name}`);
     }
@@ -100,12 +93,9 @@ export default  function ProfessionalDashboardPage({
 
   const handleDeletePatient = (patientId) => {
     const patientToDelete = patients.find(p => p.id === patientId);
-    // Idealmente, verificar se há registros associados antes de excluir ou usar exclusão lógica
     setPatients(prev => prev.filter(p => p.id !== patientId));
-    // Opcional: Remover registros associados (CUIDADO!)
-    // setRecords(prev => prev.filter(r => r.patientId !== patientId));
     if(selectedPatient && selectedPatient.id === patientId) {
-      setSelectedPatient(null); // Desseleciona se o paciente atual foi excluído
+      setSelectedPatient(null);
     }
     addToast('Paciente excluído com sucesso!', 'success');
     addLog?.(user?.name, `excluiu paciente ${patientToDelete?.name || ''} (ID: ${patientId})`);
@@ -126,7 +116,7 @@ export default  function ProfessionalDashboardPage({
         message = 'Registro atualizado com sucesso!';
         addLog?.(user?.name, `atualizou registro (ID: ${recordData.id}) para ${patientName}`);
     } else {
-        const newRecord = { ...recordData, id: Date.now(), entryDate: new Date().toISOString() }; // ID e data de entrada
+        const newRecord = { ...recordData, id: Date.now(), entryDate: new Date().toISOString() };
         setRecords(prev => [...prev, newRecord]);
         message = 'Registro salvo com sucesso!';
         addLog?.(user?.name, `criou novo registro para ${patientName}`);
@@ -134,71 +124,49 @@ export default  function ProfessionalDashboardPage({
     addToast(message, 'success');
     setIsRecordModalOpen(false);
     setEditingRecord(null);
-    setQuickAddPatientId(''); // Limpa select de adição rápida
-    // setSelectedPatient(null); // Não deseleciona para continuar vendo o histórico
+    setQuickAddPatientId('');
   };
 
-  // Função para adicionar nova medicação (chamada pelo RecordForm)
   const handleAddNewMedication = (medData) => {
-      const newMed = {
-          id: Date.now(), // ID temporário
-          name: medData.name,
-          createdAt: new Date().toISOString().slice(0, 10)
-      };
-      setMedications(prev => [...prev, newMed].sort((a,b)=> a.name.localeCompare(b.name))); // Adiciona e ordena
+      const newMed = { id: Date.now(), name: medData.name, createdAt: new Date().toISOString().slice(0, 10) };
+      setMedications(prev => [...prev, newMed].sort((a,b)=> a.name.localeCompare(b.name)));
       addToast('Medicação cadastrada com sucesso!', 'success');
       addLog?.(user?.name, `cadastrou nova medicação: ${newMed.name}`);
-      return newMed; // Retorna a nova medicação para o RecordForm selecionar
+      return newMed;
   };
 
-  // --- Funções de Mudança de Status ---
   const handleUpdateRecordStatus = (recordId, deliveryDateStr) => {
-    // Validação da data
-    if (!deliveryDateStr) {
-      addToast('Por favor, selecione uma data de entrega.', 'error');
-      return;
-    }
-    // Converte a string 'YYYY-MM-DD' para um objeto Date e depois para ISO String (idealmente com hora UTC)
-    // Para simplicidade, vamos armazenar como string por enquanto, mas ISO é melhor
-    // const deliveryDateISO = new Date(deliveryDateStr + 'T12:00:00Z').toISOString(); // Exemplo com UTC noon
-
-    setRecords(prev => prev.map(r =>
-        r.id === recordId
-        ? { ...r, status: 'Atendido', deliveryDate: deliveryDateStr } // Usando string por enquanto
-        : r
-    ));
+    if (!deliveryDateStr) { addToast('Selecione uma data.', 'error'); return; }
+    // const deliveryDateISO = new Date(deliveryDateStr + 'T12:00:00Z').toISOString();
+    setRecords(prev => prev.map(r => r.id === recordId ? { ...r, status: 'Atendido', deliveryDate: deliveryDateStr } : r ));
     addToast('Registro marcado como Atendido!', 'success');
     addLog?.(user?.name, `marcou registro (ID: ${recordId}) como Atendido`);
-    setAttendingRecord(null); // Fecha o modal de confirmação
+    setAttendingRecord(null);
   };
 
   const handleCancelRecordStatus = (recordId) => {
-    setRecords(prev => prev.map(r =>
-        r.id === recordId ? { ...r, status: 'Cancelado', deliveryDate: null } : r
-    ));
+    setRecords(prev => prev.map(r => r.id === recordId ? { ...r, status: 'Cancelado', deliveryDate: null } : r ));
     addToast('Registro marcado como Cancelado.', 'info');
     addLog?.(user?.name, `marcou registro (ID: ${recordId}) como Cancelado`);
   };
 
-  // --- Funções de Navegação e UI ---
+  // --- Funções UI ---
   const handleViewPatientHistory = (patientId) => {
       const patient = patients.find(p => p.id === patientId);
       if(patient) {
-          setSelectedPatient(patient); // Seleciona o paciente
-          setCurrentView('patients'); // Muda a visão interna para a de pacientes/detalhes
-          // Ou navega para uma rota específica se existir: navigate(`/patients/${patientId}`);
+          setSelectedPatient(patient);
+          setCurrentView('patients'); // Mantém na mesma página, mas foca no paciente
+          // Se tivesse rotas separadas: navigate(`/patients/${patientId}`);
       }
   }
 
-  // Abre modal de novo registro para o paciente clicado
   const handleQuickAddRecord = (e, patient) => {
-      e.stopPropagation(); // Previne que o clique selecione a linha inteira
-      setSelectedPatient(patient); // Garante que o paciente está selecionado
-      setEditingRecord(null); // Garante que é um novo registro
+      e.stopPropagation();
+      setSelectedPatient(patient);
+      setEditingRecord(null);
       setIsRecordModalOpen(true);
   }
 
-  // Abre modal de novo registro a partir do select
   const openQuickAddModal = () => {
     if(quickAddPatientId) {
         const patient = patients.find(p => p.id === parseInt(quickAddPatientId));
@@ -206,12 +174,8 @@ export default  function ProfessionalDashboardPage({
             setSelectedPatient(patient);
             setEditingRecord(null);
             setIsRecordModalOpen(true);
-        } else {
-            addToast('Paciente não encontrado.', 'error');
-        }
-    } else {
-        addToast('Selecione um paciente primeiro.', 'error');
-    }
+        } else { addToast('Paciente não encontrado.', 'error'); }
+    } else { addToast('Selecione um paciente.', 'error'); }
   }
 
 
@@ -228,6 +192,7 @@ export default  function ProfessionalDashboardPage({
                     <div className="bg-white p-4 md:p-6 rounded-lg shadow hover:shadow-lg transition-shadow">
                         <h3 className="text-lg font-semibold text-gray-700">Entradas Pendentes</h3>
                         <p className="text-3xl font-bold mt-2 text-yellow-600">{pendingRecords.length}</p>
+                        {/* Botão para mudar a view interna */}
                         <button onClick={() => setCurrentView('historico')} className="text-sm text-blue-600 hover:underline mt-2">Ver Entradas</button>
                     </div>
                     {/* Card Pacientes */}
@@ -236,7 +201,7 @@ export default  function ProfessionalDashboardPage({
                         <p className="text-3xl font-bold mt-2 text-blue-600">{patients.length}</p>
                          <button onClick={() => setCurrentView('patients')} className="text-sm text-blue-600 hover:underline mt-2">Gerenciar Pacientes</button>
                     </div>
-                    {/* Ações Rápidas (Opcional) */}
+                    {/* Ações Rápidas */}
                     <div className="bg-white p-4 md:p-6 rounded-lg shadow flex flex-col justify-center items-center gap-3">
                          <button onClick={() => { setEditingPatient(null); setIsPatientModalOpen(true); }} className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
                            <span className="w-4 h-4">{icons.plus}</span> Novo Paciente
@@ -244,14 +209,13 @@ export default  function ProfessionalDashboardPage({
                          <button onClick={() => setCurrentView('historico')} className="w-full px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 text-sm">Ver Histórico Geral</button>
                     </div>
                 </div>
-                {/* Pode adicionar um gráfico ou outra info aqui */}
              </div>
           );
 
       // VISÃO: GERENCIAR PACIENTES (Lista e Detalhes)
       case 'patients':
         return (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-10rem)] animate-fade-in"> {/* Altura ajustada */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-10rem)] animate-fade-in">
             {/* Coluna da Lista */}
             <div className="lg:col-span-1 bg-white rounded-lg shadow p-4 flex flex-col">
                 <h2 className="text-xl font-bold mb-4 text-gray-800">Pacientes</h2>
@@ -265,18 +229,17 @@ export default  function ProfessionalDashboardPage({
                   <span className="w-4 h-4">{icons.plus}</span> Novo Paciente
                 </button>
                 {/* Lista Rolável */}
-                <div className="flex-grow overflow-y-auto pr-2 -mr-2"> {/* Negativo margem para scrollbar */}
+                <div className="flex-grow overflow-y-auto pr-2 -mr-2">
                   {filteredPatients.length > 0 ? filteredPatients.map(patient => (
                     <div key={patient.id}
                          className={`p-3 rounded-lg cursor-pointer mb-2 border ${selectedPatient?.id === patient.id ? 'bg-blue-100 border-blue-300' : 'hover:bg-gray-50 border-transparent hover:border-gray-200'}`}
                          onClick={() => setSelectedPatient(patient)}
-                         role="button"
-                         tabIndex={0} // Para acessibilidade
+                         role="button" tabIndex={0}
                          onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setSelectedPatient(patient)}
                     >
                       <div className="flex justify-between items-center">
-                          <p className="font-semibold text-gray-800 text-sm truncate">{patient.name}</p> {/* Truncate */}
-                           <div className="flex items-center gap-2 flex-shrink-0"> {/* Evita que botões quebrem */}
+                          <p className="font-semibold text-gray-800 text-sm truncate">{patient.name}</p>
+                           <div className="flex items-center gap-2 flex-shrink-0">
                             <StatusBadge status={patient.status} />
                             <button onClick={(e) => handleQuickAddRecord(e, patient)} title="Novo Registro Rápido" className="text-gray-400 hover:text-blue-600 p-0.5">
                                 <span className="w-4 h-4 block">{icons.plus}</span>
@@ -290,24 +253,25 @@ export default  function ProfessionalDashboardPage({
                   )}
                 </div>
             </div>
+
             {/* Coluna de Detalhes */}
             <div className="lg:col-span-2 bg-white rounded-lg shadow p-4 md:p-6 flex flex-col">
               {selectedPatient ? (
                 <>
-                  {/* Info Paciente */}
+                  {/* Info Paciente com Optional Chaining */}
                   <div className="flex justify-between items-start mb-4 pb-4 border-b">
                     <div>
-                      <h2 className="text-xl md:text-2xl font-bold text-gray-800">{selectedPatient.name}</h2>
-                      <p className="text-sm text-gray-500 mt-1">CPF: {selectedPatient.cpf || 'Não informado'}</p>
-                      <p className="text-sm text-gray-500">SUS: {selectedPatient.susCard || 'Não informado'}</p>
-                      <p className="mt-2 text-sm"><strong>Observações:</strong> {selectedPatient.observations || 'Nenhuma'}</p>
-                       <p className="mt-1 text-sm"><strong>Anotações Gerais:</strong> {selectedPatient.generalNotes || 'Nenhuma'}</p>
+                      <h2 className="text-xl md:text-2xl font-bold text-gray-800">{selectedPatient?.name || 'Nome Indisponível'}</h2>
+                      <p className="text-sm text-gray-500 mt-1">CPF: {selectedPatient?.cpf || 'Não informado'}</p>
+                      <p className="text-sm text-gray-500">SUS: {selectedPatient?.susCard || 'Não informado'}</p>
+                      <p className="mt-2 text-sm"><strong>Observações:</strong> {selectedPatient?.observations || 'Nenhuma'}</p>
+                      <p className="mt-1 text-sm"><strong>Anotações Gerais:</strong> {selectedPatient?.generalNotes || 'Nenhuma'}</p>
                     </div>
                     <div className="flex gap-2 flex-shrink-0">
                       <button onClick={() => { setEditingPatient(selectedPatient); setIsPatientModalOpen(true); }} className="p-2 text-gray-600 hover:text-blue-600" title="Editar Paciente">
                          <span className="w-4 h-4 block">{icons.edit}</span>
                       </button>
-                      <button onClick={() => setConfirmation({ isOpen: true, message: `Excluir ${selectedPatient.name}? (Registros não serão excluídos)`, onConfirm: () => handleDeletePatient(selectedPatient.id) })} className="p-2 text-gray-600 hover:text-red-600" title="Excluir Paciente">
+                      <button onClick={() => setConfirmation({ isOpen: true, message: `Excluir ${selectedPatient?.name}? (Registros não serão excluídos)`, onConfirm: () => handleDeletePatient(selectedPatient.id) })} className="p-2 text-gray-600 hover:text-red-600" title="Excluir Paciente">
                          <span className="w-4 h-4 block">{icons.trash}</span>
                       </button>
                     </div>
@@ -315,13 +279,24 @@ export default  function ProfessionalDashboardPage({
                    {/* Histórico */}
                    <div className="flex justify-between items-center mt-2 mb-3">
                       <h3 className="text-lg font-semibold text-gray-700">Histórico de Registros</h3>
-                      <button onClick={() => { setEditingRecord(null); setIsRecordModalOpen(true);}} className="flex items-center gap-1.5 px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 text-xs font-medium">
-                        <span className="w-3 h-3">{icons.plus}</span> Novo Registro
+                      {/* --- BOTÃO + NOVO REGISTRO --- */}
+                      <button
+                          onClick={(e) => {
+                              // e.stopPropagation(); // Descomente se tiver problemas de clique duplo/borbulhamento
+                              console.log("Clicou em + Novo Registro para paciente:", selectedPatient?.id);
+                              setEditingRecord(null); // Define como NOVO registro
+                              setIsRecordModalOpen(true); // ABRE o modal
+                              console.log("Estado após clique: isRecordModalOpen=", true, "editingRecord=", null);
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 text-xs font-medium"
+                      >
+                          <span className="w-3 h-3">{icons.plus}</span> Novo Registro
                       </button>
+                      {/* --- FIM DO BOTÃO --- */}
                     </div>
                      {/* Tabela de Histórico Rolável */}
-                     <div className="flex-grow overflow-y-auto -mx-4 md:-mx-6 px-4 md:px-6"> {/* Overflow com padding negativo/positivo */}
-                        <PatientRecordsTable records={patientRecords} medications={medications} />
+                     <div className="flex-grow overflow-y-auto -mx-4 md:-mx-6 px-4 md:px-6">
+                        <PatientRecordsTable records={Array.isArray(patientRecords) ? patientRecords : []} medications={medications} />
                      </div>
                 </>
               ) : (
@@ -346,7 +321,6 @@ export default  function ProfessionalDashboardPage({
                  <div className="flex flex-col sm:flex-row items-center gap-3">
                    <select onChange={(e) => setQuickAddPatientId(e.target.value)} value={quickAddPatientId} className="flex-grow p-2 border rounded-lg w-full sm:w-auto text-sm bg-white">
                        <option value="">Selecione um paciente...</option>
-                       {/* Ordena pacientes no select */}
                        {patients.sort((a,b) => a.name.localeCompare(b.name)).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                    </select>
                    <button onClick={openQuickAddModal} disabled={!quickAddPatientId} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 w-full sm:w-auto text-sm font-medium">
@@ -367,7 +341,6 @@ export default  function ProfessionalDashboardPage({
                          </tr>
                      </thead>
                      <tbody>
-                         {/* Usa a lista completa de records ordenada */}
                          {records.sort((a,b) => new Date(b.entryDate) - new Date(a.entryDate)).map(record => (
                              <tr key={record.id} className="border-b hover:bg-gray-50">
                                  {/* Nome clicável */}
@@ -383,7 +356,7 @@ export default  function ProfessionalDashboardPage({
                                   <td className="py-2 px-3"><StatusBadge status={record.status} /></td>
                                  {/* Ações */}
                                  <td className="py-2 px-3">
-                                   <div className="flex items-center gap-2">
+                                   <div className="flex items-center gap-2 flex-wrap"> {/* Adicionado flex-wrap */}
                                      {record.status === 'Pendente' && (
                                          <>
                                              <button onClick={() => setAttendingRecord(record)} className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 font-medium" title="Marcar como Atendido">Atendido</button>
@@ -393,7 +366,7 @@ export default  function ProfessionalDashboardPage({
                                       <button onClick={() => {
                                          const patientForRecord = patients.find(p => p.id === record.patientId);
                                          if(patientForRecord) {
-                                           setSelectedPatient(patientForRecord); // Seleciona para o modal saber o contexto
+                                           setSelectedPatient(patientForRecord);
                                            setEditingRecord(record);
                                            setIsRecordModalOpen(true);
                                          }
@@ -414,16 +387,16 @@ export default  function ProfessionalDashboardPage({
          </div>
         );
 
-       // VISÃO: ENTREGAS RECENTES (Reutiliza o componente)
+       // VISÃO: ENTREGAS RECENTES
        case 'deliveries':
            return <RecentDeliveriesTab records={records} patients={patients} medications={medications} />;
 
-      default: // Caso a view seja desconhecida ou 'dashboard' por padrão
-        // Retorna o Dashboard como fallback
+      default:
+        // Fallback para Dashboard se view for inválida
         return (
-            <div className="text-center p-10">
-                <h2 className="text-xl font-semibold text-gray-700">Visão Inválida</h2>
-                <p className="text-gray-500">Ocorreu um erro ao carregar a visualização solicitada.</p>
+            <div className="text-center p-10 bg-white rounded shadow">
+                <h2 className="text-xl font-semibold text-gray-700">Erro Interno</h2>
+                <p className="text-gray-500">Visualização desconhecida: {currentView}</p>
                 <button onClick={() => setCurrentView('dashboard')} className="mt-4 text-blue-600 hover:underline">Voltar ao Dashboard</button>
             </div>
         );
@@ -433,49 +406,42 @@ export default  function ProfessionalDashboardPage({
   // --- Renderização Principal da Página ---
   return (
     <>
-      {/* Renderiza a visão atual */}
       {renderCurrentView()}
 
       {/* --- Modais --- */}
-      {/* Modal de Paciente (Novo/Editar) */}
       {isPatientModalOpen && (
         <PatientForm
             patient={editingPatient}
             onSave={handleSavePatient}
             onClose={() => { setIsPatientModalOpen(false); setEditingPatient(null); }}
-            // Passar função de checar duplicidade se implementada
         />
       )}
-      {/* Modal de Registro (Novo/Editar) */}
-      {isRecordModalOpen && selectedPatient && ( // Só abre se tiver um paciente selecionado
+      {isRecordModalOpen && selectedPatient?.id && (
         <RecordForm
             patient={selectedPatient}
-            professionalId={user.id} // ID do usuário logado
+            professionalId={user?.id}
             record={editingRecord}
             onSave={handleSaveRecord}
-            onClose={() => { setIsRecordModalOpen(false); setEditingRecord(null); /* Não deseleciona paciente */ }}
-            medicationsList={medications} // Lista completa de medicações
-            onNewMedication={handleAddNewMedication} // Função para adicionar medicação dinamicamente
+            onClose={() => { setIsRecordModalOpen(false); setEditingRecord(null); }}
+            medicationsList={medications}
+            onNewMedication={handleAddNewMedication}
         />
        )}
-      {/* Modal de Confirmação Genérico */}
       {confirmation.isOpen && (
         <ConfirmModal
             message={confirmation.message}
-            onConfirm={confirmation.onConfirm}
+            onConfirm={() => confirmation.onConfirm(confirmation.data)}
             onClose={closeConfirmation}
         />
       )}
-       {/* Modal para Confirmar Atendimento */}
        {attendingRecord && (
          <AttendRecordModal
             record={attendingRecord}
             onConfirm={handleUpdateRecordStatus}
             onClose={() => setAttendingRecord(null)}
-            getPatientName={getPatientNameById} // Passa a função helper
+            getPatientName={getPatientNameById}
          />
        )}
-        {/* Modal para Adicionar Medicação (renderizado dentro do RecordForm) */}
     </>
   );
 }

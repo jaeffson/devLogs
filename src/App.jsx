@@ -10,6 +10,7 @@ import ProfessionalDashboardPage from './pages/ProfessionalDashboardPage';
 import SecretaryDashboardPage from './pages/SecretaryDashboardPage';
 import {MedicationsPage} from './pages/MedicationsPage'; 
 import AdminSettingsPage from './pages/AdminSettingsPage'
+import {AdminReportsPage} from './pages/AdminReportsPage'
 
 
 // --- Imports de Componentes Comuns e Utils ---
@@ -141,7 +142,7 @@ export default function App() {
             }
           />
 
-          {/* Rotas Profissional / Admin */}
+          {}
           {(user?.role === 'profissional' || user?.role === 'admin') && (
             <>
               {/* Usando a prop activeTabForced para reutilizar o componente */}
@@ -149,7 +150,7 @@ export default function App() {
               <Route path="history" element={<ProfessionalDashboardPage {...commonPageProps} activeTabForced="historico" />} />
               <Route path="deliveries" element={<ProfessionalDashboardPage {...commonPageProps} activeTabForced="deliveries" />} />
             <Route path="medications" element={<MedicationsPage {...commonPageProps} />} />
-              
+            <Route path="dashboard" element={<ProfessionalDashboardPage {...commonPageProps} />} />  
             </>
           )}
 
@@ -172,7 +173,7 @@ export default function App() {
                <Route path="medications" element={<MedicationsPage {...commonPageProps} />} />
 
                {/* Rota para Relatórios (Ainda placeholder, faremos depois) */}
-               <Route path="reports" element={<div className="p-4 bg-white rounded shadow">Página de Relatórios (Admin) - Em construção</div>} />
+               <Route path="reports" element={<AdminReportsPage {...commonPageProps} />} />
 
                {/* Rota CORRIGIDA para Configurações */}
                <Route path="settings" element={<AdminSettingsPage {...commonPageProps} />} />
