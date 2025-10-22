@@ -1,22 +1,20 @@
-// src/App.jsx (VERSÃO REFEITA E SIMPLIFICADA)
+// src/App.jsx (VERSÃO CORRIGIDA)
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Navigate, useNavigate, Link } from 'react-router-dom';
 
 // --- Imports das Páginas e Layouts ---
-// Certifique-se que os exports/imports estão corretos (default ou named {})
 import LoginPage from './pages/LoginPage';
 import MainLayout from './layouts/MainLayout';
 import ProfessionalDashboardPage from './pages/ProfessionalDashboardPage';
 import SecretaryDashboardPage from './pages/SecretaryDashboardPage';
-import {MedicationsPage} from './pages/MedicationsPage'; 
-import AdminSettingsPage from './pages/AdminSettingsPage'
-import {AdminReportsPage} from './pages/AdminReportsPage'
-
+import AdminSettingsPage from './pages/AdminSettingsPage';
+import {MedicationsPage} from './pages/MedicationsPage';
+import {AdminReportsPage} from './pages/AdminReportsPage';
 
 // --- Imports de Componentes Comuns e Utils ---
-import ToastContainer  from './components/common/ToastContainer';
+import { ToastContainer } from './components/common/ToastContainer';
 import { FullScreenPreloader } from './components/common/FullScreenPreloader';
-import { getMedicationName } from './utils/helpers'; // Função helper
+import { getMedicationName } from './utils/helpers';
 
 // --- Dados Mock (Temporariamente aqui) ---
 let MOCK_USERS = [
@@ -37,14 +35,12 @@ let MOCK_RECORDS = [
 ];
 // --- Fim dos Dados Mock ---
 
-// --- Componente Raiz da Aplicação ---
 export default function App() {
-  // --- Estados ---
   const [user, setUser] = useState(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [toasts, setToasts] = useState([]);
-  // Estados dos dados (serão gerenciados globalmente ou via API depois)
+  const [showCookieBanner, setShowCookieBanner] = useState(false);
   const [patients, setPatients] = useState(MOCK_PATIENTS);
   const [records, setRecords] = useState(MOCK_RECORDS);
   const [medications, setMedications] = useState(MOCK_MEDICATIONS);
@@ -52,37 +48,57 @@ export default function App() {
   const [annualBudget, setAnnualBudget] = useState(5000.00);
   const [activityLog, setActivityLog] = useState([]);
 
-  // --- Hooks ---
-  const navigate = useNavigate(); // Hook do React Router
+  const navigate = useNavigate();
 
-  // --- Funções ---
   const addToast = (message, type = 'success') => {
     const id = Date.now() + Math.random();
-    setToasts(prev => [...prev, { id, message, type }].slice(-5)); // Limita a 5 toasts
+    setToasts(prev => [...prev, { id, message, type }].slice(-5));
   };
   const removeToast = (id) => {
     setToasts(prevToasts => prevToasts.filter(toast => toast.id !== id));
   };
-   const addLog = (userName, action) => {
+  const addLog = (userName, action) => {
     const newLog = { id: Date.now(), timestamp: new Date().toISOString(), user: userName || 'Sistema', action };
-    setActivityLog(prev => [newLog, ...prev].slice(0, 100)); // Limita a 100 logs
+    setActivityLog(prev => [newLog, ...prev].slice(0, 100));
   };
-   const handleUpdateBudget = (newBudget) => { /* ... sua função ... */ }; // Implemente se necessário
 
-  // --- Efeito de Inicialização ---
+  const handleUpdateBudget = (newBudget) => {
+      const numericBudget = parseFloat(newBudget);
+      if (!isNaN(numericBudget) && numericBudget >= 0) {
+        setAnnualBudget(numericBudget);
+        addToast('Orçamento atualizado com sucesso!', 'success');
+        addLog(user?.name, `atualizou o orçamento para R$ ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(numericBudget)}.`);
+      } else {
+         addToast('Valor de orçamento inválido recebido.', 'error');
+      }
+  };
+
+  const handleAcceptCookies = () => {
+      localStorage.setItem('cookieConsent', 'true');
+      setShowCookieBanner(false);
+  };
+
   useEffect(() => {
-    // Simula carregamento ou verificação de token
-    const timer = setTimeout(() => setIsInitializing(false), 1000); // 1 segundo de preloader
-    return () => clearTimeout(timer); // Limpa o timer
+    const initTimer = setTimeout(() => setIsInitializing(false), 1000);
+    const consent = localStorage.getItem('cookieConsent');
+    if (consent !== 'true') {
+        const bannerTimer = setTimeout(() => setShowCookieBanner(true), 1500);
+        return () => clearTimeout(bannerTimer);
+    }
+    return () => clearTimeout(initTimer);
   }, []);
 
-  // --- Funções de Autenticação ---
+  // --- EFEITO DE DEPURAÇÃO PARA O ESTADO 'user' ---
+  useEffect(() => {
+    console.log("3. App.jsx: O estado 'user' mudou para:", user);
+  }, [user]);
+
+  // --- FUNÇÕES DE AUTENTICAÇÃO CORRIGIDAS ---
   const handleLogin = (userData) => {
+    console.log("2. App.jsx: handleLogin foi chamado com:", userData);
     setUser(userData);
     addLog(userData.name, 'fez login.');
-    // Decide para onde ir após login baseado na role (opcional)
-    const landingPage = '/dashboard'; // Ou '/admin-dashboard' etc.
-    navigate(landingPage, { replace: true }); // replace: true evita voltar para o login
+    navigate('/dashboard', { replace: true });
   };
 
   const handleLogout = () => {
@@ -92,21 +108,19 @@ export default function App() {
       setUser(null);
       setIsLoggingOut(false);
       navigate('/login', { replace: true });
-    }, 500); // Meio segundo para logout visual
+    }, 500);
   };
+  // --- FIM DA CORREÇÃO ---
 
-  // --- Renderização do Preloader ---
   if (isInitializing || isLoggingOut) {
     return <FullScreenPreloader />;
   }
 
-  // --- Props compartilhadas com as páginas dentro do Layout ---
   const commonPageProps = {
     user, patients, setPatients, records, setRecords, medications, setMedications,
     users, setUsers, addToast, addLog, annualBudget, handleUpdateBudget, activityLog, getMedicationName,
   };
 
-  // --- Renderização Principal com Rotas ---
   return (
     <>
       <ToastContainer toasts={toasts} removeToast={removeToast} />
@@ -122,42 +136,38 @@ export default function App() {
           }
         />
 
-        {/* Rota Raiz (Protegida) - Renderiza o Layout que contém o Outlet */}
+        {/* Rota Raiz (Protegida) */}
         <Route
           path="/"
           element={
             user
-              ? <MainLayout user={user} handleLogout={handleLogout} {...commonPageProps} /> // Passa props para o Layout
+              ? <MainLayout user={user} handleLogout={handleLogout} {...commonPageProps} />
               : <Navigate to="/login" replace />
           }
         >
-          {/* Rotas Filhas (serão renderizadas pelo <Outlet> dentro do MainLayout) */}
+          {/* Rotas Filhas */}
           <Route index element={<Navigate to="/dashboard" replace />} />
 
           {/* Dashboard Condicional */}
           <Route path="dashboard" element={
               user?.role === 'secretario'
-                ? <SecretaryDashboardPage {...commonPageProps} /> // Secretária tem seu dashboard
-                : <ProfessionalDashboardPage {...commonPageProps} /> // Pro e Admin usam o mesmo por enquanto
+                ? <SecretaryDashboardPage {...commonPageProps} />
+                : <ProfessionalDashboardPage {...commonPageProps} />
             }
           />
 
-          {}
+          {/* Rotas Profissional / Admin */}
           {(user?.role === 'profissional' || user?.role === 'admin') && (
             <>
-              {/* Usando a prop activeTabForced para reutilizar o componente */}
               <Route path="patients" element={<ProfessionalDashboardPage {...commonPageProps} activeTabForced="patients" />} />
               <Route path="history" element={<ProfessionalDashboardPage {...commonPageProps} activeTabForced="historico" />} />
               <Route path="deliveries" element={<ProfessionalDashboardPage {...commonPageProps} activeTabForced="deliveries" />} />
-            <Route path="medications" element={<MedicationsPage {...commonPageProps} />} />
-            <Route path="dashboard" element={<ProfessionalDashboardPage {...commonPageProps} />} />  
             </>
           )}
 
           {/* Rotas Secretário */}
           {user?.role === 'secretario' && (
             <>
-              {/* Dashboard já definido */}
               <Route path="deliveries" element={<SecretaryDashboardPage {...commonPageProps} activeTabForced="deliveries" />} />
               <Route path="reports-general" element={<SecretaryDashboardPage {...commonPageProps} activeTabForced="all_history" />} />
               <Route path="patient-history" element={<SecretaryDashboardPage {...commonPageProps} activeTabForced="records" />} />
@@ -167,30 +177,35 @@ export default function App() {
           {/* Rotas Admin */}
           {user?.role === 'admin' && (
             <>
-               {/* As rotas patients, history, deliveries já estão cobertas acima */}
-
-               {/* Rota CORRIGIDA para Medicações */}
                <Route path="medications" element={<MedicationsPage {...commonPageProps} />} />
-
-               {/* Rota para Relatórios (Ainda placeholder, faremos depois) */}
                <Route path="reports" element={<AdminReportsPage {...commonPageProps} />} />
-
-               {/* Rota CORRIGIDA para Configurações */}
                <Route path="settings" element={<AdminSettingsPage {...commonPageProps} />} />
-
-               {/* A rota para gerenciar usuários agora está DENTRO de /settings */}
             </>
           )}
 
-          {/* Rota 'Não Encontrado' DENTRO do layout */}
+          {/* Rota 'Não Encontrado' */}
           <Route path="*" element={<div className="text-center p-6 bg-white rounded shadow"><h2>Página não encontrada</h2><Link to="/dashboard" className="text-blue-600">Voltar ao Dashboard</Link></div>} />
 
-        </Route> { /* Fim das rotas protegidas */ }
-
+        </Route>
       </Routes>
 
-      {/* Banner de Cookies (se usar) */}
-      {/* {showCookieBanner && (...)} */}
+      {/* BANNER DE COOKIES */}
+      {showCookieBanner && (
+            <div className="fixed bottom-0 left-0 right-0 bg-gray-800 text-white p-4 shadow-lg animate-fade-in-up z-[9990]">
+                <div className="max-w-4xl mx-auto flex flex-col md:flex-row justify-between items-center gap-3">
+                    <p className="text-sm text-center md:text-left">
+                        🍪 Usamos cookies para garantir que você tenha a melhor experiência em nosso site.
+                    </p>
+                    <button
+                        onClick={handleAcceptCookies}
+                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-5 rounded-lg text-sm flex-shrink-0"
+                    >
+                        Entendi e Aceitar
+                    </button>
+                </div>
+            </div>
+      )}
     </>
   );
 }
+

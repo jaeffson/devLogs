@@ -23,7 +23,8 @@ export default function LoginPage({ onLogin, setUsers, addToast, addLog, MOCK_US
     setTimeout(() => {
       if (isLoginView) {
         // Lógica de Login
-        const user = MOCK_USERS.find(u => u.email === email && u.password === password);
+        // FIX: Add a fallback to an empty array to prevent 'find of undefined' error
+        const user = (MOCK_USERS || []).find(u => u.email === email && u.password === password);
         if (user) {
             if (user.status === 'pending') {
               setError('Sua conta está pendente de aprovação.');
@@ -33,6 +34,11 @@ export default function LoginPage({ onLogin, setUsers, addToast, addLog, MOCK_US
               setError('Sua conta está desativada. Entre em contato.');
               setIsLoading(false); return;
             }
+          
+          // --- ADICIONADO PARA DEPURAÇÃO ---
+          console.log("1. LoginPage: Usuário encontrado. Chamando onLogin com:", user);
+          // -----------------------------------
+
           // Chama a função onLogin passada pelo App.jsx
           onLogin({ ...user, token: `fake-jwt-token-for-${user.id}` });
           // Não precisa setIsLoading(false) aqui, pois a tela vai mudar
@@ -42,7 +48,8 @@ export default function LoginPage({ onLogin, setUsers, addToast, addLog, MOCK_US
         }
       } else {
         // Lógica de Cadastro
-        if (MOCK_USERS.some(u => u.email.toLowerCase() === email.trim().toLowerCase())) {
+        // FIX: Add a fallback to an empty array here as well for safety
+        if ((MOCK_USERS || []).some(u => u.email.toLowerCase() === email.trim().toLowerCase())) {
           setError('Este e-mail já está em uso.');
           setIsLoading(false); return;
         }
@@ -61,7 +68,6 @@ export default function LoginPage({ onLogin, setUsers, addToast, addLog, MOCK_US
         };
 
         // Atualiza a lista de usuários (temporário, backend fará isso)
-        // Certifique-se que setUsers é uma função válida
         if (typeof setUsers === 'function') {
             setUsers(prev => [...prev, newUser]);
         } else {
@@ -71,7 +77,6 @@ export default function LoginPage({ onLogin, setUsers, addToast, addLog, MOCK_US
         addToast('Cadastro realizado! Aguarde aprovação.', 'success');
         addLog('Novo Usuário', `${name.trim()} (${email.trim()}) realizou cadastro e aguarda aprovação.`);
         setIsLoginView(true); // Volta para a tela de login após cadastro
-        // Limpa campos após cadastro (opcional)
         setName(''); setEmail(''); setPassword('');
         setIsLoading(false);
       }
@@ -83,7 +88,8 @@ export default function LoginPage({ onLogin, setUsers, addToast, addLog, MOCK_US
       <div className="max-w-md w-full bg-white rounded-xl shadow-2xl p-8 transform transition-all hover:scale-[1.01]"> {/* Efeito sutil */}
         <div className="text-center mb-8">
           {/* Pode adicionar um logo aqui */}
-          <h1 className="text-3xl font-bold text-gray-800">SysMed</h1>
+          <h1 className="text-3xl font-bold text-gray-800">MedLogs </h1>
+          <h1 className="text-3xl font-bold text-gray-800">Farmácia Municipal de Parari -PB</h1>
           <p className="text-gray-500 mt-1">Gestão Inteligente de Pacientes</p>
         </div>
 
@@ -116,7 +122,7 @@ export default function LoginPage({ onLogin, setUsers, addToast, addLog, MOCK_US
               className="shadow-sm appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-1 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10" // Padding à direita para ícone
               placeholder="Sua senha" disabled={isLoading}
             />
-             {/* Ícone (opcional, para mostrar/esconder senha) */}
+              {/* Ícone (opcional, para mostrar/esconder senha) */}
             <span className="absolute right-3 top-[37px] text-gray-400 cursor-pointer">
               {/* {icons.lock} */}
             </span>
@@ -149,10 +155,10 @@ export default function LoginPage({ onLogin, setUsers, addToast, addLog, MOCK_US
             >
               {isLoginView ? 'Não tem conta? Cadastre-se' : 'Já tem conta? Faça login'}
             </button>
-             {/* Link Esqueci Senha (opcional) */}
-             {/* {isLoginView && (
-                 <Link to="/forgot-password" className="text-xs text-gray-500 hover:text-blue-600 mt-2">Esqueceu a senha?</Link>
-             )} */}
+              {/* Link Esqueci Senha (opcional) */}
+              {/* {isLoginView && (
+                  <Link to="/forgot-password" className="text-xs text-gray-500 hover:text-blue-600 mt-2">Esqueceu a senha?</Link>
+              )} */}
           </div>
         </form>
         <p className="text-center text-xs text-gray-400 mt-8">Versão 1.0.3</p>
@@ -160,3 +166,4 @@ export default function LoginPage({ onLogin, setUsers, addToast, addLog, MOCK_US
     </div>
   );
 }
+

@@ -2,7 +2,7 @@ import React from 'react';
 import  Toast from '../common/Toast'; // Importa o Toast do mesmo diretório
 
 // Container para os Toasts - Exportação nomeada
-export default function ToastContainer({ toasts, removeToast }) {
+export  function ToastContainer({ toasts, removeToast }) {
   return (
     <div className="fixed top-5 right-5 z-[9999]"> {/* Z-index alto */}
       {toasts.map(toast => (
