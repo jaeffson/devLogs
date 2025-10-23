@@ -23,14 +23,14 @@ export default function MedicationForm({ medication, onSave, onClose /* Adicione
         }
 
         // --- Validação de Duplicidade (COMENTADA) ---
-        /*
+        
         // Exemplo usando prop:
         // const isDuplicate = checkDuplicateMed({ name: trimmedName, currentId: medication?.id });
         // if (isDuplicate) {
         //   setError('Esta medicação já existe.');
         //   return;
         // }
-        */
+        
 
         // Passa o ID se estiver editando, e o nome limpo
         onSave({ id: medication?.id, name: trimmedName });

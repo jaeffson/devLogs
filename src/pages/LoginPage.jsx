@@ -162,7 +162,7 @@ export default function LoginPage({ onLogin, setUsers, addToast, addLog, MOCK_US
           </div>
         </form>
         <p className="text-center text-xs text-gray-400 mt-8">Versão 1.0.4</p>
-        <p className="text-center text-xs text-gray-400 mt-8">Todos os direito reservados @2025 </p>
+        <p className="text-center text-xs text-gray-400 mt-8">Todos os direitos reservados @2025 </p>
       </div>
     </div>
   );
