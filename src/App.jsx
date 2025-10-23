@@ -1,4 +1,4 @@
-// src/App.jsx (VERSÃO COM ROTA DE RELATÓRIOS COMPARTILHADA)
+// src/App.jsx (VERSÃO COM ROTA DE RELATÓRIOS COMPARTILHADA E LOGIN PERSISTENTE)
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Navigate, useNavigate, Link } from 'react-router-dom';
 
@@ -37,7 +37,25 @@ let MOCK_RECORDS = [
 // --- Fim dos Dados Mock ---
 
 export default function App() {
-  const [user, setUser] = useState(null);
+
+  // --- PASSO 1: LER DO LOCALSTORAGE AO INICIAR ---
+  // Trocamos 'useState(null)' por uma função que roda SÓ UMA VEZ.
+  // Ela tenta ler o 'user' do localStorage. Se achar, o usuário já começa logado.
+  const [user, setUser] = useState(() => {
+    const storedUser = localStorage.getItem('user');
+    if (!storedUser) return null; // Se não tem nada, começa nulo
+
+    try {
+      // Converte a string guardada de volta para um objeto
+      return JSON.parse(storedUser);
+    } catch (error) {
+      console.error("Falha ao analisar usuário do localStorage:", error);
+      // Se os dados estiverem corrompidos, limpa e começa nulo
+      localStorage.removeItem('user');
+      return null;
+    }
+  });
+
   const [isInitializing, setIsInitializing] = useState(true);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [toasts, setToasts] = useState([]);
@@ -70,7 +88,7 @@ export default function App() {
         addToast('Orçamento atualizado com sucesso!', 'success');
         addLog(user?.name, `atualizou o orçamento para R$ ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(numericBudget)}.`);
       } else {
-         addToast('Valor de orçamento inválido recebido.', 'error');
+        addToast('Valor de orçamento inválido recebido.', 'error');
       }
   };
 
@@ -80,6 +98,7 @@ export default function App() {
   };
 
   useEffect(() => {
+    // Esta lógica de preloader continua a mesma
     const initTimer = setTimeout(() => setIsInitializing(false), 1000);
     const consent = localStorage.getItem('cookieConsent');
     if (consent !== 'true') {
@@ -89,21 +108,25 @@ export default function App() {
     return () => clearTimeout(initTimer);
   }, []);
 
-  useEffect(() => {
-    // console.log("3. App.jsx: O estado 'user' mudou para:", user);
-  }, [user]);
 
+  // --- PASSO 2: SALVAR NO LOCALSTORAGE AO FAZER LOGIN ---
   const handleLogin = (userData) => {
-    // console.log("2. App.jsx: handleLogin foi chamado com:", userData);
+    // 1. Salva o usuário no localStorage (convertido para string)
+    localStorage.setItem('user', JSON.stringify(userData));
+    // 2. Atualiza o estado do React (como antes)
     setUser(userData);
     addLog(userData.name, 'fez login.');
     navigate('/dashboard', { replace: true });
   };
 
+  // --- PASSO 3: REMOVER DO LOCALSTORAGE AO FAZER LOGOUT ---
   const handleLogout = () => {
     setIsLoggingOut(true);
     addLog(user?.name, 'fez logout.');
     setTimeout(() => {
+      // 1. Remove o usuário do localStorage
+      localStorage.removeItem('user');
+      // 2. Atualiza o estado do React para null (como antes)
       setUser(null);
       setIsLoggingOut(false);
       navigate('/login', { replace: true });
@@ -171,15 +194,15 @@ export default function App() {
           {/* Rotas SOMENTE Admin */}
           {user?.role === 'admin' && (
             <>
-               <Route path="medications" element={<MedicationsPage {...commonPageProps} />} />
-               {/* A rota 'settings' do admin é diferente da do secretário */}
-               <Route path="settings" element={<AdminSettingsPage {...commonPageProps} />} /> 
+              <Route path="medications" element={<MedicationsPage {...commonPageProps} />} />
+              {/* A rota 'settings' do admin é diferente da do secretário */}
+              <Route path="settings" element={<AdminSettingsPage {...commonPageProps} />} /> 
             </>
           )}
           
           {/* Rota de Relatórios (AGORA COMPARTILHADA entre Admin e Secretário) */}
           {(user?.role === 'admin' || user?.role === 'secretario') && (
-               <Route path="reports" element={<AdminReportsPage {...commonPageProps} />} />
+              <Route path="reports" element={<AdminReportsPage {...commonPageProps} />} />
           )}
           {/* --- FIM DA ALTERAÇÃO --- */}
 
@@ -189,21 +212,20 @@ export default function App() {
       </Routes>
 
       {showCookieBanner && (
-            <div className="fixed bottom-0 left-0 right-0 bg-gray-800 text-white p-4 shadow-lg animate-fade-in-up z-[9990]">
-                <div className="max-w-4xl mx-auto flex flex-col md:flex-row justify-between items-center gap-3">
-                    <p className="text-sm text-center md:text-left">
-                        🍪 Usamos cookies para garantir que você tenha a melhor experiência em nosso site.
-                    </p>
-                    <button
-                        onClick={handleAcceptCookies}
-                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-5 rounded-lg text-sm flex-shrink-0"
-                    >
-                        Entendi e Aceitar
-                    </button>
-                </div>
-            </div>
+          <div className="fixed bottom-0 left-0 right-0 bg-gray-800 text-white p-4 shadow-lg animate-fade-in-up z-[9990]">
+              <div className="max-w-4xl mx-auto flex flex-col md:flex-row justify-between items-center gap-3">
+                  <p className="text-sm text-center md:text-left">
+                      🍪 Usamos cookies para garantir que você tenha a melhor experiência em nosso site.
+                  </p>
+                  <button
+                      onClick={handleAcceptCookies}
+                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-5 rounded-lg text-sm flex-shrink-0"
+                  >
+                      Entendi e Aceitar
+                  </button>
+              </div>
+          </div>
       )}
     </>
   );
 }
-
