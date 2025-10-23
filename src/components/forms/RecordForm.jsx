@@ -118,9 +118,10 @@ export default function RecordForm({
             if (!med.medicationId) {
                 newErrors[`medications[${index}].medicationId`] = 'Selecione uma medicação.';
             }
-            // Adicione validação para quantidade ou valor se necessário
-            // if (!med.quantity) newErrors[`medications[${index}].quantity`] = 'Quantidade obrigatória.';
-            // if (med.value && isNaN(Number(med.value))) newErrors[`medications[${index}].value`] = 'Valor inválido.';
+            // Valida se quantidade foi preenchida (agora que é input)
+            if (!med.quantity) {
+                newErrors[`medications[${index}].quantity`] = 'Quantidade obrigatória.';
+            }
         });
     }
     return newErrors;
@@ -190,65 +191,75 @@ export default function RecordForm({
             {/* Seção de Medicações */}
             <div className="border-t pt-4">
                 <h3 className="text-lg font-semibold mb-2">Medicações</h3>
-                {medications.map((med, index) => (
-                    <div key={index} className="grid grid-cols-12 gap-2 mb-3 items-start border-b pb-3 last:border-b-0 last:pb-0"> {/* Separador e espaçamento */}
-                        {/* Select Medicação */}
-                        <div className="col-span-12 md:col-span-4">
-                            <label className="text-xs text-gray-600 mb-1 block" htmlFor={`med-id-${index}`}>Medicação</label>
-                            <select
-                              id={`med-id-${index}`}
-                              value={med.medicationId}
-                              onChange={e => handleMedicationChange(index, 'medicationId', e.target.value)}
-                              className={`w-full p-2 border rounded ${errors[`medications[${index}].medicationId`] ? 'border-red-500' : 'border-gray-300'} bg-white text-sm`}
-                              required
-                            >
-                                <option value="" disabled>Selecione...</option>
-                                {medicationsList.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                                <option value="new" className="font-bold text-blue-600 italic">Cadastrar Nova...</option>
-                            </select>
-                            {errors[`medications[${index}].medicationId`] && <p className="text-red-500 text-xs mt-1">{errors[`medications[${index}].medicationId`]}</p>}
+                
+                {/* --- ÁREA DE SCROLL ADICIONADA --- */}
+                <div className="max-h-72 overflow-y-auto p-1 space-y-3">
+                    {medications.map((med, index) => (
+                        // 'mb-3' foi removido daqui e 'space-y-3' controla o espaçamento no 'div' pai
+                        <div key={index} className="grid grid-cols-12 gap-2 items-start border-b pb-3 last:border-b-0 last:pb-0"> 
+                            {/* Select Medicação */}
+                            <div className="col-span-12 md:col-span-4">
+                                <label className="text-xs text-gray-600 mb-1 block" htmlFor={`med-id-${index}`}>Medicação</label>
+                                <select
+                                  id={`med-id-${index}`}
+                                  value={med.medicationId}
+                                  onChange={e => handleMedicationChange(index, 'medicationId', e.target.value)}
+                                  className={`w-full p-2 border rounded ${errors[`medications[${index}].medicationId`] ? 'border-red-500' : 'border-gray-300'} bg-white text-sm`}
+                                  required
+                                >
+                                    <option value="" disabled>Selecione...</option>
+                                    {medicationsList.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                    <option value="new" className="font-bold text-blue-600 italic">Cadastrar Nova...</option>
+                                </select>
+                                {errors[`medications[${index}].medicationId`] && <p className="text-red-500 text-xs mt-1">{errors[`medications[${index}].medicationId`]}</p>}
+                            </div>
+
+                            {/* --- CAMPO QUANTIDADE (INPUT + DATALIST) --- */}
+                            <div className="col-span-6 md:col-span-3">
+                                <label className="text-xs text-gray-600 mb-1 block" htmlFor={`med-qty-${index}`}>Quantidade</label>
+                                <input
+                                  type="text"
+                                  id={`med-qty-${index}`}
+                                  list="quantity-options-list" // Liga ao datalist
+                                  value={med.quantity}
+                                  onChange={e => handleMedicationChange(index, 'quantity', e.target.value)}
+                                  className={`w-full p-2 border rounded ${errors[`medications[${index}].quantity`] ? 'border-red-500' : 'border-gray-300'} bg-white text-sm`}
+                                  required // Adicionado required
+                                />
+                                {errors[`medications[${index}].quantity`] && <p className="text-red-500 text-xs mt-1">{errors[`medications[${index}].quantity`]}</p>}
+                            </div>
+
+                            {/* Input Valor */}
+                            <div className="col-span-6 md:col-span-3">
+                                <label className="text-xs text-gray-600 mb-1 block" htmlFor={`med-val-${index}`}>Valor (R$)</label>
+                                <input
+                                  type="number"
+                                  id={`med-val-${index}`}
+                                  placeholder="0.00"
+                                  value={med.value}
+                                  onChange={e => handleMedicationChange(index, 'value', e.target.value)}
+                                  className={`w-full p-2 border rounded ${errors[`medications[${index}].value`] ? 'border-red-500' : 'border-gray-300'} text-sm`}
+                                  step="0.01" min="0"
+                                />
+                                 {errors[`medications[${index}].value`] && <p className="text-red-500 text-xs mt-1">{errors[`medications[${index}].value`]}</p>}
+                            </div>
+                            {/* Botão Remover */}
+                            <div className="col-span-12 md:col-span-2 flex items-end justify-end md:justify-start pt-2 md:pt-0">
+                              <button
+                                type="button"
+                                onClick={() => removeMedicationField(index)}
+                                className="text-red-500 hover:text-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs p-2 mt-4 md:mt-0"
+                                disabled={medications.length <= 1}
+                                title="Remover medicação"
+                              >
+                                Remover
+                              </button>
+                            </div>
                         </div>
-                        {/* Select Quantidade */}
-                        <div className="col-span-6 md:col-span-3">
-                            <label className="text-xs text-gray-600 mb-1 block" htmlFor={`med-qty-${index}`}>Quantidade</label>
-                            <select
-                              id={`med-qty-${index}`}
-                              value={med.quantity}
-                              onChange={e => handleMedicationChange(index, 'quantity', e.target.value)}
-                              className="w-full p-2 border rounded border-gray-300 bg-white text-sm"
-                            >
-                                {quantityOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                {/* Permitir digitar quantidade customizada? (requereria mudar para input) */}
-                            </select>
-                        </div>
-                        {/* Input Valor */}
-                        <div className="col-span-6 md:col-span-3">
-                            <label className="text-xs text-gray-600 mb-1 block" htmlFor={`med-val-${index}`}>Valor (R$)</label>
-                            <input
-                              type="number"
-                              id={`med-val-${index}`}
-                              placeholder="0.00"
-                              value={med.value}
-                              onChange={e => handleMedicationChange(index, 'value', e.target.value)}
-                              className={`w-full p-2 border rounded ${errors[`medications[${index}].value`] ? 'border-red-500' : 'border-gray-300'} text-sm`}
-                              step="0.01" min="0"
-                            />
-                             {errors[`medications[${index}].value`] && <p className="text-red-500 text-xs mt-1">{errors[`medications[${index}].value`]}</p>}
-                        </div>
-                        {/* Botão Remover */}
-                        <div className="col-span-12 md:col-span-2 flex items-end justify-end md:justify-start pt-2 md:pt-0">
-                          <button
-                            type="button"
-                            onClick={() => removeMedicationField(index)}
-                            className="text-red-500 hover:text-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs p-2 mt-4 md:mt-0"
-                            disabled={medications.length <= 1}
-                            title="Remover medicação"
-                          >
-                            Remover
-                          </button>
-                        </div>
-                    </div>
-                ))}
+                    ))}
+                </div>
+                {/* --- FIM DA ÁREA DE SCROLL --- */}
+
                 <button type="button" onClick={addMedicationField} className="mt-2 text-sm text-blue-600 hover:text-blue-800 font-semibold">+ Adicionar medicação</button>
             </div>
 
@@ -271,6 +282,13 @@ export default function RecordForm({
                 <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Salvar Registro</button>
             </div>
         </form>
+
+        {/* --- DATALIST DAS QUANTIDADES --- */}
+        {/* Colocado FORA do map, UMA ÚNICA VEZ */}
+        <datalist id="quantity-options-list">
+            {quantityOptions.map(opt => <option key={opt} value={opt} />)}
+        </datalist>
+
     </Modal>
 
     {/* Modal para cadastrar nova medicação (renderizado condicionalmente) */}
@@ -282,12 +300,9 @@ export default function RecordForm({
         onClose={() => {
             setIsMedicationModalOpen(false);
             setAddingMedicationIndex(null);
-            // Opcional: focar de volta no select?
         }}
-        // Não passa 'medication' (é sempre novo)
-        // Passe a prop para verificar duplicidade se implementada
       />
-     )}
+      )}
     </>
   );
 }

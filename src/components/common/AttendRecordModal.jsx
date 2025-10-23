@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Modal } from './Modal'; // Importa Modal
+import { Modal } from './Modal'; 
 
 // Exportação nomeada
-export default function AttendRecordModal({ record, onConfirm, onClose, getPatientName }) {
+export  function AttendRecordModal({ record, onConfirm, onClose, getPatientName }) {
     // Inicializa com a data atual ou a data de referência do registro se já existir
     const initialDate = record?.referenceDate || new Date().toISOString().slice(0, 10);
     const [deliveryDate, setDeliveryDate] = useState(initialDate);

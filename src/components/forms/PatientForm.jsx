@@ -1,5 +1,6 @@
 // src/components/forms/PatientForm.jsx
 import React, { useState, useEffect } from 'react';
+// CORREÇÃO: Removendo a extensão .jsx do caminho de importação
 import { Modal } from '../common/Modal'; // Importa Modal da pasta common
 
 // Funções utilitárias (podem ser movidas para utils/helpers.js futuramente, mas ok aqui por enquanto)
@@ -36,10 +37,9 @@ export default function PatientForm({
     patient, // Paciente a ser editado (null se for novo)
     onSave, // Função chamada ao salvar (recebe dados do form)
     onClose, // Função para fechar o modal
-    // checkDuplicate // Opcional: Função para verificar duplicidade antes de salvar
+    checkDuplicate // <--- Prop de validação agora será usada
 }) {
     // --- Estado do Formulário ---
-    // Inicializa todos os campos como string vazia para evitar erros de 'controlled' vs 'uncontrolled'
     const [formData, setFormData] = useState({
         name: '',
         cpf: '',
@@ -51,10 +51,8 @@ export default function PatientForm({
     const [errors, setErrors] = useState({}); // Estado para erros de validação
 
     // --- Efeito para Carregar Dados ou Resetar ---
-    // Roda quando o modal abre ou a prop 'patient' muda
     useEffect(() => {
         if (patient) {
-            // Editando: Preenche o form com dados do paciente, usando '' como fallback
             setFormData({
                name: patient.name || '',
                cpf: patient.cpf || '',
@@ -62,100 +60,86 @@ export default function PatientForm({
                observations: patient.observations || '',
                generalNotes: patient.generalNotes || '',
                status: patient.status || 'Ativo',
-               id: patient.id // Mantém o ID se estiver editando
+               id: patient.id
             });
         } else {
-            // Novo: Reseta o form para strings vazias
             setFormData({
-                name: '',
-                cpf: '',
-                susCard: '',
-                observations: '',
-                generalNotes: '',
-                status: 'Ativo',
-                // Sem ID para novo
+                name: '', cpf: '', susCard: '', observations: '', generalNotes: '', status: 'Ativo',
             });
         }
-        setErrors({}); // Limpa erros ao abrir/trocar paciente
-    }, [patient]); // Dependência: Roda quando 'patient' muda
+        setErrors({});
+    }, [patient]);
 
     // --- Manipulador de Mudanças nos Inputs ---
     const handleChange = (e) => {
         let { name, value } = e.target;
-
-        // Aplica formatações específicas
         if (name === 'cpf') value = formatCPF(value);
         if (name === 'name') value = capitalizeName(value);
-        if (name === 'susCard') value = value.replace(/\D/g, ''); // Apenas números
-
-        // Atualiza o estado do formulário
+        if (name === 'susCard') value = value.replace(/\D/g, '');
         setFormData(prev => ({ ...prev, [name]: value }));
-
-        // Limpa erro do campo específico ao ser modificado
-        if (errors[name]) {
-            setErrors(prev => ({ ...prev, [name]: null }));
-        }
-        // Limpa erro combinado de CPF/SUS se um deles for preenchido
+        if (errors[name]) setErrors(prev => ({ ...prev, [name]: null }));
         if ((name === 'cpf' || name === 'susCard') && errors.cpf) {
-            setErrors(prev => ({...prev, cpf: null }));
+             setErrors(prev => ({...prev, cpf: null }));
         }
     };
 
     // --- Função de Validação ---
     const validateForm = () => {
         const newErrors = {};
-        // CORREÇÃO AQUI: Verifica se formData.name existe ANTES de chamar trim()
         if (!formData.name || !formData.name.trim()) {
             newErrors.name = 'O nome completo é obrigatório.';
         }
-        // Verifica se pelo menos um documento foi informado (com segurança contra undefined/null)
-        const hasCPF = formData.cpf && formData.cpf.trim();
-        const hasSUS = formData.susCard && formData.susCard.trim();
+        const hasCPF = formData.cpf && String(formData.cpf).replace(/\D/g, '').trim();
+        const hasSUS = formData.susCard && String(formData.susCard).replace(/\D/g, '').trim();
         if (!hasCPF && !hasSUS) {
-            // Mostra erro no campo CPF, mas poderia ser em ambos ou em um campo genérico
             newErrors.cpf = 'É necessário informar o CPF ou o Cartão SUS.';
         }
-        // Adicione mais validações se necessário (formato CPF, etc.)
         return newErrors;
     }
 
     // --- Manipulador de Submissão ---
     const handleSubmit = (e) => {
-        e.preventDefault(); // Previne recarregamento da página
-        const formErrors = validateForm(); // Roda a validação
+        e.preventDefault();
+        // Limpa erros antigos antes de validar novamente
+        setErrors({});
+
+        const formErrors = validateForm();
         if (Object.keys(formErrors).length > 0) {
-            setErrors(formErrors); // Se houver erros, atualiza o estado de erros e para
+            setErrors(formErrors);
             return;
         }
 
-        // --- Validação de Duplicidade (Opcional - Idealmente no backend) ---
-        // Se você passou uma função `checkDuplicate` via props, pode usá-la aqui
-        /*
+        // --- Validação de Duplicidade (AGORA ATIVADA) ---
         if (typeof checkDuplicate === 'function') {
             const cleanCPF = (cpf) => String(cpf || '').replace(/\D/g, '');
             const cleanSus = (sus) => String(sus || '').replace(/\D/g, '');
-            const isDuplicate = checkDuplicate({
-                cpf: cleanCPF(formData.cpf),
-                susCard: cleanSus(formData.susCard),
-                currentId: formData.id // Passa o ID atual (se houver) para ignorar na verificação
-            });
-            if (isDuplicate) {
-                setErrors({ cpf: 'Já existe um paciente com este CPF ou Cartão SUS.' });
-                return;
+            const cpfToCheck = cleanCPF(formData.cpf);
+            const susToCheck = cleanSus(formData.susCard);
+
+            // Só executa a verificação se CPF ou SUS foi preenchido
+            if (cpfToCheck || susToCheck) {
+                const isDuplicate = checkDuplicate({
+                    cpf: cpfToCheck,
+                    susCard: susToCheck,
+                    currentId: formData.id // Passa o ID atual (undefined se for novo)
+                });
+
+                if (isDuplicate) {
+                    setErrors({ cpf: 'Já existe um paciente com este CPF ou Cartão SUS.' });
+                    return; // PARA A EXECUÇÃO AQUI se for duplicado
+                }
             }
         }
-        */
+        // --- FIM DA VALIDAÇÃO ---
 
-        // Se passou na validação, chama a função onSave passada pelo componente pai
-        onSave(formData); // Envia os dados do formulário
-        // onClose(); // O componente pai geralmente fecha o modal após onSave ter sucesso
+        onSave(formData);
     };
 
     // --- Renderização do Componente ---
     return (
         <Modal onClose={onClose}>
             <h2 className="text-2xl font-bold mb-6">{patient ? 'Editar Paciente' : 'Cadastrar Novo Paciente'}</h2>
-            <form onSubmit={handleSubmit} noValidate> {/* noValidate desabilita validação HTML5 */}
+            <form onSubmit={handleSubmit} noValidate>
 
                 {/* Campo Nome */}
                 <div className="mb-4">
@@ -164,30 +148,28 @@ export default function PatientForm({
                         type="text"
                         id={`patient-name-${patient?.id || 'new'}`}
                         name="name"
-                        value={formData.name} // Controlado pelo estado
+                        value={formData.name}
                         onChange={handleChange}
                         className={`w-full p-2 border rounded ${errors.name ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'} focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                        required // Para acessibilidade e indicação visual
+                        required
                     />
                     {errors.name && <p className="text-red-600 text-xs mt-1">{errors.name}</p>}
                 </div>
 
                 {/* Campos CPF e SUS */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-1">
                     <div>
                         <label className="block text-gray-700 font-medium mb-1" htmlFor={`patient-cpf-${patient?.id || 'new'}`}>CPF</label>
                         <input
                             type="text"
                             id={`patient-cpf-${patient?.id || 'new'}`}
                             name="cpf"
-                            value={formData.cpf} // Controlado
+                            value={formData.cpf}
                             onChange={handleChange}
                             maxLength="14"
                             placeholder="000.000.000-00"
                             className={`w-full p-2 border rounded ${errors.cpf ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'} focus:outline-none focus:ring-2 focus:ring-blue-500`}
                         />
-                        {/* Mostra erro do CPF apenas se ele for o erro principal (não do SUS) */}
-                        {errors.cpf && <p className="text-red-600 text-xs mt-1">{errors.cpf}</p>}
                     </div>
                     <div>
                         <label className="block text-gray-700 font-medium mb-1" htmlFor={`patient-sus-${patient?.id || 'new'}`}>Cartão SUS</label>
@@ -195,16 +177,17 @@ export default function PatientForm({
                             type="text"
                             id={`patient-sus-${patient?.id || 'new'}`}
                             name="susCard"
-                            value={formData.susCard} // Controlado
+                            value={formData.susCard}
                             onChange={handleChange}
                             maxLength="15"
                             placeholder="000 0000 0000 0000"
-                            className={`w-full p-2 border rounded ${errors.cpf ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'} focus:outline-none focus:ring-2 focus:ring-blue-500`} // Marca se houver erro no CPF/SUS
+                            className={`w-full p-2 border rounded ${errors.cpf ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'} focus:outline-none focus:ring-2 focus:ring-blue-500`}
                         />
                     </div>
                 </div>
-                {/* Mostra erro do CPF/SUS abaixo dos campos se existir */}
-                {/* {errors.cpf && <p className="text-red-600 text-xs -mt-2 mb-4">{errors.cpf}</p>} */}
+                {/* Exibe o erro de CPF/SUS aqui */}
+                {errors.cpf && <p className="text-red-600 text-xs mt-1 mb-3">{errors.cpf}</p>}
+
 
                 {/* Campo Observações */}
                 <div className="mb-4">
@@ -212,11 +195,11 @@ export default function PatientForm({
                     <textarea
                         id={`patient-obs-${patient?.id || 'new'}`}
                         name="observations"
-                        value={formData.observations} // Controlado
+                        value={formData.observations}
                         onChange={handleChange}
                         className="w-full p-2 border rounded border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         rows="3"
-                        placeholder="Ex: Alergias, condições pré-existentes..."
+                        placeholder=""
                     ></textarea>
                 </div>
 
@@ -226,7 +209,7 @@ export default function PatientForm({
                     <textarea
                         id={`patient-notes-${patient?.id || 'new'}`}
                         name="generalNotes"
-                        value={formData.generalNotes} // Controlado
+                        value={formData.generalNotes}
                         onChange={handleChange}
                         className="w-full p-2 border rounded border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         rows="3"
@@ -241,14 +224,13 @@ export default function PatientForm({
                         <select
                             id={`patient-status-${patient.id}`}
                             name="status"
-                            value={formData.status} // Controlado
+                            value={formData.status}
                             onChange={handleChange}
                             className="w-full p-2 border rounded border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
                             <option value="Ativo">Ativo</option>
                             <option value="Inativo">Inativo</option>
                             <option value="Pendente">Pendente</option>
-                            {/* Adicione outros status se aplicável */}
                         </select>
                     </div>
                 )}
@@ -262,3 +244,4 @@ export default function PatientForm({
         </Modal>
     );
 }
+

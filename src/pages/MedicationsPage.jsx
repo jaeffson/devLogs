@@ -9,7 +9,7 @@ import icons from '../utils/icons'; // Ajuste o caminho se necessário
 
 // --- Componente da Página ---
 // Recebe props de App.jsx via commonPageProps
-export function MedicationsPage({
+export default function MedicationsPage({
     medications = [], // Lista de medicações
     setMedications, // Função para atualizar a lista
     addToast, // Para notificações

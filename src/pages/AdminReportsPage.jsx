@@ -3,7 +3,7 @@ import React, { useState, useMemo } from 'react';
 
 // --- Imports de Componentes (Opcional: Gráficos) ---
 import { BarChart } from '../components/common/BarChart'; // Reutiliza o gráfico de barras
-import AnnualBudgetChart  from '../components/common/AnnualBudgetChart'; // Reutiliza o gráfico de orçamento
+import {AnnualBudgetChart}  from '../components/common/AnnualBudgetChart'; // Reutiliza o gráfico de orçamento
 import icons from '../utils/icons';
 
 // --- Imports de Utils ---
@@ -11,7 +11,7 @@ import { getMedicationName } from '../utils/helpers'; // Função helper
 
 // --- Componente da Página ---
 // Recebe props de App.jsx via commonPageProps
-export  function AdminReportsPage({
+export  default  function AdminReportsPage({
     user, // Usuário admin logado
     patients = [],
     records = [],

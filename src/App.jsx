@@ -1,4 +1,4 @@
-// src/App.jsx (VERSÃO CORRIGIDA)
+// src/App.jsx (VERSÃO COM ROTA DE RELATÓRIOS COMPARTILHADA)
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Navigate, useNavigate, Link } from 'react-router-dom';
 
@@ -8,8 +8,9 @@ import MainLayout from './layouts/MainLayout';
 import ProfessionalDashboardPage from './pages/ProfessionalDashboardPage';
 import SecretaryDashboardPage from './pages/SecretaryDashboardPage';
 import AdminSettingsPage from './pages/AdminSettingsPage';
-import {MedicationsPage} from './pages/MedicationsPage';
-import {AdminReportsPage} from './pages/AdminReportsPage';
+import MedicationsPage from './pages/MedicationsPage';
+import AdminReportsPage from './pages/AdminReportsPage';
+import SecretarySettingsPage from './pages/SecretarySettingsPage';
 
 // --- Imports de Componentes Comuns e Utils ---
 import { ToastContainer } from './components/common/ToastContainer';
@@ -61,7 +62,7 @@ export default function App() {
     const newLog = { id: Date.now(), timestamp: new Date().toISOString(), user: userName || 'Sistema', action };
     setActivityLog(prev => [newLog, ...prev].slice(0, 100));
   };
-
+  
   const handleUpdateBudget = (newBudget) => {
       const numericBudget = parseFloat(newBudget);
       if (!isNaN(numericBudget) && numericBudget >= 0) {
@@ -88,14 +89,12 @@ export default function App() {
     return () => clearTimeout(initTimer);
   }, []);
 
-  // --- EFEITO DE DEPURAÇÃO PARA O ESTADO 'user' ---
   useEffect(() => {
-    console.log("3. App.jsx: O estado 'user' mudou para:", user);
+    // console.log("3. App.jsx: O estado 'user' mudou para:", user);
   }, [user]);
 
-  // --- FUNÇÕES DE AUTENTICAÇÃO CORRIGIDAS ---
   const handleLogin = (userData) => {
-    console.log("2. App.jsx: handleLogin foi chamado com:", userData);
+    // console.log("2. App.jsx: handleLogin foi chamado com:", userData);
     setUser(userData);
     addLog(userData.name, 'fez login.');
     navigate('/dashboard', { replace: true });
@@ -110,7 +109,6 @@ export default function App() {
       navigate('/login', { replace: true });
     }, 500);
   };
-  // --- FIM DA CORREÇÃO ---
 
   if (isInitializing || isLoggingOut) {
     return <FullScreenPreloader />;
@@ -126,7 +124,6 @@ export default function App() {
       <ToastContainer toasts={toasts} removeToast={removeToast} />
 
       <Routes>
-        {/* Rota de Login */}
         <Route
           path="/login"
           element={
@@ -136,7 +133,6 @@ export default function App() {
           }
         />
 
-        {/* Rota Raiz (Protegida) */}
         <Route
           path="/"
           element={
@@ -145,10 +141,8 @@ export default function App() {
               : <Navigate to="/login" replace />
           }
         >
-          {/* Rotas Filhas */}
           <Route index element={<Navigate to="/dashboard" replace />} />
 
-          {/* Dashboard Condicional */}
           <Route path="dashboard" element={
               user?.role === 'secretario'
                 ? <SecretaryDashboardPage {...commonPageProps} />
@@ -156,7 +150,6 @@ export default function App() {
             }
           />
 
-          {/* Rotas Profissional / Admin */}
           {(user?.role === 'profissional' || user?.role === 'admin') && (
             <>
               <Route path="patients" element={<ProfessionalDashboardPage {...commonPageProps} activeTabForced="patients" />} />
@@ -165,31 +158,36 @@ export default function App() {
             </>
           )}
 
-          {/* Rotas Secretário */}
           {user?.role === 'secretario' && (
             <>
               <Route path="deliveries" element={<SecretaryDashboardPage {...commonPageProps} activeTabForced="deliveries" />} />
               <Route path="reports-general" element={<SecretaryDashboardPage {...commonPageProps} activeTabForced="all_history" />} />
               <Route path="patient-history" element={<SecretaryDashboardPage {...commonPageProps} activeTabForced="records" />} />
+              <Route path="settings" element={<SecretarySettingsPage {...commonPageProps} />} />
             </>
           )}
 
-          {/* Rotas Admin */}
+          {/* --- ALTERAÇÃO AQUI --- */}
+          {/* Rotas SOMENTE Admin */}
           {user?.role === 'admin' && (
             <>
                <Route path="medications" element={<MedicationsPage {...commonPageProps} />} />
-               <Route path="reports" element={<AdminReportsPage {...commonPageProps} />} />
-               <Route path="settings" element={<AdminSettingsPage {...commonPageProps} />} />
+               {/* A rota 'settings' do admin é diferente da do secretário */}
+               <Route path="settings" element={<AdminSettingsPage {...commonPageProps} />} /> 
             </>
           )}
+          
+          {/* Rota de Relatórios (AGORA COMPARTILHADA entre Admin e Secretário) */}
+          {(user?.role === 'admin' || user?.role === 'secretario') && (
+               <Route path="reports" element={<AdminReportsPage {...commonPageProps} />} />
+          )}
+          {/* --- FIM DA ALTERAÇÃO --- */}
 
-          {/* Rota 'Não Encontrado' */}
+
           <Route path="*" element={<div className="text-center p-6 bg-white rounded shadow"><h2>Página não encontrada</h2><Link to="/dashboard" className="text-blue-600">Voltar ao Dashboard</Link></div>} />
-
         </Route>
       </Routes>
 
-      {/* BANNER DE COOKIES */}
       {showCookieBanner && (
             <div className="fixed bottom-0 left-0 right-0 bg-gray-800 text-white p-4 shadow-lg animate-fade-in-up z-[9990]">
                 <div className="max-w-4xl mx-auto flex flex-col md:flex-row justify-between items-center gap-3">

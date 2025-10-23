@@ -2,13 +2,14 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 
-// --- Imports de Componentes ---
-// Certifique-se que o caminho e a exportação (default ou named {}) estão corretos
-import  AnnualBudgetChart  from '../components/common/AnnualBudgetChart';
+// --- Imports de Componentes e Utils ---
+// Garante que a importação do gráfico é NOMEADA
+import { AnnualBudgetChart } from '../components/common/AnnualBudgetChart'; 
+// Importa a função de formatação de nome
+import { formatUserName } from '../utils/helpers'; 
 
 // --- DEFINIÇÃO DOS ÍCONES ---
-// Para garantir que funcione, os ícones estão definidos diretamente aqui.
-// O ideal é mantê-los em 'src/utils/icons.jsx' e importar, mas isso garante a correção.
+// (Colocados aqui para garantir que o layout sempre os encontre)
 const icons = {
   user: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>,
   lock: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>,
@@ -36,6 +37,7 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
     const location = useLocation();
     const [filterYear, setFilterYear] = useState(new Date().getFullYear());
 
+    // Calcula o gasto total para o gráfico
     const totalSpentForYear = useMemo(() =>
         (records || [])
             .filter(r => new Date(r.entryDate).getFullYear() === filterYear)
@@ -48,7 +50,7 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
         return names[role] || role;
     };
 
-    // --- LÓGICA DO MENU CORRIGIDA ---
+    // Define os menus para cada role
     const menuItems = useMemo(() => {
         const professionalMenu = [
             { path: '/dashboard', label: 'Dashboard', icon: icons.dashboard },
@@ -56,12 +58,16 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
             { path: '/history', label: 'Histórico de Entradas', icon: icons.history },
             { path: '/patients', label: 'Gerenciar Pacientes', icon: icons.users },
         ];
+        
         const secretaryMenu = [
             { path: '/dashboard', label: 'Dashboard', icon: icons.dashboard },
             { path: '/deliveries', label: 'Entregas Recentes', icon: icons.clipboard },
             { path: '/reports-general', label: 'Relatório Geral', icon: icons.reports },
             { path: '/patient-history', label: 'Histórico por Paciente', icon: icons.history },
+            { path: '/reports', label: 'Relatórios Admin', icon: icons.reports },
+            { path: '/settings', label: 'Configurações', icon: icons.settings },
         ];
+
         const adminMenu = [
             { path: '/dashboard', label: 'Dashboard', icon: icons.dashboard },
             { path: '/deliveries', label: 'Entregas Recentes', icon: icons.clipboard },
@@ -76,14 +82,14 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
             case 'admin': return adminMenu;
             case 'secretario': return secretaryMenu;
             case 'profissional': return professionalMenu;
-            default: return []; // Retorna um array vazio se o usuário ou a role não existirem
+            default: return [];
         }
     }, [user?.role]);
 
-    // Efeito para fechar o menu em telas maiores
+    // Efeito para fechar sidebar em telas grandes
     useEffect(() => {
         const handleResize = () => {
-            if (window.innerWidth >= 768) { // Ponto de quebra 'md' do Tailwind
+            if (window.innerWidth >= 768) {
                 setIsSidebarOpen(false);
             }
         };
@@ -93,7 +99,7 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
 
     return (
         <div className="relative min-h-screen md:flex bg-gray-100">
-            {/* Overlay para fechar menu em mobile */}
+            {/* Overlay */}
             {isSidebarOpen && (
               <div 
                 className="fixed inset-0 bg-black bg-opacity-50 z-20 md:hidden"
@@ -102,7 +108,7 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
               ></div>
             )}
 
-            {/* --- SIDEBAR (MENU LATERAL) --- */}
+            {/* Sidebar */}
             <aside 
               className={`fixed inset-y-0 left-0 bg-white shadow-lg flex-shrink-0 flex flex-col z-30 w-64
                          transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} 
@@ -147,9 +153,9 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
                     })}
                 </nav>
 
-                {/* Footer da Sidebar (Logout) */}
+                {/* Footer da Sidebar */}
                 <div className="p-4 border-t">
-                     <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 p-2 text-sm bg-red-50 hover:bg-red-100 text-red-700 rounded-md font-medium">
+                     <button onClick={handleLogout} className="w-full flex items-center justify-center gap-3 p-3 text-sm bg-red-50 hover:bg-red-100 text-red-700 rounded-md font-medium">
                        <span className="w-5 h-5">{icons.logout}</span>
                        <span>Sair</span>
                      </button>
@@ -158,8 +164,10 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
            
             {/* Conteúdo Principal */}
             <div className="flex-1 flex flex-col overflow-hidden">
-                 {/* Header Principal */}
+                 
+                 {/* --- CABEÇALHO CORRIGIDO --- */}
                  <header className="bg-white shadow-sm p-4 flex justify-between items-center flex-shrink-0 z-10 h-16">
+                    {/* Lado Esquerdo: Botão Menu e Saudação */}
                     <div className="flex items-center gap-4">
                         <button 
                           className="text-gray-600 hover:text-gray-900 md:hidden p-1"
@@ -168,19 +176,27 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
                         >
                           {icons.menu}
                         </button>
-                        <span className="text-sm hidden xs:block">Olá, <strong className="font-semibold">{user?.name || 'Usuário'}</strong></span>
+                        {/* Nome do usuário formatado */}
+                        <span className="text-sm  sm:block">
+                            Olá, <strong className="font-semibold">{formatUserName(user?.name)}</strong>
+                        </span>
                     </div>
                    
+                    {/* Lado Direito: Gráfico e Seletor de Ano */}
                     <div className="flex items-center gap-4 md:gap-6">
+                      
+                      {/* Gráfico (Aparece se for Admin ou Secretário) */}
                       {(user?.role === 'admin' || user?.role === 'secretario') && (
-                          <div className="hidden sm:block">
+                          <div className="hidden sm:block"> {/* Oculta em telas muito pequenas */}
                             <AnnualBudgetChart
-                                key={annualBudget}
+                                key={annualBudget} // Força re-renderização quando o orçamento muda
                                 totalSpent={totalSpentForYear}
                                 budgetLimit={annualBudget}
                             />
                           </div>
                       )}
+
+                      {/* Seletor de Ano (Aparece se for Admin ou Secretário) */}
                       {(user?.role === 'admin' || user?.role === 'secretario') &&
                           <div className="flex items-center">
                               <label className="text-xs font-medium text-gray-700 mr-2 hidden md:inline">Ano:</label>
@@ -198,10 +214,10 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
                       }
                     </div>
                  </header>
+                 {/* --- FIM DO CABEÇALHO CORRIGIDO --- */}
                  
-                 {/* Área de Conteúdo da Rota */}
                  <main className="flex-grow p-4 md:p-6 overflow-auto bg-gray-100">
-                    {/* O Outlet renderiza o componente da rota filha (ex: ProfessionalDashboardPage) */}
+                    {/* O Outlet renderiza a página da rota atual (ex: Dashboard, Settings, etc.) */}
                     <Outlet />
                  </main>
             </div>
