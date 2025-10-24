@@ -1,50 +1,73 @@
+// src/components/common/AttendRecordModal.jsx
 import React, { useState } from 'react';
-import { Modal } from './Modal'; 
+import { Modal } from './Modal';
 
-// Exportação nomeada
-export  function AttendRecordModal({ record, onConfirm, onClose, getPatientName }) {
-    // Inicializa com a data atual ou a data de referência do registro se já existir
-    const initialDate = record?.referenceDate || new Date().toISOString().slice(0, 10);
-    const [deliveryDate, setDeliveryDate] = useState(initialDate);
+export function AttendRecordModal({
+    record,
+    onConfirm,
+    onClose,
+    getPatientName,
+    medications,        // <-- Prop recebida
+    getMedicationName   // <-- Prop recebida
+}) {
+    const today = new Date().toISOString().slice(0, 10);
+    const initialDate = record?.referenceDate || today; // Data de referência OU hoje
+    const [deliveryDate, setDeliveryDate] = useState(today); // Padrão: HOJE
 
-    // Garante que getPatientName seja uma função antes de chamar
     const patientName = typeof getPatientName === 'function' ? getPatientName(record?.patientId) : 'Paciente desconhecido';
+
+    const handleConfirmClick = () => {
+        if (record?.id && deliveryDate) {
+            console.log(`[AttendRecordModal] Confirmando Atendimento para Record ID: ${record.id}, Data: ${deliveryDate}`); // Debug
+            onConfirm(record.id, deliveryDate);
+            // onClose(); // O onConfirm já deve fechar
+        } else {
+            console.error("ID do registro ou data de entrega ausente.");
+            // Idealmente, usar addToast aqui se fosse passado como prop
+            alert("Erro: Selecione uma data de entrega válida.");
+        }
+    }
 
     return (
         <Modal onClose={onClose}>
-            <h2 className="text-xl font-semibold mb-4">Confirmar Atendimento</h2>
-            <p className="mb-4">Confirme ou ajuste a data de entrega para o paciente <strong>{patientName}</strong> (Ref: {new Date(initialDate + 'T00:00:00').toLocaleDateString('pt-BR')}).</p>
+            <h2 className="text-lg font-semibold mb-4 text-gray-800 border-b pb-2">Confirmar Atendimento</h2>
+            <div className="mb-4 space-y-2 text-sm">
+                 <p>Paciente: <strong className="text-gray-700">{patientName}</strong></p>
+                 <p>Data Ref.: <strong className="text-gray-700">{new Date(initialDate + 'T00:00:00').toLocaleDateString('pt-BR')}</strong></p>
+                 <div>
+                     <h4 className="font-medium text-gray-700 mb-1">Medicações Registradas:</h4>
+                     {/* Verifica se as props necessárias existem */}
+                     {typeof getMedicationName === 'function' && Array.isArray(medications) ? (
+                         <ul className="list-disc list-inside text-gray-600 space-y-1 pl-1 max-h-32 overflow-y-auto border rounded p-2 bg-gray-50 text-xs">
+                             {record?.medications?.length > 0 ? (
+                                 record.medications.map((medItem, index) => (
+                                     <li key={medItem.recordMedId || index}>
+                                         {/* Uso correto das props */}
+                                         {getMedicationName(medItem.medicationId, medications) || `ID ${medItem.medicationId} não encontrado`}
+                                         {medItem.quantity && ` (${medItem.quantity})`}
+                                     </li>
+                                 ))
+                             ) : (
+                                 <li className="text-gray-500 italic">Nenhuma medicação.</li>
+                             )}
+                         </ul>
+                     ) : (
+                         <p className="text-red-500 text-xs">Erro: Dados de medicação indisponíveis.</p> // Mensagem de erro se props faltarem
+                     )}
+                 </div>
+            </div>
             <div className="mb-6">
-                <label className="block text-gray-700 font-medium mb-1">Data da Entrega</label>
+                <label htmlFor="deliveryDateAttended" className="block text-sm font-medium text-gray-700 mb-1">Confirmar Data da Entrega</label>
                 <input
-                  type="date"
-                  value={deliveryDate}
-                  onChange={e => setDeliveryDate(e.target.value)}
-                  className="w-full p-2 border rounded border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  // Define um mínimo (opcional, ex: data de referência) e máximo (data atual)
-                  min={record?.referenceDate}
-                  max={new Date().toISOString().slice(0, 10)}
+                    id="deliveryDateAttended" type="date" value={deliveryDate} onChange={e => setDeliveryDate(e.target.value)}
+                    className="w-full p-2 border rounded border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+                    max={today} required
                 />
             </div>
-            <div className="flex justify-end gap-4">
-                <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">Cancelar</button>
-                <button
-                  type="button"
-                  onClick={() => {
-                      if (record?.id && deliveryDate) { // Verifica se tem ID e data
-                          onConfirm(record.id, deliveryDate);
-                          onClose();
-                      } else {
-                          // Adicionar feedback de erro se necessário
-                          console.error("ID do registro ou data de entrega ausente.");
-                      }
-                  }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-                  disabled={!deliveryDate} // Desabilita se não houver data
-                >
-                    Confirmar
-                </button>
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                <button type="button" onClick={onClose} className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 font-medium text-sm transition-colors">Cancelar</button>
+                <button type="button" onClick={handleConfirmClick} className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 font-medium text-sm transition-colors" disabled={!deliveryDate}>Confirmar Entrega</button>
             </div>
         </Modal>
-    )
+    );
 }

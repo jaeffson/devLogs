@@ -2,7 +2,7 @@ import React from 'react';
 
 // Ícone de Fechar (SVG)
 const CloseIcon = (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg xmlns="http://www.w.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <line x1="18" y1="6" x2="6" y2="18"></line>
     <line x1="6" y1="6" x2="18" y2="18"></line>
   </svg>
@@ -13,7 +13,7 @@ export function Modal({ children, onClose }) {
   return (
     // Fundo/Overlay: Cinza escuro com 75% de opacidade
     <div
-      className="fixed inset-0 bg-gray-900 bg-opacity-75 flex justify-center items-center z-50 p-4 transition-opacity duration-300 ease-in-out"
+      className="fixed inset-0 #ececeec2 flex justify-center items-center z-50 p-4 transition-opacity duration-300 ease-in-out"
       // onClick removido para não fechar ao clicar fora
       role="dialog" // Adicionado para acessibilidade
       aria-modal="true" // Adicionado para acessibilidade
@@ -31,7 +31,10 @@ export function Modal({ children, onClose }) {
         </button>
 
         {/* Conteúdo do modal (formulários, etc.) */}
-        {children}
+        {/* Adiciona padding interno se o conteúdo não tiver o seu próprio */}
+        <div className="pt-2"> {/* Espaço para não colar no botão X */}
+          {children}
+        </div>
       </div>
     </div>
   );

@@ -24,11 +24,789 @@ let MOCK_USERS = [
     { id: 3, name: 'Maria Souza (Admin)', email: 'admin@email.com', password: '123', role: 'admin', status: 'active' },
 ];
 let MOCK_PATIENTS = [
-    { id: 1, name: 'Jaeffson Sabino', cpf: '123.456.789-00', susCard: '', observations: 'Hipertenso', generalNotes: 'Monitorar pressão arterial semanalmente.', createdAt: '2025-10-18', status: 'Ativo' },
-    { id: 2, name: 'Maria Oliveira', cpf: '', susCard: '898001020304050', observations: 'Diabética tipo 2', generalNotes: 'Alergia a penicilina.', createdAt: '2025-09-01', status: 'Ativo' },
-    { id: 3, name: 'Carlos Pereira', cpf: '111.222.333-44', susCard: '', observations: 'Asmático', generalNotes: '', createdAt: '2025-10-20', status: 'Pendente' },
-    {id:4, name:'Jaeffson Sabino', cpf:'', susCard:'',observations:'', generalNotes:'', createdAt:'', status:'Ativo'}
-];
+    
+  {
+    id: 1,
+    name: "PEDRO GONÇALVES DE FARIAS",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 2,
+    name: "SUELI ALVES",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 3,
+    name: "LENICE RIBEIRO",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 4,
+    name: "DOUGLAS LEONARDO ALVES",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 5,
+    name: "JOSEFA AURICELIA QUEIROZ",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 6,
+    name: "EDILENE ALCÂNTARA RIBEIRO",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 7,
+    name: "JOSIELIA ALMEIDA",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 8,
+    name: "MIGUEL PEDRO ALMEIDA",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 9,
+    name: "HELCIO DE SÁ",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 10,
+    name: "JOSELMO OLIVEIRA DE QUEIROZ",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 11,
+    name: "MARIA BETANIA DE QUEIROZ RIBEIRO",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 12,
+    name: "JOÃO BOSCO GOMES BATISTA",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 13,
+    name: "SEVERINA FERREIRA DA SILVA",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 14,
+    name: "LUCIENE OLIVEIRA DE AQUINO",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 16,
+    name: "MARIA MARTINHA DE SOUZA",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 17,
+    name: "ANA LAURA RIBEIRO",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 18,
+    name: "JOAO BATISTA SOUZA FILHO",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 19,
+    name: "LUCIA DE FÁTIMA SANTOS",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 20,
+    name: "MARCOS ANTONIO FERREIRA",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 21,
+    name: "MARGARENE FARIAS",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 22,
+    name: "ANTONIO RICARDO DE SOUZA",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 23,
+    name: "JOSE VANDERLEY BRITO SANTOS",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 24,
+    name: "VALDILENE MOURA SANTOS",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 25,
+    name: "LUCILENE DOS SANTOS",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 26,
+    name: "MARIA DOS MILAGRES",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 27,
+    name: "INACIA ANA CAVALCANTE",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 28,
+    name: "INACIA SEVERINA DA SILVA",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 29,
+    name: "MARGARIDA MARIA ALVES",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 30,
+    name: "MARINALVA BRITO",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 31,
+    name: "TARCIANA DE QUEIROZ SILVA",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 32,
+    name: "ANTONIO BRAZ DA SILVA",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 33,
+    name: "IVONE QUEIROZ SILVA",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 34,
+    name: "FRANCISCO DAS CHAGAS SIMÃO",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 35,
+    name: "MARIA RODRIGUES MOURA",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 36,
+    name: "MARIA HELENA SABINO",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 37,
+    name: "CARLA OLIVEIRA DE QUEIROZ",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 38,
+    name: "ALGUSTINHO ALVES DE BRITO",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 39,
+    name: "MARIA DO SOCORRO FERREIRA FARIAS",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 40,
+    name: "ANA CELIA LINO",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 41,
+    name: "ARLENE BRAZ DA CONCEIÇÃO",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 42,
+    name: "TEREZINHA ALVES",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 43,
+    name: "MARIA DO SOCORRO BERNADINO",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 44,
+    name: "FRANCILENE DOS SANTOS",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 45,
+    name: "TEREZINHA FERREIRA DO NASCMENTO",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 46,
+    name: "MARIA DOLORES DA SILVA",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 47,
+    name: "EDVALDO ALVES DE QUEIROZ",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 48,
+    name: "JOÃO BATISTA CALUÊTE",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 49,
+    name: "JOSÉ ARIMATEIA ALVES",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 50,
+    name: "RAFAELA DUARTE MOREIRA",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 51,
+    name: "FABIO QUEIROZ",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 52,
+    name: "JAQUELINE DA SILVA QUEIROZ",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 53,
+    name: "ANA MARIA JOSE RODRIGUES",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 54,
+    name: "JOSE DE FARIAS",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 56,
+    name: "MARIA GERLANIA PEQUENO",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 57,
+    name: "PEDRO HENRIQUE PEQUENO",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 58,
+    name: "MARIA JOSE FERREIRA DE SOUZA",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 59,
+    name: "MARIA JOSE DOS SANTOS",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-24",
+    status: "Ativo"
+  },
+  {
+    id: 60,
+    name: "MELYNA MOURA BARRETO",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-25",
+    status: "Ativo"
+  },
+  {
+    id: 62,
+    name: "DAMIAO PEDRO DE SOUZA",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-25",
+    status: "Ativo"
+  },
+  {
+    id: 63,
+    name: "MARLI APOLONIO DE LIMA",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-25",
+    status: "Ativo"
+  },
+  {
+    id: 64,
+    name: "JESSICA SEVERINA A.QUEIROZ",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-25",
+    status: "Ativo"
+  },
+  {
+    id: 65,
+    name: "LEANE DA SILVA TARGINO",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-25",
+    status: "Ativo"
+  },
+  {
+    id: 66,
+    name: "JOSE LEANDRO TARGINO",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-25",
+    status: "Ativo"
+  },
+  {
+    id: 67,
+    name: "JOELSO SABINO",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-25",
+    status: "Ativo"
+  },
+  {
+    id: 68,
+    name: "JOSE EUDO FERREIRA LINO",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-26",
+    status: "Ativo"
+  },
+  {
+    id: 69,
+    name: "MARIA DO SOCORRO BERNARDINO",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-26",
+    status: "Ativo"
+  },
+  {
+    id: 70,
+    name: "MARIA DO SOCORRO FERREIRA NASCIMENTO",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-02-26",
+    status: "Ativo"
+  },
+  {
+    id: 71,
+    name: "JOSE ARTHUR FRANÇA",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-03-06",
+    status: "Ativo"
+  },
+  {
+    id: 72,
+    name: "ADRIANA ARAUJO DOS SANTOS",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-03-06",
+    status: "Ativo"
+  },
+  {
+    id: 73,
+    name: "JOSEFA MARIA DA CONCEIÇÃO",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-03-06",
+    status: "Ativo"
+  },
+  {
+    id: 74,
+    name: "JOSE DELMIRO VICENTE",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-03-06",
+    status: "Ativo"
+  },
+  {
+    id: 75,
+    name: "JOANA DARC ARAUJO DE QUEIROZ",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-03-06",
+    status: "Ativo"
+  },
+  {
+    id: 76,
+    name: "JOSE JOAQUIM BATISTA GOUVEIA",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-03-06",
+    status: "Ativo"
+  },
+  {
+    id: 77,
+    name: "JOSEFA RIBEIRO FEITOSA",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-03-06",
+    status: "Ativo"
+  },
+  {
+    id: 78,
+    name: "JOSE CAVALCANTE DE FARIAS",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-03-06",
+    status: "Ativo"
+  },
+  {
+    id: 79,
+    name: "JOSEFA JAILSA DE QUEIROZ FERNANDES",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-03-06",
+    status: "Ativo"
+  },
+  {
+    id: 80,
+    name: "MARIA DA PAZ FERREIRA DE FARIAS",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-03-06",
+    status: "Ativo"
+  },
+  {
+    id: 81,
+    name: "JOSE GERONIMO FERNANDES",
+    cpf: "",
+    susCard: "",
+    observations: "",
+    generalNotes: "",
+    createdAt: "2025-03-06",
+    status: "Ativo"
+  }
+]
+;
 let MOCK_MEDICATIONS = [
    
   { id: 20250311115147, name: 'BRITENS  COLIRIO', createdAt: '' },

@@ -1,5 +1,5 @@
 // src/pages/ProfessionalDashboardPage.jsx
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 // --- Imports (Verifique se os caminhos estão corretos para sua estrutura) ---
@@ -13,6 +13,7 @@ import { RecentDeliveriesTab } from '../components/common/RecentDeliveriesTab';
 import { PatientRecordsTable } from '../components/common/PatientRecordsTable';
 import icons from '../utils/icons';
 import { getMedicationName } from '../utils/helpers';
+import {useDebounce} from '../hooks/useDebounce';
 
 // --- Componente da Página ---
 export default function ProfessionalDashboardPage({
@@ -33,12 +34,48 @@ export default function ProfessionalDashboardPage({
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
   const [confirmation, setConfirmation] = useState({ isOpen: false, message: '', data: null, onConfirm: null });
-  const [quickAddPatientId, setQuickAddPatientId] = useState('');
   const [attendingRecord, setAttendingRecord] = useState(null);
+
+  // --- Estados do 'Select com Busca' ---
+  const [quickAddPatientId, setQuickAddPatientId] = useState('');
+  const [quickSearchTerm, setQuickSearchTerm] = useState('');
+  const [isQuickSelectOpen, setIsQuickSelectOpen] = useState(false);
+  const [selectedPatientName, setSelectedPatientName] = useState('');
+  const quickSelectRef = useRef(null);
+
+  // --- Estado do Filtro de Histórico ---
+  const [statusFilter, setStatusFilter] = useState('Todos'); // 'Todos', 'Pendente', 'Atendido', 'Cancelado'
+
+  // --- Estados de Paginação ---
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(20); // 20 itens por página
+
+  // --- Debounce ---
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
+  const debouncedQuickSearchTerm = useDebounce(quickSearchTerm, 300);
 
   useEffect(() => {
     setCurrentView(activeTabForced || 'dashboard');
   }, [activeTabForced]);
+
+  // Effect para fechar o select customizado
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (quickSelectRef.current && !quickSelectRef.current.contains(event.target)) {
+        setIsQuickSelectOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [quickSelectRef]);
+
+  // Effect para Paginação
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter]);
+
 
   // --- Função de Validação de Duplicidade ---
   const checkDuplicatePatient = ({ cpf, susCard, currentId }) => {
@@ -66,11 +103,12 @@ export default function ProfessionalDashboardPage({
   // --- Memos ---
   const filteredPatients = useMemo(() =>
     Array.isArray(patients) ? patients.filter(p =>
-      p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (p.cpf && String(p.cpf).includes(searchTerm)) ||
-      (p.susCard && String(p.susCard).includes(searchTerm))
+      p.name?.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+      (p.cpf && String(p.cpf).includes(debouncedSearchTerm)) ||
+      (p.susCard && String(p.susCard).includes(debouncedSearchTerm))
     ).sort((a, b) => a.name?.localeCompare(b.name || '') || 0) : [],
-    [patients, searchTerm]);
+    [patients, debouncedSearchTerm]
+  );
 
   const patientRecords = useMemo(() => {
     if (!selectedPatient?.id || !Array.isArray(records)) return [];
@@ -80,6 +118,50 @@ export default function ProfessionalDashboardPage({
   const pendingRecords = useMemo(() =>
     Array.isArray(records) ? records.filter(r => r.status === 'Pendente').sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate)) : [],
   [records]);
+
+  const quickFilteredPatients = useMemo(() =>
+    Array.isArray(patients) ? patients
+      .filter(p => p.name?.toLowerCase().includes(debouncedQuickSearchTerm.toLowerCase()))
+      .sort((a, b) => a.name.localeCompare(b.name))
+    : [],
+  [patients, debouncedQuickSearchTerm]
+  );
+
+  const filteredRecords = useMemo(() => {
+    const sorted = records.sort((a,b) => new Date(b.entryDate) - new Date(a.entryDate));
+    if (statusFilter === 'Todos') {
+      return sorted;
+    }
+    return sorted.filter(r => r.status === statusFilter);
+  }, [records, statusFilter]);
+
+  // --- Memos (Paginação) ---
+  const totalPages = useMemo(() => {
+    return Math.ceil(filteredRecords.length / itemsPerPage);
+  }, [filteredRecords, itemsPerPage]);
+
+  const currentRecords = useMemo(() => {
+    const indexOfLastItem = currentPage * itemsPerPage;
+    const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+    return filteredRecords.slice(indexOfFirstItem, indexOfLastItem);
+  }, [filteredRecords, currentPage, itemsPerPage]);
+
+  // --- NOVO MEMO (Filtro de 1 Semana para Entregas) ---
+  const recentDeliveries = useMemo(() => {
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    oneWeekAgo.setHours(0, 0, 0, 0); // Começo do dia, 7 dias atrás
+
+    return Array.isArray(records) ? records
+      .filter(r =>
+        r.status === 'Atendido' &&
+        r.deliveryDate && // Garante que a data existe
+        new Date(r.deliveryDate + 'T00:00:00') >= oneWeekAgo // Compara datas (adiciona hora para evitar problemas de fuso)
+      )
+      .sort((a, b) => new Date(b.deliveryDate) - new Date(a.deliveryDate)) // Ordena pela data de entrega, mais recente primeiro
+    : [];
+  }, [records]);
+
 
   // --- Funções CRUD ---
   const handleSavePatient = (patientData) => {
@@ -128,7 +210,10 @@ export default function ProfessionalDashboardPage({
     addToast(message, 'success');
     setIsRecordModalOpen(false);
     setEditingRecord(null);
+    
     setQuickAddPatientId('');
+    setSelectedPatientName('');
+    setQuickSearchTerm('');
   };
   const handleAddNewMedication = (medData) => {
       const newMed = { id: Date.now(), name: medData.name, createdAt: new Date().toISOString().slice(0, 10) };
@@ -178,7 +263,7 @@ export default function ProfessionalDashboardPage({
   // --- Renderização Condicional ---
   const renderCurrentView = () => {
     switch(currentView) {
-      // VISÃO: DASHBOARD (Código completo)
+      // VISÃO: DASHBOARD
       case 'dashboard':
           return (
              <div className="space-y-6 animate-fade-in">
@@ -204,45 +289,70 @@ export default function ProfessionalDashboardPage({
                          <button onClick={() => setCurrentView('historico')} className="w-full px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 text-sm">Ver Histórico Geral</button>
                     </div>
                 </div>
-                {/* Você pode adicionar mais seções ao dashboard aqui */}
              </div>
           );
-      // VISÃO: PACIENTES (Código completo)
+      // VISÃO: PACIENTES
       case 'patients':
         return (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-10rem)] animate-fade-in">
-            {/* Coluna da Lista */}
-            <div className="lg:col-span-1 bg-white rounded-lg shadow p-4 flex flex-col">
+          // --- Altura aumentada ---
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-8rem)] animate-fade-in">
+            
+            <div className="lg:col-span-1 bg-white rounded-lg shadow p-4 flex flex-col min-h-0">
                 <h2 className="text-xl font-bold mb-4 text-gray-800">Pacientes</h2>
                 <div className="relative mb-4">
-                  <input type="text" placeholder="Buscar por nome, CPF ou SUS..." className="w-full p-2 pl-10 border rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                  <input type="text" placeholder="Buscar por nome, CPF ou SUS..." className="w-full p-2 pl-10 border rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm" 
+                    value={searchTerm} 
+                    onChange={e => setSearchTerm(e.target.value)} 
+                  />
                   <div className="absolute left-3 top-2.5 text-gray-400 w-4 h-4">{icons.search}</div>
                 </div>
                 <button onClick={() => { setEditingPatient(null); setIsPatientModalOpen(true); }} className="w-full flex items-center justify-center gap-2 mb-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
                   <span className="w-4 h-4">{icons.plus}</span> Novo Paciente
                 </button>
-                <div className="flex-grow overflow-y-auto pr-2 -mr-2">
-                  {filteredPatients.length > 0 ? filteredPatients.map(patient => (
-                    <div key={patient.id}
-                         className={`p-3 rounded-lg cursor-pointer mb-2 border ${selectedPatient?.id === patient.id ? 'bg-blue-100 border-blue-300' : 'hover:bg-gray-50 border-transparent hover:border-gray-200'}`}
-                         onClick={() => setSelectedPatient(patient)} role="button" tabIndex={0}
-                         onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setSelectedPatient(patient)} >
-                      <div className="flex justify-between items-center">
-                          <p className="font-semibold text-gray-800 text-sm truncate">{patient.name}</p>
-                           <div className="flex items-center gap-2 flex-shrink-0">
-                            <StatusBadge status={patient.status} />
-                            <button onClick={(e) => handleQuickAddRecord(e, patient)} title="Novo Registro Rápido" className="text-gray-400 hover:text-blue-600 p-0.5">
-                                <span className="w-4 h-4 block">{icons.plus}</span>
-                            </button>
-                           </div>
-                      </div>
-                      <p className="text-xs text-gray-600 mt-0.5">{patient.cpf || patient.susCard || 'Sem documento'}</p>
+                
+                <div className="flex-grow min-h-0 overflow-y-auto pr-2 -mr-2">
+                  
+                  {patients.length === 0 ? (
+                    <div className="text-center text-gray-500 py-10 px-4">
+                      <div className="mb-4 text-gray-300 w-16 h-16 mx-auto">{icons.users}</div>
+                      <h3 className="font-semibold text-lg mb-1">Sem pacientes</h3>
+                      <p className="text-sm mb-4">Parece que você ainda não cadastrou nenhum paciente.</p>
+                      <button 
+                        onClick={() => { setEditingPatient(null); setIsPatientModalOpen(true); }} 
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                      >
+                        Cadastrar primeiro paciente
+                      </button>
                     </div>
-                  )) : ( <p className="text-center text-gray-500 py-4 text-sm">Nenhum paciente encontrado.</p> )}
+                  ) : filteredPatients.length === 0 ? (
+                    <div className="text-center text-gray-500 py-10 px-4">
+                      <div className="mb-4 text-gray-300 w-16 h-16 mx-auto">{icons.search}</div>
+                      <h3 className="font-semibold text-lg mb-1">Nenhum resultado</h3>
+                      <p className="text-sm">Não encontramos pacientes para a busca <strong className="text-gray-700">"{debouncedSearchTerm}"</strong>.</p>
+                    </div>
+                  ) : (
+                    filteredPatients.map(patient => (
+                      <div key={patient.id}
+                           className={`p-3 rounded-lg cursor-pointer mb-2 border ${selectedPatient?.id === patient.id ? 'bg-blue-100 border-blue-300' : 'hover:bg-gray-50 border-transparent hover:border-gray-200'}`}
+                           onClick={() => setSelectedPatient(patient)} role="button" tabIndex={0}
+                           onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setSelectedPatient(patient)} >
+                        <div className="flex justify-between items-center">
+                            <p className="font-semibold text-gray-800 text-sm truncate">{patient.name}</p>
+                             <div className="flex items-center gap-2 flex-shrink-0">
+                              <StatusBadge status={patient.status} />
+                              <button onClick={(e) => handleQuickAddRecord(e, patient)} title="Novo Registro Rápido" className="text-gray-400 hover:text-blue-600 p-0.5">
+                                  <span className="w-4 h-4 block">{icons.plus}</span>
+                              </button>
+                             </div>
+                        </div>
+                        <p className="text-xs text-gray-600 mt-0.5">{patient.cpf || patient.susCard || 'Sem documento'}</p>
+                      </div>
+                    ))
+                  )}
                 </div>
             </div>
-            {/* Coluna de Detalhes */}
-            <div className="lg:col-span-2 bg-white rounded-lg shadow p-4 md:p-6 flex flex-col">
+            
+            <div className="lg:col-span-2 bg-white rounded-lg shadow p-4 md:p-6 flex flex-col min-h-0">
               {selectedPatient ? (
                 <>
                   <div className="flex justify-between items-start mb-4 pb-4 border-b">
@@ -262,9 +372,10 @@ export default function ProfessionalDashboardPage({
                       <h3 className="text-lg font-semibold text-gray-700">Histórico de Registros</h3>
                       <button onClick={() => { setEditingRecord(null); setIsRecordModalOpen(true); }} className="flex items-center gap-1.5 px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 text-xs font-medium"><span className="w-3 h-3">{icons.plus}</span> Novo Registro</button>
                     </div>
-                     <div className="flex-grow overflow-y-auto -mx-4 md:-mx-6 px-4 md:px-6">
-                        <PatientRecordsTable records={Array.isArray(patientRecords) ? patientRecords : []} medications={medications} />
-                     </div>
+                       
+                        <div className="flex-grow min-h-0 overflow-y-auto -mx-4 md:-mx-6 px-4 md:px-6">
+                          <PatientRecordsTable records={Array.isArray(patientRecords) ? patientRecords : []} medications={medications} />
+                       </div>
                 </>
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-center text-gray-500">
@@ -276,26 +387,112 @@ export default function ProfessionalDashboardPage({
             </div>
           </div>
         );
-      // VISÃO: HISTÓRICO (Código completo)
+      // VISÃO: HISTÓRICO
       case 'historico':
         return (
-           <div className="bg-white rounded-lg shadow p-4 md:p-6 animate-fade-in">
+           // --- Altura aumentada ---
+           <div className="bg-white rounded-lg shadow p-4 md:p-6 animate-fade-in flex flex-col h-[calc(100vh-8rem)]">
              <h2 className="text-xl md:text-2xl font-bold mb-4 text-gray-800">Histórico Geral de Entradas</h2>
+               
+               {/* --- Bloco 'Adicionar Rápido' (sem scroll) --- */}
                <div className="bg-gray-50 p-4 rounded-lg mb-4 border">
                  <h4 className="font-semibold mb-2 text-gray-700">Adicionar Novo Registro Rápido</h4>
-                 <div className="flex flex-col sm:flex-row items-center gap-3">
-                   <select onChange={(e) => setQuickAddPatientId(e.target.value)} value={quickAddPatientId} className="flex-grow p-2 border rounded-lg w-full sm:w-auto text-sm bg-white">
-                       <option value="">Selecione um paciente...</option>
-                       {patients.sort((a,b) => a.name.localeCompare(b.name)).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                   </select>
+                 
+                 <div className="flex flex-col sm:flex-row items-center gap-3" ref={quickSelectRef}>
+                   
+                   <div className="relative flex-grow w-full sm:w-auto">
+                     <button
+                       type="button"
+                       onClick={() => setIsQuickSelectOpen(prev => !prev)}
+                       className="w-full p-2 pl-3 pr-10 border rounded-lg text-sm bg-white text-left flex justify-between items-center"
+                     >
+                       <span className={quickAddPatientId ? 'text-gray-900' : 'text-gray-500'}>
+                         {selectedPatientName || "Selecione um paciente..."}
+                       </span>
+                       <span className="absolute right-3 top-2.5 text-gray-400 text-xs">&#9660;</span>
+                     </button>
+
+                     {isQuickSelectOpen && (
+                       <div className="absolute z-10 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-60 flex flex-col">
+                         
+                         <div className="p-2 border-b sticky top-0 bg-white">
+                           <input
+                             type="text"
+                             placeholder="Buscar paciente..."
+                             className="w-full p-2 border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                             value={quickSearchTerm} 
+                             onChange={e => setQuickSearchTerm(e.target.value)} 
+                             autoFocus
+                           />
+                         </div>
+
+                         <div className="overflow-y-auto">
+                           <div
+                             className="p-2 text-sm text-gray-500 hover:bg-blue-100 cursor-pointer"
+                             onClick={() => {
+                               setQuickAddPatientId('');
+                               setSelectedPatientName('Selecione um paciente...');
+                               setIsQuickSelectOpen(false);
+                               setQuickSearchTerm('');
+                             }}
+                           >
+                             -- Limpar seleção --
+                           </div>
+                           
+                           {quickFilteredPatients.length > 0 ? (
+                             quickFilteredPatients.map(p => (
+                               <div
+                                 key={p.id}
+                                 className="p-2 text-sm hover:bg-blue-100 cursor-pointer"
+                                 onClick={() => {
+                                   setQuickAddPatientId(String(p.id));
+                                   setSelectedPatientName(p.name);
+                                   setIsQuickSelectOpen(false);
+                                   setQuickSearchTerm('');
+                                 }}
+                               >
+                                 {p.name}
+                               </div>
+                             ))
+                           ) : (
+                             <p className="p-2 text-sm text-gray-500 text-center">Nenhum paciente encontrado.</p>
+                           )}
+                         </div>
+                       </div>
+                     )}
+                   </div>
+                   
                    <button onClick={openQuickAddModal} disabled={!quickAddPatientId} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 w-full sm:w-auto text-sm font-medium">
                        <span className="inline-block mr-1">+</span> Adicionar
                    </button>
                  </div>
                </div>
-             <div className="overflow-x-auto">
+               {/* --- Fim do Bloco 'Adicionar Rápido' --- */}
+
+
+              {/* --- Bloco 'Filtros de Status' (sem scroll) --- */}
+              <div className="flex items-center gap-2 mb-4 flex-wrap">
+                <span className="text-sm font-semibold">Filtrar por Status:</span>
+                {['Todos', 'Pendente', 'Atendido', 'Cancelado'].map(status => (
+                  <button
+                    key={status}
+                    onClick={() => setStatusFilter(status)}
+                    className={`px-3 py-1 text-xs rounded-full ${
+                      statusFilter === status
+                        ? 'bg-blue-600 text-white font-bold'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    {status}
+                  </button>
+                ))}
+              </div>
+              {/* --- Fim dos Filtros --- */}
+
+             {/* --- Container da Tabela (com scroll) --- */}
+             <div className="overflow-x-auto overflow-y-auto flex-grow min-h-0">
                  <table className="min-w-full bg-white text-sm">
-                     <thead className="bg-gray-100">
+                     <thead className="bg-gray-100 sticky top-0">
                          <tr>
                              <th className="text-left py-2 px-3 font-semibold text-gray-600">Paciente</th>
                              <th className="text-left py-2 px-3 font-semibold text-gray-600">Entrada</th>
@@ -305,7 +502,8 @@ export default function ProfessionalDashboardPage({
                          </tr>
                      </thead>
                      <tbody>
-                         {records.sort((a,b) => new Date(b.entryDate) - new Date(a.entryDate)).map(record => (
+                         {/* Mapeia 'currentRecords' (itens da página atual) */}
+                         {currentRecords.map(record => (
                              <tr key={record.id} className="border-b hover:bg-gray-50">
                                  <td className="py-2 px-3 font-medium">
                                      <button onClick={() => handleViewPatientHistory(record.patientId)} className="text-blue-600 hover:underline text-left">{getPatientNameById(record.patientId)}</button>
@@ -336,13 +534,72 @@ export default function ProfessionalDashboardPage({
                          ))}
                      </tbody>
                  </table>
-                 {records.length === 0 && <p className="text-center text-gray-500 py-6">Nenhuma entrada registrada.</p>}
+                 
+                 {/* Mensagem de 'vazio' */}
+                 {filteredRecords.length === 0 && (
+                    <p className="text-center text-gray-500 py-6">
+                      {statusFilter === 'Todos' ? 'Nenhuma entrada registrada.' : `Nenhuma entrada com status '${statusFilter}'.`}
+                    </p>
+                 )}
              </div>
-         </div>
+             {/* Fim do Container da Tabela */}
+
+             {/* Controles de Paginação (sem scroll) */}
+             {filteredRecords.length > itemsPerPage && ( 
+                <div className="flex justify-between items-center pt-4 border-t mt-auto">
+                  <span className="text-sm text-gray-700">
+                    Mostrando {Math.min((currentPage - 1) * itemsPerPage + 1, filteredRecords.length)} 
+                    {' a '} 
+                    {Math.min(currentPage * itemsPerPage, filteredRecords.length)} 
+                    {' de '} 
+                    {filteredRecords.length} registros
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                      disabled={currentPage === 1}
+                      className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Anterior
+                    </button>
+                    <span className="text-sm font-medium">
+                      Página {currentPage} de {totalPages > 0 ? totalPages : 1}
+                    </span>
+                    <button
+                      onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
+                      disabled={currentPage === totalPages || totalPages === 0}
+                      className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Próxima
+                    </button>
+                  </div>
+                </div>
+             )}
+             {/* --- FIM (Paginação) --- */}
+
+          </div>
         );
-      // VISÃO: ENTREGAS (Código completo)
+      // VISÃO: ENTREGAS
       case 'deliveries':
-        return <RecentDeliveriesTab records={Array.isArray(records) ? records : []} patients={Array.isArray(patients) ? patients : []} medications={Array.isArray(medications) ? medications : []} />;
+        return (
+          // --- ATUALIZAÇÃO: Adicionado container com altura e scroll ---
+          <div className="bg-white rounded-lg shadow p-4 md:p-6 animate-fade-in flex flex-col h-[calc(100vh-8rem)]">
+            <h2 className="text-xl md:text-2xl font-bold mb-4 text-gray-800">Entregas da Última Semana</h2>
+            {/* O componente RecentDeliveriesTab agora rola internamente se precisar */}
+            <div className="flex-grow min-h-0 overflow-y-auto">
+              {/* --- ATUALIZAÇÃO: Passando 'recentDeliveries' filtrado --- */}
+              <RecentDeliveriesTab 
+                records={recentDeliveries} 
+                patients={Array.isArray(patients) ? patients : []} 
+                medications={Array.isArray(medications) ? medications : []} 
+              />
+              {/* Mensagem se não houver entregas recentes */}
+              {recentDeliveries.length === 0 && (
+                 <p className="text-center text-gray-500 py-10">Nenhuma entrega registrada na última semana.</p>
+              )}
+            </div>
+          </div>
+        );
       default:
         return (<div className="text-center p-10">View desconhecida: {currentView}</div>);
     }
@@ -351,6 +608,8 @@ export default function ProfessionalDashboardPage({
   return (
     <>
       {renderCurrentView()}
+      
+      {/* --- Modais --- */}
       {isPatientModalOpen && (
         <PatientForm
             patient={editingPatient}
@@ -373,7 +632,7 @@ export default function ProfessionalDashboardPage({
       {confirmation.isOpen && (
         <ConfirmModal
             message={confirmation.message}
-            onConfirm={() => confirmation.onConfirm(confirmation.data)}
+            onConfirm={() => { confirmation.onConfirm(confirmation.data); closeConfirmation(); }}
             onClose={closeConfirmation}
         />
       )}
@@ -388,4 +647,3 @@ export default function ProfessionalDashboardPage({
     </>
   );
 }
-
