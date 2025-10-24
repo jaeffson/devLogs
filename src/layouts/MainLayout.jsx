@@ -1,95 +1,157 @@
 // src/layouts/MainLayout.jsx
-import React, { useState, useMemo, useEffect } from 'react';
-import { Link, Outlet, useLocation } from 'react-router-dom';
 
-// --- Imports de Componentes e Utils ---
-// Garante que a importação do gráfico é NOMEADA
-import { AnnualBudgetChart } from '../components/common/AnnualBudgetChart'; 
-// Importa a função de formatação de nome
-import { formatUserName } from '../utils/helpers'; 
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { Outlet, useLocation, Link } from 'react-router-dom';
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
-// --- DEFINIÇÃO DOS ÍCONES ---
-// (Colocados aqui para garantir que o layout sempre os encontre)
-const icons = {
-  user: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>,
-  lock: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>,
-  plus: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>,
-  search: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>,
-  edit: <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>,
-  trash: <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>,
-  logout: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>,
-  pill: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"></path><path d="m8.5 8.5 7 7"></path></svg>,
-  users: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>,
-  clipboard: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>,
-  dollar: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>,
-  settings: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>,
-  dashboard: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>,
-  download: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>,
-  history: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>,
-  reports: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>,
-  menu: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>,
-  close: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>,
+// --- Imports ---
+// Gráfico (verifique se a importação está correta)
+import { AnnualBudgetChart } from '../components/common/AnnualBudgetChart';
+import { formatUserName } from '../utils/helpers';
+// Ícones e useDebounce (presumindo que existem nesses locais)
+import icons from '../utils/icons'; // Importa o objeto de ícones
+// import useDebounce from '../hooks/useDebounce'; // Descomente se usar debounce AQUI
+
+// --- Definição dos Ícones (Recomendação: Mover para src/utils/icons.js ou similar) ---
+// const icons = { /* ... Seu objeto de ícones SVG ... */ };
+// Para simplificar a leitura, vamos assumir que o objeto 'icons' importado
+// contém as chaves corretas (dashboard, users, history, etc.)
+
+// Simulação de dados
+const fetchSimulatedData = async () => {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    return {
+        user: { id: 2, name: 'Secretária Silva', role: 'secretario' },
+        // user: { id: 1, name: 'Dr. Carlos Andrade', role: 'profissional' },
+        patients: [ {id: 1, name: "Ana"}, {id: 2, name: "Bruno"} ],
+        records: [ { id: 1, patientId: 1, entryDate: '2025-10-23T10:00:00Z', medications: [{ medicationId: 1, quantity: 2, value: 5.50 }], totalValue: 11.00, status: 'Pendente', deliveryDate: null }, { id: 2, patientId: 2, entryDate: '2025-10-22T14:30:00Z', medications: [{ medicationId: 2, quantity: 1, value: 12.00 }], totalValue: 12.00, status: 'Atendido', deliveryDate: '2025-10-22' } ],
+        medications: [ { id: 1, name: 'Med A' }, { id: 2, name: 'Med B' } ],
+        annualBudget: 50000,
+    };
 };
-// --- FIM DOS ÍCONES ---
 
-export default function MainLayout({ user, handleLogout, annualBudget, records }) {
-    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+export default function MainLayout() { // Removidas props não usadas diretamente aqui
     const location = useLocation();
+
+    // --- Estados Globais do Layout ---
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    // --- Estados dos Dados da Aplicação ---
+    const [user, setUser] = useState(null);
+    const [patients, setPatients] = useState([]);
+    const [records, setRecords] = useState([]);
+    const [medications, setMedications] = useState([]);
+    const [annualBudget, setAnnualBudget] = useState(0);
     const [filterYear, setFilterYear] = useState(new Date().getFullYear());
 
-    // Calcula o gasto total para o gráfico
+    // --- Funções Toast e Log ---
+    const addToast = useCallback((message, type = 'info') => {
+        toast(message, { type });
+    }, []);
+    const addLog = useCallback((userName, action) => {
+        console.log(`[LOG] ${userName}: ${action} em ${new Date().toLocaleString()}`);
+    }, []);
+
+    // --- Efeito para Buscar Dados Iniciais ---
+    useEffect(() => {
+        const loadData = async () => {
+            setIsLoading(true);
+            setError(null);
+            try {
+                const data = await fetchSimulatedData();
+                setUser(data.user);
+                setPatients(data.patients || []);
+                setRecords(data.records || []);
+                setMedications(data.medications || []);
+                setAnnualBudget(data.annualBudget || 0);
+            } catch (err) {
+                setError('Falha ao carregar os dados. Tente novamente mais tarde.');
+                addToast('Erro ao carregar dados.', 'error');
+                console.error("Fetch error:", err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        loadData();
+    }, [addToast]); // Depende do addToast para evitar warning do linter
+
+    // --- Memos para Gráfico ---
+     const recordsByYear = useMemo(() =>
+      Array.isArray(records) ? records.filter(r => new Date(r.entryDate).getFullYear() === filterYear) : [],
+      [records, filterYear]);
+
     const totalSpentForYear = useMemo(() =>
-        (records || [])
-            .filter(r => new Date(r.entryDate).getFullYear() === filterYear)
-            .reduce((sum, item) => sum + (Number(item.totalValue) || 0), 0),
-        [records, filterYear]
+        recordsByYear.reduce((sum, item) => sum + (Number(item.totalValue) || 0), 0),
+        [recordsByYear] // Depende dos registros já filtrados por ano
     );
-   
+
+    // --- Helper para Nome do Role ---
     const getRoleName = (role) => {
-        const names = { profissional: "Profissional", secretario: "Secretário(a)", admin: "Administrador(a)" };
+        const names = { profissional: "Profissional", secretario: "Secretário(a)", admin: "Admin" };
         return names[role] || role;
     };
 
-    // Define os menus para cada role
-    const menuItems = useMemo(() => {
-        const professionalMenu = [
-            { path: '/dashboard', label: 'Dashboard', icon: icons.dashboard },
-            { path: '/deliveries', label: 'Entregas Recentes', icon: icons.clipboard },
-            { path: '/history', label: 'Histórico de Entradas', icon: icons.history },
-            { path: '/patients', label: 'Gerenciar Pacientes', icon: icons.users },
-        ];
-        
-        const secretaryMenu = [
-            { path: '/dashboard', label: 'Dashboard', icon: icons.dashboard },
-            { path: '/deliveries', label: 'Entregas Recentes', icon: icons.clipboard },
-            { path: '/reports-general', label: 'Relatório Geral', icon: icons.reports },
-            { path: '/patient-history', label: 'Histórico por Paciente', icon: icons.history },
-            { path: '/reports', label: 'Relatórios Admin', icon: icons.reports },
-            { path: '/settings', label: 'Configurações', icon: icons.settings },
+    // --- Links da Sidebar (Reorganizado e Simplificado) ---
+    const navLinks = useMemo(() => {
+        const baseLinks = [
+             // { path: '/ajuda', label: 'Ajuda', icon: icons.help }, // Exemplo de link comum
         ];
 
-        const adminMenu = [
-            { path: '/dashboard', label: 'Dashboard', icon: icons.dashboard },
-            { path: '/deliveries', label: 'Entregas Recentes', icon: icons.clipboard },
-            { path: '/history', label: 'Histórico de Entradas', icon: icons.history },
-            { path: '/patients', label: 'Gerenciar Pacientes', icon: icons.users },
-            { path: '/medications', label: 'Gerenciar Medicações', icon: icons.pill },
-            { path: '/reports', label: 'Relatórios Admin', icon: icons.reports },
-            { path: '/settings', label: 'Configurações', icon: icons.settings },
-        ];
+        let roleSpecificLinks = [];
 
-        switch(user?.role) {
-            case 'admin': return adminMenu;
-            case 'secretario': return secretaryMenu;
-            case 'profissional': return professionalMenu;
-            default: return [];
+        switch (user?.role) {
+            case 'secretario':
+                roleSpecificLinks = [
+                    { path: '/secretaria/dashboard', label: 'Dashboard', icon: icons.dashboard },
+                ];
+                break;
+            case 'profissional':
+                roleSpecificLinks = [
+                    { path: '/profissional/dashboard', label: 'Dashboard', icon: icons.dashboard },
+                    { path: '/profissional/pacientes', label: 'Pacientes', icon: icons.users },
+                    { path: '/profissional/historico', label: 'Histórico Geral', icon: icons.history },
+                    { path: '/profissional/entregas', label: 'Entregas Recentes', icon: icons.delivery }, // Mudado de clipboard para delivery
+                ];
+                break;
+            case 'admin':
+                roleSpecificLinks = [
+                    { path: '/admin/dashboard', label: 'Dashboard Admin', icon: icons.settings }, // Exemplo
+                    { path: '/admin/usuarios', label: 'Gerenciar Usuários', icon: icons.users },
+                    { path: '/admin/medicamentos', label: 'Gerenciar Meds', icon: icons.pill },
+                    // { path: '/admin/logs', label: 'Logs', icon: icons.history }, // Exemplo
+                ];
+                break;
+            default:
+                roleSpecificLinks = [];
         }
-    }, [user?.role]);
 
-    // Efeito para fechar sidebar em telas grandes
+        return [...roleSpecificLinks, ...baseLinks]; // Combina específicos com comuns
+    }, [user?.role]); // Depende apenas do role do usuário
+
+    // --- Aba ativa ---
+    const getActiveTabFromPath = useCallback(() => {
+        // Encontra o link cuja base corresponde ao início do pathname atual
+        // Dá prioridade para matches mais longos (ex: /profissional/pacientes antes de /profissional)
+        let bestMatch = '/';
+        let maxMatchLength = 0;
+        navLinks.forEach(link => {
+            if (location.pathname.startsWith(link.path) && link.path.length > maxMatchLength) {
+                maxMatchLength = link.path.length;
+                bestMatch = link.path;
+            }
+        });
+        return bestMatch;
+    }, [location.pathname, navLinks]);
+    const activeTab = getActiveTabFromPath();
+
+    // --- Efeito para fechar sidebar em telas grandes ---
     useEffect(() => {
         const handleResize = () => {
-            if (window.innerWidth >= 768) {
+            if (window.innerWidth >= 768) { // md breakpoint
                 setIsSidebarOpen(false);
             }
         };
@@ -97,56 +159,77 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
+    // --- Simulação de Logout ---
+    const handleLogout = () => {
+        addToast("Logout realizado (simulação)", "success");
+        // Adicionar lógica real de logout aqui (limpar token, redirecionar, etc.)
+        // navigate('/login');
+        setUser(null); // Simula o logout limpando o usuário
+    };
+
+
+    // --- Renderização ---
+    if (isLoading) return <div className="flex justify-center items-center h-screen text-gray-600">Carregando...</div>;
+    if (error) return <div className="flex justify-center items-center h-screen text-red-600 font-semibold p-4">{error}</div>;
+    // Se não houver usuário após o carregamento, pode redirecionar para login ou mostrar mensagem
+    if (!user && !isLoading) {
+         // Exemplo: return <Navigate to="/login" replace />;
+         return <div className="flex justify-center items-center h-screen">Usuário não autenticado. Redirecionando...</div>;
+    }
+
+
     return (
-        <div className="relative min-h-screen md:flex bg-gray-100">
+        <div className="flex h-screen bg-gray-100">
             {/* Overlay */}
             {isSidebarOpen && (
-              <div 
-                className="fixed inset-0 bg-black bg-opacity-50 z-20 md:hidden"
-                onClick={() => setIsSidebarOpen(false)}
-                aria-hidden="true"
-              ></div>
+                <div
+                    className="fixed inset-0 bg-black bg-opacity-50 z-20 md:hidden"
+                    onClick={() => setIsSidebarOpen(false)}
+                    aria-hidden="true"
+                ></div>
             )}
 
             {/* Sidebar */}
-            <aside 
-              className={`fixed inset-y-0 left-0 bg-white shadow-lg flex-shrink-0 flex flex-col z-30 w-64
-                         transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} 
-                         md:relative md:translate-x-0 md:shadow-md transition-transform duration-300 ease-in-out`}
+            <aside
+              className={`fixed inset-y-0 left-0 bg-gradient-to-b from-gray-800 to-gray-900 text-gray-100 shadow-lg flex-shrink-0 flex flex-col z-30 w-64
+                         transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+                         md:relative md:translate-x-0 transition-transform duration-300 ease-in-out`}
               aria-label="Menu Principal"
             >
                 {/* Header da Sidebar */}
-                <div className="p-4 border-b flex justify-between items-center h-16">
-                   <div>
-                      <h1 className="text-2xl font-bold text-gray-800">SysMed</h1>
-                      <p className="text-sm text-gray-500 hidden md:block">Painel de {getRoleName(user?.role)}</p>
-                   </div>
-                   <button 
-                     className="md:hidden text-gray-500 hover:text-gray-800 p-1"
-                     onClick={() => setIsSidebarOpen(false)}
-                     aria-label="Fechar menu"
-                   >
-                     {icons.close}
-                   </button>
+                <div className="p-4 border-b border-gray-700 flex justify-between items-center h-16 flex-shrink-0">
+                    <div>
+                        {/* Logo ou Título */}
+                        <h1 className="text-2xl font-bold text-white tracking-tight">SysMed</h1>
+                         {/* Role (opcional em mobile) */}
+                         <p className="text-xs text-blue-300 hidden md:block">{getRoleName(user?.role)}</p>
+                    </div>
+                    <button
+                      className="md:hidden text-gray-400 hover:text-white p-1 -mr-2"
+                      onClick={() => setIsSidebarOpen(false)}
+                      aria-label="Fechar menu"
+                    >
+                      {icons.close || 'X'}
+                    </button>
                 </div>
 
                 {/* Navegação */}
                 <nav className="flex-grow p-4 overflow-y-auto">
-                    {menuItems.map(item => {
-                        const isActive = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
+                    {navLinks.map(item => {
+                        const isActive = activeTab === item.path;
                         return (
                             <Link
                                 key={item.path}
                                 to={item.path}
                                 onClick={() => setIsSidebarOpen(false)}
-                                className={`w-full text-left p-2 rounded-md text-sm font-medium transition-colors mb-2 flex items-center gap-3 ${
+                                className={`w-full text-left p-2.5 rounded-md text-sm font-medium transition-all duration-150 mb-2 flex items-center gap-3 group ${
                                     isActive
-                                        ? 'bg-blue-100 text-blue-700 font-semibold'
-                                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                                        ? 'bg-blue-600 text-white shadow-sm' // Estilo ativo mais forte
+                                        : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                                 }`}
                                 aria-current={isActive ? 'page' : undefined}
                             >
-                                <span className="w-5 h-5">{item.icon}</span>
+                                <span className={`w-5 h-5 transition-colors duration-150 ${isActive ? 'text-white' : 'text-gray-400 group-hover:text-gray-200'}`}>{item.icon || icons.default}</span>
                                 <span>{item.label}</span>
                             </Link>
                         );
@@ -154,74 +237,96 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
                 </nav>
 
                 {/* Footer da Sidebar */}
-                <div className="p-4 border-t">
-                     <button onClick={handleLogout} className="w-full flex items-center justify-center gap-3 p-3 text-sm bg-red-50 hover:bg-red-100 text-red-700 rounded-md font-medium">
-                       <span className="w-5 h-5">{icons.logout}</span>
-                       <span>Sair</span>
-                     </button>
+                <div className="p-4 border-t border-gray-700 flex-shrink-0">
+                     {/* Informações do Usuário */}
+                     <div className="mb-4 text-center">
+                         <div className="w-10 h-10 rounded-full bg-blue-500 mx-auto mb-2 flex items-center justify-center text-white font-bold">
+                             {user?.name ? user.name.charAt(0).toUpperCase() : '?'} {/* Inicial */}
+                         </div>
+                         <p className="text-sm font-medium text-gray-200 truncate">{formatUserName(user?.name)}</p>
+                         <p className="text-xs text-gray-400">{getRoleName(user?.role)}</p>
+                     </div>
+                     {/* Botão Sair */}
+                    <button onClick={handleLogout} className="w-full flex items-center justify-center gap-3 p-2.5 text-sm bg-red-800 hover:bg-red-700 text-red-100 rounded-md font-medium transition-colors duration-150">
+                        <span className="w-5 h-5">{icons.logout}</span>
+                        <span>Sair</span>
+                    </button>
                 </div>
             </aside>
-           
+
             {/* Conteúdo Principal */}
             <div className="flex-1 flex flex-col overflow-hidden">
-                 
-                 {/* --- CABEÇALHO CORRIGIDO --- */}
-                 <header className="bg-white shadow-sm p-4 flex justify-between items-center flex-shrink-0 z-10 h-16">
-                    {/* Lado Esquerdo: Botão Menu e Saudação */}
+
+                {/* Cabeçalho Principal */}
+                <header className="bg-white shadow-sm p-4 flex justify-between items-center flex-shrink-0 z-10 h-16 border-b">
+                    {/* Lado Esquerdo: Botão Menu Mobile */}
                     <div className="flex items-center gap-4">
-                        <button 
-                          className="text-gray-600 hover:text-gray-900 md:hidden p-1"
+                        <button
+                          className="text-gray-500 hover:text-gray-800 md:hidden p-1 -ml-1" // Ajuste de margem
                           onClick={() => setIsSidebarOpen(true)}
                           aria-label="Abrir menu"
                         >
-                          {icons.menu}
+                          {icons.menu || '☰'}
                         </button>
-                        {/* Nome do usuário formatado */}
-                        <span className="text-sm  sm:block">
-                            Olá, <strong className="font-semibold">{formatUserName(user?.name)}</strong>
-                        </span>
+                         {/* Título da Página Atual (Opcional, pode ficar em branco ou mostrar saudação) */}
+                        <h2 className="text-lg font-semibold text-gray-700 hidden sm:block">
+                           {navLinks.find(link => link.path === activeTab)?.label || `Olá, ${formatUserName(user?.name)}`}
+                        </h2>
                     </div>
-                   
-                    {/* Lado Direito: Gráfico e Seletor de Ano */}
-                    <div className="flex items-center gap-4 md:gap-6">
-                      
-                      {/* Gráfico (Aparece se for Admin ou Secretário) */}
-                      {(user?.role === 'admin' || user?.role === 'secretario') && (
-                          <div className="hidden sm:block"> {/* Oculta em telas muito pequenas */}
-                            <AnnualBudgetChart
-                                key={annualBudget} // Força re-renderização quando o orçamento muda
-                                totalSpent={totalSpentForYear}
-                                budgetLimit={annualBudget}
-                            />
-                          </div>
-                      )}
 
-                      {/* Seletor de Ano (Aparece se for Admin ou Secretário) */}
-                      {(user?.role === 'admin' || user?.role === 'secretario') &&
-                          <div className="flex items-center">
-                              <label className="text-xs font-medium text-gray-700 mr-2 hidden md:inline">Ano:</label>
-                              <select
-                                value={filterYear}
-                                onChange={e => setFilterYear(parseInt(e.target.value))}
-                                className="p-1 border rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                aria-label="Selecionar Ano para Filtro"
-                              >
-                                  <option value="2025">2025</option>
-                                  <option value="2024">2024</option>
-                                  <option value="2023">2023</option>
-                              </select>
-                          </div>
-                      }
+                    {/* Lado Direito: Gráfico e Ano */}
+                    <div className="flex items-center gap-4 md:gap-6">
+                        {(user?.role === 'admin' || user?.role === 'secretario') && (
+                            <> {/* Fragmento para agrupar */}
+                                <div className="hidden lg:block"> {/* Oculta gráfico em telas menores que large */}
+                                    <AnnualBudgetChart
+                                        key={annualBudget + totalSpentForYear} // Chave para forçar re-render se dados mudam
+                                        totalSpent={totalSpentForYear}
+                                        budgetLimit={annualBudget}
+                                    />
+                                </div>
+                                <div className="flex items-center">
+                                    <label className="text-xs font-medium text-gray-600 mr-2 hidden md:inline">Ano:</label>
+                                    <select
+                                      value={filterYear}
+                                      onChange={e => setFilterYear(parseInt(e.target.value))}
+                                      className="p-1 border border-gray-300 rounded-md text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                      aria-label="Selecionar Ano para Filtro"
+                                    >
+                                        {/* Gerar opções de ano dinamicamente seria melhor */}
+                                        <option value={new Date().getFullYear()}>{new Date().getFullYear()}</option>
+                                        <option value={new Date().getFullYear() - 1}>{new Date().getFullYear() - 1}</option>
+                                        <option value={new Date().getFullYear() - 2}>{new Date().getFullYear() - 2}</option>
+                                    </select>
+                                </div>
+                            </>
+                        )}
+                         {/* Outros ícones/controles do header aqui (ex: notificações, perfil) */}
                     </div>
-                 </header>
-                 {/* --- FIM DO CABEÇALHO CORRIGIDO --- */}
-                 
-                 <main className="flex-grow p-4 md:p-6 overflow-auto bg-gray-100">
-                    {/* O Outlet renderiza a página da rota atual (ex: Dashboard, Settings, etc.) */}
-                    <Outlet />
-                 </main>
+                </header>
+
+                {/* Área de Conteúdo com Scroll */}
+                <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100">
+                    {/* Renderiza a página da rota atual */}
+                    {/* Passa todos os dados e funções necessários via contexto */}
+                    <div className="p-4 md:p-6"> {/* Padding aplicado aqui */}
+                        <Outlet context={{ user, patients, records, medications, annualBudget, filterYear, addToast, addLog, setPatients, setRecords /* Passa setters se precisar */ }} />
+                    </div>
+                </main>
             </div>
+
+            <ToastContainer
+                position="top-right"
+                autoClose={3000}
+                hideProgressBar={false}
+                newestOnTop={false}
+                closeOnClick
+                rtl={false}
+                pauseOnFocusLoss
+                draggable
+                pauseOnHover
+                theme="colored" // Um tema mais moderno
+            />
         </div>
     );
-};
-
+}
