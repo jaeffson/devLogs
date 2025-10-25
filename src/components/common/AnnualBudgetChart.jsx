@@ -7,8 +7,8 @@ export function AnnualBudgetChart({ totalSpent = 0, budgetLimit = 0 }) {
   const numericBudgetLimit = Number(budgetLimit) || 0;
 
   const formatCurrency = (value) => {
-      if (!isFinite(value)) return 'R$ ---';
-      return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+    if (!isFinite(value)) return 'R$ ---';
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   }
 
   const percentage = numericBudgetLimit > 0 ? (numericTotalSpent / numericBudgetLimit) * 100 : (numericTotalSpent > 0 ? 101 : 0);
@@ -31,9 +31,17 @@ export function AnnualBudgetChart({ totalSpent = 0, budgetLimit = 0 }) {
   }
 
   return (
-    // --- CORREÇÃO AQUI: "box-content" foi RE-ADICIONADO ---
-    <div className="w-full max-w-xs animate-fade-in box-content">
-      <h3 className="text-sm font-semibold text-center text-gray-600 mb-1">Orçamento Anual</h3>
+    // --- ALTERAÇÃO AQUI ---
+    // Mantemos o min-w-[220px] (para o header)
+    // e o mx-auto (para centralizar no card)
+    <div className="min-w-[220px] animate-fade-in mx-auto">
+      
+      {/* --- CORREÇÃO PRINCIPAL ---
+        O TÍTULO H3 FOI REMOVIDO DAQUI.
+        O componente não deve ter seu próprio título,
+        já que o card na página "Relatórios" já fornece um.
+      */}
+      
       <div className="space-y-1">
         <div>
           {/* Informações de Texto */}
@@ -71,4 +79,3 @@ export function AnnualBudgetChart({ totalSpent = 0, budgetLimit = 0 }) {
     </div>
   );
 }
-

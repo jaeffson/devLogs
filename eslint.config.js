@@ -1,8 +1,11 @@
-import js from '@eslint/js'
-import globals from 'globals'
-import reactHooks from 'eslint-plugin-react-hooks'
-import reactRefresh from 'eslint-plugin-react-refresh'
-import { defineConfig, globalIgnores } from 'eslint/config'
+// eslint.config.js
+import js from '@eslint/js';
+import globals from 'globals';
+import reactHooks from 'eslint-plugin-react-hooks';
+import reactRefresh from 'eslint-plugin-react-refresh';
+import prettierConfig from 'eslint-config-prettier'; // Importe a config
+import prettierPlugin from 'eslint-plugin-prettier'; // Importe o plugin
+import { defineConfig, globalIgnores } from 'eslint/config';
 
 export default defineConfig([
   globalIgnores(['dist']),
@@ -12,7 +15,14 @@ export default defineConfig([
       js.configs.recommended,
       reactHooks.configs['recommended-latest'],
       reactRefresh.configs.vite,
+      // prettierConfig DEVE SER O ÚLTIMO 'extends'
+      // para desativar regras conflitantes
+      prettierConfig,
     ],
+    plugins: {
+       // Adicione o plugin do prettier
+      prettier: prettierPlugin,
+    },
     languageOptions: {
       ecmaVersion: 2020,
       globals: globals.browser,
@@ -23,7 +33,9 @@ export default defineConfig([
       },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      'no-unused-vars': ['warn', { varsIgnorePattern: '^[A-Z_]' }], // Mudei para 'warn'
+      // Ative as regras do prettier
+      'prettier/prettier': 'error',
     },
   },
-])
+]);

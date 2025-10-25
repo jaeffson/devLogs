@@ -4,14 +4,13 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 // --- Imports de Componentes e Utils ---
 import { AnnualBudgetChart } from '../components/common/AnnualBudgetChart'; 
 import { formatUserName } from '../utils/helpers'; 
-import icons  from '../utils/icons'; // Importando nossos novos ícones
+import {icons}  from '../utils/icons'; // Verifique o caminho
 
 export default function MainLayout({ user, handleLogout, annualBudget, records }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const location = useLocation();
   const [filterYear, setFilterYear] = useState(new Date().getFullYear());
   
-  // Estados para melhorias
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   
@@ -31,7 +30,7 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
     return names[role] || role;
   };
 
-  // Definição dos menus (sem mudanças, mas usarão os novos ícones)
+  // (Definição dos menus - sem mudanças)
   const menuItems = useMemo(() => {
     const professionalMenu = [
       { path: '/dashboard', label: 'Dashboard', icon: icons.dashboard },
@@ -95,7 +94,8 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
   };
 
   return (
-    <div className="relative min-h-screen md:flex bg-gray-100">
+   
+    <div className="relative min-h-screen md:h-screen md:flex md:overflow-hidden bg-gray-100">
       
       {/* Overlay */}
       {isSidebarOpen && (
@@ -106,13 +106,13 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
         ></div>
       )}
 
-      {/* --- SIDEBAR ATUALIZADA --- */}
+      {/* --- SIDEBAR --- */}
       <aside 
         className={`fixed inset-y-0 left-0 bg-white shadow-xl flex-shrink-0 flex flex-col z-30
-                  transition-all duration-300 ease-in-out
-                  ${isSidebarCollapsed ? 'md:w-20' : 'md:w-64'}
-                  transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} 
-                  md:static md:translate-x-0`}
+                transition-all duration-300 ease-in-out
+                ${isSidebarCollapsed ? 'md:w-20' : 'md:w-64'}
+                transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} 
+                md:static md:translate-x-0`}
         aria-label="Menu Principal"
       >
         {/* Header da Sidebar */}
@@ -129,7 +129,7 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
             onClick={() => setIsSidebarOpen(false)}
             aria-label="Fechar menu"
           >
-            {icons.close}
+            <span className="w-6 h-6">{icons.close}</span>
           </button>
           
           <button 
@@ -137,11 +137,16 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
             aria-label={isSidebarCollapsed ? "Expandir menu" : "Retrair menu"}
           >
-            {isSidebarCollapsed ? icons.chevronRight : icons.chevronLeft}
+            <span className="w-5 h-5">
+              {isSidebarCollapsed ? icons.chevronRight : icons.chevronLeft}
+            </span>
           </button>
         </div>
 
-        {/* --- NAVEGAÇÃO ATUALIZADA --- */}
+        {/* --- NAVEGAÇÃO ---
+           Note que esta <nav> JÁ TEM 'overflow-y-auto'.
+           Isso é ótimo, significa que se o SEU MENU for longo, ele rolará.
+        */}
         <nav className="flex-grow p-4 overflow-y-auto">
           {menuItems.map(item => {
             const isActive = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
@@ -152,18 +157,16 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
                 onClick={() => setIsSidebarOpen(false)}
                 title={isSidebarCollapsed ? item.label : undefined}
                 className={`relative w-full text-left p-3 rounded-lg text-sm font-medium transition-all duration-150 mb-2 flex items-center gap-4
-                          ${isSidebarCollapsed ? 'md:justify-center' : ''}
-                          ${isActive
-                            ? 'bg-indigo-50 text-indigo-700 font-semibold' // Estilo de fundo para ativo
-                            : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                          }`}
+                        ${isSidebarCollapsed ? 'md:justify-center' : ''}
+                        ${isActive
+                          ? 'bg-indigo-50 text-indigo-700 font-semibold'
+                          : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                        }`}
                 aria-current={isActive ? 'page' : undefined}
               >
-                {/* --- NOVO ESTILO DE INDICADOR ATIVO --- */}
                 {isActive && (
                   <span className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 bg-indigo-600 rounded-r-full"></span>
                 )}
-
                 <span className="w-5 h-5 flex-shrink-0 text-lg">{item.icon}</span>
                 <span className={`transition-opacity whitespace-nowrap ${isSidebarCollapsed ? 'md:opacity-0 md:hidden' : 'md:opacity-100'}`}>
                   {item.label}
@@ -173,29 +176,31 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
           })}
         </nav>
 
-        {/* Footer da Sidebar (Vazio por enquanto, o "Sair" está no perfil) */}
         <div className="p-4 border-t">
         </div>
       </aside>
       
-      {/* --- CONTEÚDO PRINCIPAL E HEADER --- */}
+      {/* --- CONTEÚDO PRINCIPAL E HEADER ---
+         Esta <div> JÁ TEM 'overflow-hidden', o que é perfeito.
+         Ela vai conter a rolagem do <main>.
+      */}
       <div className="flex-1 flex flex-col overflow-hidden">
           
-        {/* --- HEADER ATUALIZADO --- */}
+        {/* --- HEADER (Não rola) --- */}
         <header className="bg-white shadow-sm p-4 flex justify-between items-center flex-shrink-0 z-10 h-16">
           
+          {/* Lado Esquerdo */}
           <div className="flex items-center gap-4">
             <button 
               className="text-gray-600 hover:text-gray-900 md:hidden p-1"
               onClick={() => setIsSidebarOpen(true)}
               aria-label="Abrir menu"
             >
-              {icons.menu}
+              <span className="w-6 h-6">{icons.menu}</span>
             </button>
             
-            {/* Busca Global (Estilo atualizado) */}
             <div className="relative hidden md:block">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5">
                 {icons.search}
               </span>
               <input
@@ -209,9 +214,8 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
           {/* Lado Direito */}
           <div className="flex items-center gap-4 md:gap-6">
             
-            {/* Gráfico e Ano (sem mudanças, exceto o anel de foco) */}
             {(user?.role === 'admin' || user?.role === 'secretario') && (
-              <div className="hidden sm:flex items-center gap-4">
+              <div className="hidden sm:flex items-center gap-4 border-r border-gray-200 pr-4 md:pr-6">
                 <AnnualBudgetChart
                   key={annualBudget}
                   totalSpent={totalSpentForYear}
@@ -233,7 +237,7 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
               </div>
             )}
 
-            {/* --- DROPDOWN DE PERFIL ATUALIZADO --- */}
+            {/* --- DROPDOWN DE PERFIL --- */}
             <div className="relative" ref={profileRef}>
               <button
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
@@ -243,7 +247,7 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
                    {icons.userCircle}
                  </span>
                  <span className="hidden md:block font-semibold">{formatUserName(user?.name)}</span>
-                 <span className={`transition-transform text-gray-500 ${isProfileOpen ? 'rotate-180' : ''}`}>
+                 <span className={`transition-transform text-gray-500 w-5 h-5 ${isProfileOpen ? 'rotate-180' : ''}`}>
                    {icons.chevronDown}
                  </span>
               </button>
@@ -269,7 +273,7 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
                     className="flex items-center gap-3 w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
                   >
                     <span className="w-5 h-5">{icons.organization}</span>
-                    <span>Minha Organização</span>
+                    <span>Configuração</span>
                   </Link>
                   <div className="border-t border-gray-100 my-1"></div>
                   <button 
@@ -286,8 +290,11 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
           </div>
         </header>
           
+        {/* --- CONTEÚDO (Rola) ---
+           Esta <main> JÁ TEM 'overflow-auto'.
+           Agora que o container pai está travado, ela vai rolar sozinha.
+        */}
         <main className="flex-grow p-4 md:p-6 overflow-auto bg-gray-100">
-          {/* O Outlet é onde suas páginas (com as abas) serão renderizadas */}
           <Outlet />
         </main>
       </div>

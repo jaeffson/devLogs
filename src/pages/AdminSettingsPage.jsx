@@ -6,7 +6,7 @@ import UserForm from '../components/forms/UserForm';
 import { ConfirmModal } from '../components/common/Modal';
 import { StatusBadge } from '../components/common/StatusBadge';
 import  {AnnualBudgetChart}  from '../components/common/AnnualBudgetChart';
-import icons from '../utils/icons';
+import { icons } from '../utils/icons';
 
 // --- Componente da Página ---
 export default function AdminSettingsPage({

@@ -11,7 +11,7 @@ import { StatusBadge } from '../components/common/StatusBadge';
 import { AttendRecordModal } from '../components/common/AttendRecordModal';
 import { RecentDeliveriesTab } from '../components/common/RecentDeliveriesTab';
 import { PatientRecordsTable } from '../components/common/PatientRecordsTable';
-import icons from '../utils/icons';
+import {icons} from '../utils/icons';
 import { getMedicationName } from '../utils/helpers';
 import {useDebounce} from '../hooks/useDebounce';
 

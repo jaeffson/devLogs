@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 // Removido 'Link' pois você usa um botão para alternar
 // import { Link } from 'react-router-dom';
-import icons from '../utils/icons'; // Certifique-se que este caminho está correto
+
 
 // Ícones (usando os que sugeri anteriormente para consistência)
 const UserIcon = ( // Ícone para o campo Nome

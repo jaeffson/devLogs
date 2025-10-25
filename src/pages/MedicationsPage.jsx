@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react';
 // --- Imports de Componentes ---
 import MedicationForm from '../components/forms/MedicationForm';
 import { ConfirmModal } from '../components/common/Modal';
-import icons from '../utils/icons';
+import { icons } from '../utils/icons';
 
 export default function MedicationsPage({
     medications = [],
