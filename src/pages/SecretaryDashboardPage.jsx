@@ -7,7 +7,7 @@ import { BarChart } from '../components/common/BarChart';
 import { PatientRecordsTable } from '../components/common/PatientRecordsTable';
 import { RecentDeliveriesTab } from '../components/common/RecentDeliveriesTab';
 import { StatusBadge } from '../components/common/StatusBadge';
-import icons from '../utils/icons'; // Ajuste o caminho ../ se necessário
+import {icons} from '../utils/icons'; // Ajuste o caminho ../ se necessário
 import useDebounce from '../hooks/useDebounce'; // Assumindo que /src/hooks/useDebounce.js existe
 
 // --- Imports de Utils ---
