@@ -1,3 +1,4 @@
+// src/layouts/MainLayout.jsx
 // (NOVO) Adicione 'useCallback' aos seus imports do React
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -127,76 +128,50 @@ export default function MainLayout({
   // --- (INÍCIO) LÓGICA DO TIMER DE INATIVIDADE ---
   // ==============================================================
 
-  // (NOVO) Usamos 'useRef' para guardar a ID do timer sem causar re-renderizações
   const idleTimerRef = useRef(null);
 
-  // (NOVO) Função que será chamada quando o tempo esgotar
-  // Usamos 'useCallback' para garantir que a função não seja recriada
   const logoutOnIdle = useCallback(() => {
-    // (Opcional) Você pode adicionar um Toast aqui para avisar o usuário
-    // Ex: addToast('Você foi desconectado por inatividade.', 'info');
-    
-    // Chama a função de logout que veio do App.jsx
     handleLogout();
-    
-    // Força o redirecionamento para a tela de login
     navigate('/login');
   }, [handleLogout, navigate]);
 
 
-  // (NOVO) Função que reseta o timer
   const resetIdleTimer = useCallback(() => {
-    // Limpa o timer anterior (se existir)
     if (idleTimerRef.current) {
       clearTimeout(idleTimerRef.current);
     }
-
-    // (CUSTOMIZE AQUI) Define o tempo de 10 minutos
-    const idleTimeout = 10 * 60 * 1000; // 10 minutos * 60 segundos * 1000 ms
-
-    // Cria um novo timer
+    const idleTimeout = 10 * 60 * 1000; // 10 minutos
     idleTimerRef.current = setTimeout(logoutOnIdle, idleTimeout);
   }, [logoutOnIdle]);
 
 
-  // (NOVO) 'useEffect' para adicionar e remover os "ouvintes" de atividade
   useEffect(() => {
-    // Lista de eventos que contam como "atividade"
     const activityEvents = [
-      'mousemove',  // Movimento do mouse
-      'mousedown',  // Clique do mouse
-      'keypress',   // Tecla pressionada
-      'touchstart', // Toque na tela (mobile)
-      'scroll',     // Scroll
+      'mousemove',
+      'mousedown',
+      'keypress',
+      'touchstart',
+      'scroll',
     ];
-
-    // Inicia o timer quando o layout é carregado
     resetIdleTimer();
-
-    // Adiciona um "ouvinte" para cada evento de atividade
     activityEvents.forEach((event) => {
       window.addEventListener(event, resetIdleTimer);
     });
-
-    // Função de "limpeza": será executada quando o componente for desmontado
     return () => {
-      // Limpa o timer
       if (idleTimerRef.current) {
         clearTimeout(idleTimerRef.current);
       }
-      // Remove todos os "ouvintes" para evitar vazamento de memória
       activityEvents.forEach((event) => {
         window.removeEventListener(event, resetIdleTimer);
       });
     };
-  }, [resetIdleTimer]); // A dependência é o 'resetIdleTimer'
+  }, [resetIdleTimer]);
 
   // ==============================================================
   // --- (FIM) LÓGICA DO TIMER DE INATIVIDADE ---
   // ==============================================================
 
 
-  // (Lógica de cálculo e getRoleName - sem mudanças)
   const totalSpentForYear = useMemo(
     () =>
       (records || [])
@@ -213,7 +188,7 @@ export default function MainLayout({
     return names[role] || role;
   };
 
-  // (Definição dos menus - sem mudanças)
+  // (Definição dos menus)
   const menuItems = useMemo(() => {
     const professionalMenu = [
       { path: '/dashboard', label: 'Dashboard', icon: icons.dashboard },
@@ -221,14 +196,16 @@ export default function MainLayout({
       { path: '/history', label: 'Histórico de Entradas', icon: icons.history },
       { path: '/patients', label: 'Gerenciar Pacientes', icon: icons.users },
     ];
+    
+   
     const secretaryMenu = [
       { path: '/dashboard', label: 'Dashboard', icon: icons.dashboard },
-      { path: '/deliveries', label: 'Entregas Recentes', icon: icons.clipboard },
-      { path: '/reports-general', label: 'Relatório Geral', icon: icons.reports },
+     // { path: '/deliveries', label: 'Entregas Recentes', icon: icons.clipboard },//
       { path: '/patient-history', label: 'Histórico por Paciente', icon: icons.history },
-      { path: '/reports', label: 'Relatórios Admin', icon: icons.reports },
+       { path: '/reports-general', label: 'Relatórios Admin',icon: icons.clipboard},
       { path: '/settings', label: 'Configurações', icon: icons.settings },
     ];
+    
     const adminMenu = [
       { path: '/dashboard', label: 'Dashboard', icon: icons.dashboard },
       { path: '/deliveries', label: 'Entregas Recentes', icon: icons.clipboard },
@@ -294,10 +271,10 @@ export default function MainLayout({
       {/* --- SIDEBAR (Sem mudanças) --- */}
       <aside
         className={`fixed inset-y-0 left-0 bg-white shadow-xl flex-shrink-0 flex flex-col z-30
-                transition-all duration-300 ease-in-out
-                ${isSidebarCollapsed ? 'md:w-20' : 'md:w-64'}
-                transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} 
-                md:static md:translate-x-0`}
+                  transition-all duration-300 ease-in-out
+                  ${isSidebarCollapsed ? 'md:w-20' : 'md:w-64'}
+                  transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} 
+                  md:static md:translate-x-0`}
         aria-label="Menu Principal"
       >
         {/* Header da Sidebar */}
@@ -437,13 +414,24 @@ export default function MainLayout({
                   </label>
                   <select
                     value={filterYear}
-                    onChange={(e) => setFilterYear(parseInt(e.targe.value))}
+                    // --- (MODIFICADO) Corrigido `e.targe.value` para `e.target.value` ---
+                    onChange={(e) => setFilterYear(parseInt(e.target.value))}
                     className="p-1 border rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     aria-label="Selecionar Ano para Filtro"
                   >
-                    <option value="2025">2025</option>
-                    <option value="2024">2024</option>
-                    <option value="2023">2023</option>
+                    {/* (MODIFICADO) Ano de 2025 adicionado e lista dinâmica */}
+                    {[...Array(5)].map((_, i) => {
+                      const year = new Date().getFullYear() + 1 - i; // Começa de 2025 (assumindo 2024 como ano atual)
+                       if (year === 2025) { // Garantir que 2025 esteja lá
+                         return <option key={year} value={year}>{year}</option>;
+                       }
+                      return (
+                        <option key={year} value={year}>
+                          {year}
+                        </option>
+                      );
+                    }).filter((_,i) => i < 5)} 
+                     {/* Garante 5 anos, ex: 2025, 2024, 2023, 2022, 2021 */}
                   </select>
                 </div>
               </div>
