@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+// (NOVO) Adicione 'useCallback' aos seus imports do React
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-// (NOVO) Importa os ícones de clima
 import {
   WiDaySunny,
   WiDayCloudy,
@@ -30,7 +30,7 @@ import { AnnualBudgetChart } from '../components/common/AnnualBudgetChart';
 import { formatUserName } from '../utils/helpers';
 import { icons } from '../utils/icons';
 
-// --- (NOVO) Helper para traduzir o código do clima em ícone e texto ---
+// --- Helpers de Clima e Data (Sem mudanças) ---
 function getWeatherInfo(code, isDay = true) {
   const weatherMap = {
     0: { text: 'Céu limpo', icon: isDay ? WiDaySunny : WiNightClear },
@@ -56,7 +56,6 @@ function getWeatherInfo(code, isDay = true) {
   return weatherMap[code] || { text: 'Indefinido', icon: WiCloud };
 }
 
-// --- Hook customizado para formatar a data (Sem mudanças) ---
 function useFormattedDate() {
   const [formattedDate, setFormattedDate] = useState('');
   useEffect(() => {
@@ -68,36 +67,28 @@ function useFormattedDate() {
   return formattedDate;
 }
 
-// --- (MODIFICADO) Hook customizado para buscar o clima (Open-Meteo) ---
 function useWeather(latitude, longitude) {
   const [weather, setWeather] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    // URL da API Open-Meteo
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,is_day,weather_code&timezone=America/Sao_Paulo`;
-
     const fetchWeather = async () => {
       try {
         const res = await fetch(url);
         if (!res.ok) throw new Error('Resposta da API não foi OK.');
-        
         const data = await res.json();
-        
         if (!data.current) throw new Error('Dados de clima não encontrados.');
-
         const {
           temperature_2m: temp,
           is_day: isDay,
           weather_code: code,
         } = data.current;
-
         const { text, icon } = getWeatherInfo(code, isDay === 1);
-
         setWeather({
           temp: Math.round(temp),
           description: text,
-          IconComponent: icon, // Salva o componente do ícone
+          IconComponent: icon,
         });
         setError(null);
       } catch (err) {
@@ -105,15 +96,13 @@ function useWeather(latitude, longitude) {
         setError('Clima indisponível.');
       }
     };
-
     fetchWeather();
-    const intervalId = setInterval(fetchWeather, 1800000); // Atualiza a cada 30 min
+    const intervalId = setInterval(fetchWeather, 1800000);
     return () => clearInterval(intervalId);
-    
   }, [latitude, longitude]);
-
   return { weather, error };
 }
+// --- Fim dos Helpers ---
 
 export default function MainLayout({
   user,
@@ -127,15 +116,85 @@ export default function MainLayout({
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
-  // --- (MODIFICADO) Hooks de Data e Clima ---
   const formattedDate = useFormattedDate();
-  // Coordenadas de Parari, PB
   const { weather, error } = useWeather(-7.02, -36.5);
   const fixedLocationName = 'Parari, PB';
-  // --- FIM (MODIFICADO) ---
 
   const profileRef = useRef(null);
   const navigate = useNavigate();
+
+  // ==============================================================
+  // --- (INÍCIO) LÓGICA DO TIMER DE INATIVIDADE ---
+  // ==============================================================
+
+  // (NOVO) Usamos 'useRef' para guardar a ID do timer sem causar re-renderizações
+  const idleTimerRef = useRef(null);
+
+  // (NOVO) Função que será chamada quando o tempo esgotar
+  // Usamos 'useCallback' para garantir que a função não seja recriada
+  const logoutOnIdle = useCallback(() => {
+    // (Opcional) Você pode adicionar um Toast aqui para avisar o usuário
+    // Ex: addToast('Você foi desconectado por inatividade.', 'info');
+    
+    // Chama a função de logout que veio do App.jsx
+    handleLogout();
+    
+    // Força o redirecionamento para a tela de login
+    navigate('/login');
+  }, [handleLogout, navigate]);
+
+
+  // (NOVO) Função que reseta o timer
+  const resetIdleTimer = useCallback(() => {
+    // Limpa o timer anterior (se existir)
+    if (idleTimerRef.current) {
+      clearTimeout(idleTimerRef.current);
+    }
+
+    // (CUSTOMIZE AQUI) Define o tempo de 10 minutos
+    const idleTimeout = 10 * 60 * 1000; // 10 minutos * 60 segundos * 1000 ms
+
+    // Cria um novo timer
+    idleTimerRef.current = setTimeout(logoutOnIdle, idleTimeout);
+  }, [logoutOnIdle]);
+
+
+  // (NOVO) 'useEffect' para adicionar e remover os "ouvintes" de atividade
+  useEffect(() => {
+    // Lista de eventos que contam como "atividade"
+    const activityEvents = [
+      'mousemove',  // Movimento do mouse
+      'mousedown',  // Clique do mouse
+      'keypress',   // Tecla pressionada
+      'touchstart', // Toque na tela (mobile)
+      'scroll',     // Scroll
+    ];
+
+    // Inicia o timer quando o layout é carregado
+    resetIdleTimer();
+
+    // Adiciona um "ouvinte" para cada evento de atividade
+    activityEvents.forEach((event) => {
+      window.addEventListener(event, resetIdleTimer);
+    });
+
+    // Função de "limpeza": será executada quando o componente for desmontado
+    return () => {
+      // Limpa o timer
+      if (idleTimerRef.current) {
+        clearTimeout(idleTimerRef.current);
+      }
+      // Remove todos os "ouvintes" para evitar vazamento de memória
+      activityEvents.forEach((event) => {
+        window.removeEventListener(event, resetIdleTimer);
+      });
+    };
+  }, [resetIdleTimer]); // A dependência é o 'resetIdleTimer'
+
+  // ==============================================================
+  // --- (FIM) LÓGICA DO TIMER DE INATIVIDADE ---
+  // ==============================================================
+
 
   // (Lógica de cálculo e getRoleName - sem mudanças)
   const totalSpentForYear = useMemo(
@@ -154,7 +213,7 @@ export default function MainLayout({
     return names[role] || role;
   };
 
-  // --- (CORRIGIDO) Definição dos menus ---
+  // (Definição dos menus - sem mudanças)
   const menuItems = useMemo(() => {
     const professionalMenu = [
       { path: '/dashboard', label: 'Dashboard', icon: icons.dashboard },
@@ -191,7 +250,6 @@ export default function MainLayout({
         return [];
     }
   }, [user?.role]);
-  // --- FIM DA CORREÇÃO ---
 
   // (useEffect para fechar sidebar - sem mudanças)
   useEffect(() => {
@@ -233,7 +291,7 @@ export default function MainLayout({
         ></div>
       )}
 
-      {/* --- SIDEBAR --- */}
+      {/* --- SIDEBAR (Sem mudanças) --- */}
       <aside
         className={`fixed inset-y-0 left-0 bg-white shadow-xl flex-shrink-0 flex flex-col z-30
                 transition-all duration-300 ease-in-out
@@ -254,7 +312,6 @@ export default function MainLayout({
               Painel de {getRoleName(user?.role)}
             </p>
           </div>
-
           <button
             className="md:hidden text-gray-500 hover:text-gray-900 p-1"
             onClick={() => setIsSidebarOpen(false)}
@@ -262,7 +319,6 @@ export default function MainLayout({
           >
             <span className="w-6 h-6">{icons.close}</span>
           </button>
-
           <button
             className="hidden md:block text-gray-500 hover:text-indigo-600 p-1 transition-colors"
             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
@@ -275,8 +331,7 @@ export default function MainLayout({
             </span>
           </button>
         </div>
-
-        {/* --- NAVEGAÇÃO --- */}
+        {/* Navegação */}
         <nav className="flex-grow p-4 overflow-y-auto">
           {menuItems.map((item) => {
             const isActive =
@@ -312,15 +367,14 @@ export default function MainLayout({
             );
           })}
         </nav>
-
         <div className="p-4 border-t"></div>
       </aside>
 
-      {/* --- CONTEÚDO PRINCIPAL E HEADER --- */}
+      {/* --- CONTEÚDO PRINCIPAL E HEADER (Sem mudanças) --- */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* --- HEADER (Não rola) --- */}
+        {/* Header */}
         <header className="bg-white shadow-sm p-4 flex justify-between items-center flex-shrink-0 z-10 h-16">
-          {/* Lado Esquerdo */}
+          {/* Lado Esquerdo (Clima) */}
           <div className="flex items-center gap-4">
             <button
               className="text-gray-600 hover:text-gray-900 md:hidden p-1"
@@ -329,25 +383,16 @@ export default function MainLayout({
             >
               <span className="w-6 h-6">{icons.menu}</span>
             </button>
-
-            {/* ========================================================= */}
-            {/* --- (INÍCIO DA MODIFICAÇÃO) --- */}
-            {/* O 'div' da busca foi substituído por este widget */}
-            {/* ========================================================= */}
             <div className="hidden md:flex items-center gap-3">
-              {/* Clima */}
               <div className="flex items-center gap-1">
-                {/* O Ícone agora é um componente, não uma <img> */}
                 {weather && weather.IconComponent ? (
                   <span
-                    className="text-3xl text-indigo-500" // Ajuste a cor/tamanho se precisar
+                    className="text-3xl text-indigo-500"
                     title={weather.description}
                   >
-                    {/* Renderiza o componente do ícone salvo no estado */}
                     <weather.IconComponent />
                   </span>
                 ) : (
-                  // Placeholder enquanto carrega ou se der erro
                   <span className="w-8 h-8 flex items-center justify-center text-gray-400">
                     <WiCloud />
                   </span>
@@ -365,11 +410,7 @@ export default function MainLayout({
                   </p>
                 </div>
               </div>
-
-              {/* Divisor Visual */}
               <div className="h-8 w-px bg-gray-200"></div>
-
-              {/* Data e Local */}
               <div className="text-left">
                 <p className="text-sm font-medium text-gray-800 leading-tight">
                   {formattedDate || 'Carregando data...'}
@@ -379,12 +420,9 @@ export default function MainLayout({
                 </p>
               </div>
             </div>
-            {/* ========================================================= */}
-            {/* --- (FIM DA MODIFICAÇÃO) --- */}
-            {/* ========================================================= */}
           </div>
 
-          {/* Lado Direito */}
+          {/* Lado Direito (Perfil, etc) */}
           <div className="flex items-center gap-4 md:gap-6">
             {(user?.role === 'admin' || user?.role === 'secretario') && (
               <div className="hidden sm:flex items-center gap-4 border-r border-gray-200 pr-4 md:pr-6">
@@ -399,7 +437,7 @@ export default function MainLayout({
                   </label>
                   <select
                     value={filterYear}
-                    onChange={(e) => setFilterYear(parseInt(e.target.value))}
+                    onChange={(e) => setFilterYear(parseInt(e.targe.value))}
                     className="p-1 border rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     aria-label="Selecionar Ano para Filtro"
                   >
@@ -410,8 +448,7 @@ export default function MainLayout({
                 </div>
               </div>
             )}
-
-            {/* --- DROPDOWN DE PERFIL --- */}
+            {/* Dropdown de Perfil */}
             <div className="relative" ref={profileRef}>
               <button
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
@@ -429,7 +466,6 @@ export default function MainLayout({
                   {icons.chevronDown}
                 </span>
               </button>
-
               {/* Menu Dropdown */}
               {isProfileOpen && (
                 <div className="absolute right-0 mt-2 w-60 bg-white rounded-lg shadow-xl py-2 z-50 border border-gray-100">
@@ -449,7 +485,6 @@ export default function MainLayout({
                     <span className="w-5 h-5">{icons.user}</span>
                     <span>Meu Perfil</span>
                   </Link>
-
                   {(user?.role === 'admin' || user?.role === 'secretario') && (
                     <Link
                       to="/settings"
@@ -460,7 +495,6 @@ export default function MainLayout({
                       <span>Configuração</span>
                     </Link>
                   )}
-
                   {(user?.role === 'admin' ||
                     user?.role === 'profissional') && (
                     <Link
@@ -472,7 +506,6 @@ export default function MainLayout({
                       <span>Gerenciar Medicações</span>
                     </Link>
                   )}
-
                   <div className="border-t border-gray-100 my-1"></div>
                   <button
                     onClick={handleLogoutClick}
