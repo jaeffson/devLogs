@@ -219,7 +219,8 @@ export function DashboardView({
           </p>
           <button
             onClick={() => onNavigateWithFilter('all_history', 'Pendente')}
-            className="text-sm text-blue-600 hover:underline mt-2"
+            // Adicionado cursor-pointer e hover na cor do texto do botão do card
+            className="text-sm text-blue-600 hover:text-blue-800 hover:underline mt-2 cursor-pointer transition-colors"
           >
             Ver pendências
           </button>
@@ -255,7 +256,8 @@ export function DashboardView({
           </div>
           <button 
             onClick={() => onNavigateWithFilter('all_history', 'Pendente')}
-            className="px-3 py-1 text-sm font-medium rounded-lg flex-shrink-0 bg-red-600 text-white hover:bg-red-700 transition-colors"
+            // Adicionado cursor-pointer
+            className="px-3 py-1 text-sm font-medium rounded-lg flex-shrink-0 bg-red-600 text-white hover:bg-red-700 transition-colors cursor-pointer"
           >
             Ver Atrasados
           </button>
@@ -285,7 +287,8 @@ export function DashboardView({
           </div>
           <button 
             onClick={() => onNavigateWithFilter('all_history', 'Pendente')}
-            className={`px-3 py-1 text-sm font-medium rounded-lg flex-shrink-0 bg-yellow-400 text-yellow-900 hover:bg-yellow-500 transition-colors`}
+            // Adicionado cursor-pointer
+            className={`px-3 py-1 text-sm font-medium rounded-lg flex-shrink-0 bg-yellow-400 text-yellow-900 hover:bg-yellow-500 transition-colors cursor-pointer`}
           >
             Acessar
           </button>
@@ -298,6 +301,7 @@ export function DashboardView({
         Atalhos Rápidos
       </h3>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+        {/* Estes já tinham as classes de interação nos passos anteriores */}
         <div
           className="bg-white p-4 md:p-6 rounded-lg shadow hover:shadow-lg transition-shadow flex flex-col items-center justify-center text-center cursor-pointer"
           onClick={() => onNavigate('records')}

@@ -283,7 +283,7 @@ export default function MainLayout({
             className={`overflow-hidden transition-all ${isSidebarCollapsed ? 'md:w-0' : 'md:w-auto'}`}
           >
             <h1 className="text-2xl font-bold text-indigo-700 whitespace-nowrap">
-              SysMed
+              Medlogs
             </h1>
             <p className="text-sm text-gray-500 hidden md:block whitespace-nowrap">
               Painel de {getRoleName(user?.role)}

@@ -4,33 +4,31 @@ import { PatientRecordsTable } from '../../common/PatientRecordsTable';
 import { icons } from '../../../utils/icons';
 import useDebounce from '../../../hooks/useDebounce';
 
-// Recebemos as props do "Controlador"
 export function PatientHistoryView({
   patients = [],
   records = [],
   medications = [],
-  getMedicationName, // (Será passado para PatientRecordsTable)
-  initialPatient, // Paciente pré-selecionado (ex: vindo da view 'deliveries')
-  onHistoryViewed, // Callback para limpar o 'initialPatient' no controlador
+  getMedicationName, 
+  initialPatient, 
+  onHistoryViewed, 
 }) {
   
- 
+  // --- Estados (Movidos para cá) ---
   const [searchTermPatient, setSearchTermPatient] = useState('');
-  // Usamos o 'initialPatient' para definir o estado inicial
   const [selectedPatient, setSelectedPatient] = useState(initialPatient || null); 
   
   const debouncedSearchTermPatient = useDebounce(searchTermPatient, 300);
   const isSearchingPatient = searchTermPatient !== debouncedSearchTermPatient;
 
-  // Efeito para limpar o 'initialPatient' no controlador
+  // Efeito para sincronizar e limpar o 'initialPatient' no controlador
   useEffect(() => {
-    
     if (initialPatient) {
-      onHistoryViewed();
+      setSelectedPatient(initialPatient);
+      onHistoryViewed(); 
     }
   }, [initialPatient, onHistoryViewed]);
 
-  // Efeito para resetar a seleção se a busca for limpa
+  // Efeito para limpar a seleção se a busca for limpa
   useEffect(() => {
     if (!searchTermPatient) {
       setSelectedPatient(null);
@@ -64,12 +62,16 @@ export function PatientHistoryView({
       .sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate));
   }, [selectedPatient, records]);
 
-  // --- Renderização (JSX copiado do 'case: records') ---
+  // --- Renderização ---
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-8rem)] animate-fade-in">
-      {/* Div de busca */}
+    <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-6 h-[calc(100vh-8rem)] animate-fade-in">
+      
+      {/* --- SEÇÃO 1: PAINEL DE BUSCA E SELEÇÃO (1/4 da tela) --- */}
       <div className="lg:col-span-1 bg-white p-4 rounded-lg shadow flex flex-col min-h-0">
-        <h3 className="text-xl font-bold mb-4 text-gray-800">Buscar Paciente</h3>
+        <h3 className="text-xl font-bold mb-4 text-gray-800 flex items-center gap-2 border-b pb-2">
+            <span className="text-blue-500 w-5 h-5">{icons.users}</span>
+            Buscar Paciente
+        </h3>
         <div className="relative mb-4">
           <input
             type="text"
@@ -105,16 +107,16 @@ export function PatientHistoryView({
             )}
           </div>
         </div>
-        <div className="overflow-y-auto pr-2 -mr-2 flex-grow min-h-0">
+        <div className="overflow-y-auto pr-2 -mr-2 flex-grow min-h-0 divide-y divide-gray-100 border border-gray-200 rounded-lg">
           {filteredPatientsForSearch.length > 0 ? (
-            filteredPatientsForSearch.map((p, index) => (
+            filteredPatientsForSearch.map((p) => (
               <div
                 key={p.id}
-                className={`p-3 rounded-lg cursor-pointer border ${
+                className={`p-3 cursor-pointer transition-colors ${
                   selectedPatient?.id === p.id
-                    ? 'bg-blue-100 border-blue-300'
-                    : 'hover:bg-gray-100 border-transparent hover:border-gray-200'
-                } ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
+                    ? 'bg-blue-50 border-blue-300 shadow-sm'
+                    : 'hover:bg-gray-100'
+                }`}
                 onClick={() => setSelectedPatient(p)}
                 role="button"
                 tabIndex={0}
@@ -126,7 +128,7 @@ export function PatientHistoryView({
                   {p.name}
                 </p>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  {p.cpf || p.susCard || 'Sem documento'}
+                  <span className="font-medium text-gray-600">ID:</span> {p.cpf || p.susCard || 'Não especificado'}
                 </p>
               </div>
             ))
@@ -137,21 +139,41 @@ export function PatientHistoryView({
           )}
         </div>
       </div>
-      {/* Div da tabela de histórico */}
-      <div className="lg:col-span-2 bg-white p-4 md:p-6 rounded-lg shadow flex flex-col min-h-0">
+      
+      {/* --- SEÇÃO 2: DETALHES E HISTÓRICO (3/4 da tela) --- */}
+      <div className="lg:col-span-2 xl:col-span-3 bg-white p-4 md:p-6 rounded-lg shadow flex flex-col min-h-0">
+        
         {selectedPatient ? (
           <>
-            <h3 className="text-lg md:text-xl font-bold mb-4 text-gray-800 text-left">
-              Histórico:{' '}
-              <span className="text-blue-600">{selectedPatient.name}</span>
-            </h3>
-            <div className="flex-grow min-h-0 overflow-y-auto -mx-4 md:-mx-6 px-4 md:px-6">
-              {/* Passamos o getMedicationName para a tabela */}
-              <PatientRecordsTable
-                records={selectedPatientRecords}
-                medications={medications}
-                getMedicationName={getMedicationName} 
-              />
+            {/* NOVO: Cartão de Informações Rápidas do Paciente */}
+            <div className="mb-4 p-4 border border-blue-200 bg-blue-50 rounded-lg shadow-sm">
+                <h3 className="text-lg md:text-xl font-bold text-gray-800 mb-2">
+                    Histórico de: <span className="text-blue-700">{selectedPatient.name}</span>
+                </h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <p className="text-xs font-semibold text-blue-800 uppercase">CPF</p>
+                        <p className="font-medium text-gray-800">{selectedPatient.cpf || 'N/A'}</p>
+                    </div>
+                    <div>
+                        <p className="text-xs font-semibold text-blue-800 uppercase">Cartão SUS</p>
+                        <p className="font-medium text-gray-800">{selectedPatient.susCard || 'N/A'}</p>
+                    </div>
+                </div>
+            </div>
+
+            <h4 className="text-lg font-semibold text-gray-700 mb-3 border-b pb-2">Registros de Entrada/Entrega ({selectedPatientRecords.length})</h4>
+            
+            {/* Tabela de Histórico */}
+            <div className="flex-grow min-h-0 overflow-y-auto -mx-4 md:-mx-6 px-4 md:px-6 border border-gray-200 rounded-lg">
+                <PatientRecordsTable
+                    records={selectedPatientRecords}
+                    medications={medications}
+                    getMedicationName={getMedicationName} 
+                    // Nota: Se PatientRecordsTable precisar de modificação visual,
+                    // ela deve ser feita no arquivo do componente PatientRecordsTable
+                    // para manter a modularidade.
+                />
             </div>
           </>
         ) : (
@@ -159,7 +181,7 @@ export function PatientHistoryView({
             <div className="mb-4 text-gray-300 w-16 h-16">{icons.clipboard}</div>
             <h2 className="text-xl font-semibold">Selecione um Paciente</h2>
             <p className="text-sm">
-              Escolha um paciente na lista para ver seu histórico.
+              Escolha um paciente na lista ao lado para ver seu histórico.
             </p>
           </div>
         )}

@@ -6,7 +6,6 @@ import { StatusBadge } from '../../common/StatusBadge';
 import { icons } from '../../../utils/icons';
 import useDebounce from '../../../hooks/useDebounce';
 
-// Recebemos as props do "Controlador"
 export function GeneralReportView({
   user,
   records = [],
@@ -14,14 +13,13 @@ export function GeneralReportView({
   addToast,
   getPatientNameById,
   getMedicationName,
-  initialFilterStatus, // O filtro de status vindo do "Controlador"
-  onReportViewed, // Callback para limpar o filtro no "Controlador"
+  initialFilterStatus, 
+  onReportViewed, 
 }) {
   
   // --- Estados (Movidos para cá) ---
   const [filterPeriod, setFilterPeriod] = useState('all');
   
-  // O estado do filtro de status é inicializado com a prop
   const [filterStatus, setFilterStatus] = useState(initialFilterStatus || 'all');
   
   const [reportSearchTerm, setReportSearchTerm] = useState('');
@@ -30,11 +28,11 @@ export function GeneralReportView({
   const debouncedReportSearchTerm = useDebounce(reportSearchTerm, 300);
   const isSearchingReport = reportSearchTerm !== debouncedReportSearchTerm;
 
-  // Efeito para limpar o 'initialFilterStatus' no controlador
+  // Efeito para sincronizar e limpar o 'initialFilterStatus' no controlador
   useEffect(() => {
-    // Se recebemos um filtro, avisamos o pai que "já vimos"
-    if (initialFilterStatus !== 'all') {
-      onReportViewed();
+    if (initialFilterStatus && initialFilterStatus !== 'all') {
+      setFilterStatus(initialFilterStatus);
+      onReportViewed(); 
     }
   }, [initialFilterStatus, onReportViewed]);
 
@@ -228,7 +226,7 @@ export function GeneralReportView({
     }
   };
 
-  // --- Renderização (JSX copiado do 'case: all_history') ---
+  // --- Renderização ---
   return (
     <div className="bg-white rounded-lg shadow p-4 md:p-6 animate-fade-in flex flex-col h-[calc(100vh-8rem)]">
       <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-3 border-b pb-4">
@@ -241,7 +239,8 @@ export function GeneralReportView({
             !Array.isArray(filteredRecordsForReport) ||
             filteredRecordsForReport.length === 0
           }
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed w-full md:w-auto"
+          // Padronizado cursor-pointer e hover
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors w-full md:w-auto cursor-pointer"
           title="Abrir PDF em nova aba para imprimir ou salvar"
         >
           <span className="w-4 h-4">{icons.download}</span> Exportar para
@@ -324,7 +323,6 @@ export function GeneralReportView({
           >
             Status
           </label>
-          {/* O value deste select agora usa o estado interno 'filterStatus' */}
           <select
             id="report-status-all"
             value={filterStatus}
@@ -406,7 +404,7 @@ export function GeneralReportView({
                 }
 
                 return (
-                  <tr key={record.id} className="hover:bg-gray-50">
+                  <tr key={record.id} className="hover:bg-gray-50 transition-colors">
                     <td
                       className={`py-3 px-4 font-medium text-gray-900 ${
                         isHighlighted ? 'bg-yellow-100' : ''
@@ -487,7 +485,8 @@ export function GeneralReportView({
               <button
                 onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
                 disabled={currentPage === 1}
-                className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                // Classes de interação padronizadas
+                className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
               >
                 Anterior
               </button>
@@ -499,7 +498,8 @@ export function GeneralReportView({
                   setCurrentPage((p) => Math.min(p + 1, totalPages))
                 }
                 disabled={currentPage === totalPages || totalPages === 0}
-                className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                // Classes de interação padronizadas
+                className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
               >
                 Próxima
               </button>

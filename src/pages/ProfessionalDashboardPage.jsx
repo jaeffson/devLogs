@@ -250,7 +250,8 @@ export default function ProfessionalDashboardPage({
 
   const currentRecords = useMemo(() => {
     const indexOfLastItem = currentPage * itemsPerPage;
-    const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+    // CORREÇÃO APLICADA: Usando indexOfLastItem
+    const indexOfFirstItem = indexOfLastItem - itemsPerPage; 
     return filteredRecords.slice(indexOfFirstItem, indexOfLastItem);
   }, [filteredRecords, currentPage, itemsPerPage]);
 
@@ -503,14 +504,14 @@ export default function ProfessionalDashboardPage({
                       setStatusFilter('Pendente'); // Pré-filtra o histórico
                       setCurrentView('historico');
                     }}
-                    className="text-sm text-blue-600 hover:underline font-medium mt-1"
+                    className="text-sm text-blue-600 hover:underline font-medium mt-1 cursor-pointer transition-colors"
                   >
                     Ver registros pendentes
                   </button>
                 </div>
                 <button
                   onClick={() => setIsOverdueAlertVisible(false)}
-                  className="p-1 text-red-600 hover:bg-red-200 rounded-full"
+                  className="p-1 text-red-600 hover:bg-red-200 rounded-full cursor-pointer transition-colors"
                   title="Dispensar"
                 >
                   <svg
@@ -534,7 +535,8 @@ export default function ProfessionalDashboardPage({
             {/* Grid alterado para 4 colunas em telas grandes */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
               {/* Card Pendentes (Estilizado) */}
-              <div className="bg-white p-4 md:p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow border-l-4 border-yellow-500">
+              <div className="bg-white p-4 md:p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow border-l-4 border-yellow-500 cursor-pointer"
+                   onClick={() => setCurrentView('historico')}>
                 <h3 className="text-lg font-semibold text-yellow-800">
                   Entradas Pendentes
                 </h3>
@@ -542,14 +544,15 @@ export default function ProfessionalDashboardPage({
                   {pendingRecords.length}
                 </p>
                 <button
-                  onClick={() => setCurrentView('historico')}
-                  className="text-sm text-blue-600 hover:underline mt-2"
+                  onClick={(e) => { e.stopPropagation(); setCurrentView('historico'); }}
+                  className="text-sm text-blue-600 hover:underline mt-2 transition-colors"
                 >
                   Ver Entradas
                 </button>
               </div>
               {/* Card Pacientes (Estilizado) */}
-              <div className="bg-white p-4 md:p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow border-l-4 border-blue-500">
+              <div className="bg-white p-4 md:p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow border-l-4 border-blue-500 cursor-pointer"
+                   onClick={() => setCurrentView('patients')}>
                 <h3 className="text-lg font-semibold text-blue-800">
                   Total de Pacientes
                 </h3>
@@ -557,14 +560,15 @@ export default function ProfessionalDashboardPage({
                   {patients.length}
                 </p>
                 <button
-                  onClick={() => setCurrentView('patients')}
-                  className="text-sm text-blue-600 hover:underline mt-2"
+                  onClick={(e) => { e.stopPropagation(); setCurrentView('patients'); }}
+                  className="text-sm text-blue-600 hover:underline mt-2 transition-colors"
                 >
                   Gerenciar Pacientes
                 </button>
               </div>
               {/* Card Entregas (NOVO) */}
-              <div className="bg-white p-4 md:p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow border-l-4 border-green-500">
+              <div className="bg-white p-4 md:p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow border-l-4 border-green-500 cursor-pointer"
+                   onClick={() => setCurrentView('deliveries')}>
                 <h3 className="text-lg font-semibold text-green-800">
                   Entregas da Semana
                 </h3>
@@ -572,8 +576,8 @@ export default function ProfessionalDashboardPage({
                   {recentDeliveries.length}
                 </p>
                 <button
-                  onClick={() => setCurrentView('deliveries')}
-                  className="text-sm text-blue-600 hover:underline mt-2"
+                  onClick={(e) => { e.stopPropagation(); setCurrentView('deliveries'); }}
+                  className="text-sm text-blue-600 hover:underline mt-2 transition-colors"
                 >
                   Ver Entregas
                 </button>
@@ -593,7 +597,7 @@ export default function ProfessionalDashboardPage({
                   <button
                     type="button"
                     onClick={() => setIsDashQuickOpen((prev) => !prev)} // (NOVO)
-                    className="w-full p-2 pl-3 pr-10 border rounded-lg text-sm bg-white text-left flex justify-between items-center"
+                    className="w-full p-2 pl-3 pr-10 border rounded-lg text-sm bg-white text-left flex justify-between items-center cursor-pointer hover:border-blue-500 transition-colors"
                   >
                     <span
                       className={
@@ -623,7 +627,7 @@ export default function ProfessionalDashboardPage({
 
                       <div className="overflow-y-auto">
                         <div
-                          className="p-2 text-sm text-gray-500 hover:bg-blue-100 cursor-pointer"
+                          className="p-2 text-sm text-gray-500 hover:bg-blue-100 cursor-pointer transition-colors"
                           onClick={() => {
                             setDashQuickPatientId(''); // (NOVO)
                             setDashQuickPatientName('Selecione um paciente...'); // (NOVO)
@@ -638,7 +642,7 @@ export default function ProfessionalDashboardPage({
                           dashQuickFilteredPatients.map((p) => ( // (NOVO)
                             <div
                               key={p.id}
-                              className="p-2 text-sm hover:bg-blue-100 cursor-pointer"
+                              className="p-2 text-sm hover:bg-blue-100 cursor-pointer transition-colors"
                               onClick={() => {
                                 setDashQuickPatientId(String(p.id)); // (NOVO)
                                 setDashQuickPatientName(p.name); // (NOVO)
@@ -663,7 +667,7 @@ export default function ProfessionalDashboardPage({
                 <button
                   onClick={openDashQuickAddModal} // (NOVO)
                   disabled={!dashQuickPatientId} // (NOVO)
-                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 text-sm font-medium"
+                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 text-sm font-medium cursor-pointer transition-colors"
                 >
                   <span className="inline-block mr-1">+</span> Adicionar
                   Registro
@@ -699,7 +703,7 @@ export default function ProfessionalDashboardPage({
                   setEditingPatient(null);
                   setIsPatientModalOpen(true);
                 }}
-                className="w-full flex items-center justify-center gap-2 mb-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                className="w-full flex items-center justify-center gap-2 mb-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm cursor-pointer transition-colors"
               >
                 <span className="w-4 h-4">{icons.plus}</span> Novo Paciente
               </button>
@@ -721,7 +725,7 @@ export default function ProfessionalDashboardPage({
                         setEditingPatient(null);
                         setIsPatientModalOpen(true);
                       }}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium cursor-pointer transition-colors"
                     >
                       Cadastrar primeiro paciente
                     </button>
@@ -746,7 +750,7 @@ export default function ProfessionalDashboardPage({
                   filteredPatients.map((patient) => (
                     <div
                       key={patient.id}
-                      className={`p-3 rounded-lg cursor-pointer mb-2 border ${
+                      className={`p-3 rounded-lg cursor-pointer mb-2 border transition-colors ${
                         selectedPatient?.id === patient.id
                           ? 'bg-blue-100 border-blue-400'
                           : 'hover:bg-blue-50 border-gray-200'
@@ -770,7 +774,7 @@ export default function ProfessionalDashboardPage({
                           <button
                             onClick={(e) => handleQuickAddRecord(e, patient)}
                             title="Novo Registro Rápido"
-                            className="text-gray-400 hover:text-blue-600 p-0.5"
+                            className="text-gray-400 hover:text-blue-600 p-0.5 cursor-pointer transition-colors"
                           >
                             <span className="w-4 h-4 block">{icons.plus}</span>
                           </button>
@@ -809,7 +813,9 @@ export default function ProfessionalDashboardPage({
                         </p>
                       </div>
                       <div className="mt-3 text-sm">
-                        <strong className="text-gray-800">Observações:</strong>
+                        <strong className="text-gray-800">
+                          Observações:
+                        </strong>
                         <p className="text-gray-600 italic">
                           {selectedPatient?.observations || 'Nenhuma'}
                         </p>
@@ -829,7 +835,7 @@ export default function ProfessionalDashboardPage({
                           setEditingPatient(selectedPatient);
                           setIsPatientModalOpen(true);
                         }}
-                        className="p-2 text-gray-600 hover:text-blue-600 hover:bg-gray-100 rounded-md"
+                        className="p-2 text-gray-600 hover:text-blue-600 hover:bg-gray-100 rounded-md cursor-pointer transition-colors"
                         title="Editar Paciente"
                       >
                         <span className="w-4 h-4 block">{icons.edit}</span>
@@ -838,12 +844,14 @@ export default function ProfessionalDashboardPage({
                         onClick={() =>
                           setConfirmation({
                             isOpen: true,
-                            message: `Excluir ${selectedPatient?.name}?`,
+                            // --- ALTERAÇÃO AQUI: Nova mensagem de alerta ---
+                            message: `Tem certeza? Excluir ${selectedPatient?.name} é uma ação PERMANENTE e não pode ser desfeita.`,
+                            // --- FIM DA ALTERAÇÃO ---
                             onConfirm: () =>
                               handleDeletePatient(selectedPatient.id),
                           })
                         }
-                        className="p-2 text-gray-600 hover:text-red-600 hover:bg-gray-100 rounded-md"
+                        className="p-2 text-gray-600 hover:text-red-600 hover:bg-gray-100 rounded-md cursor-pointer transition-colors"
                         title="Excluir Paciente"
                       >
                         <span className="w-4 h-4 block">{icons.trash}</span>
@@ -859,7 +867,7 @@ export default function ProfessionalDashboardPage({
                         setEditingRecord(null);
                         setIsRecordModalOpen(true);
                       }}
-                      className="flex items-center gap-1.5 px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 text-xs font-medium"
+                      className="flex items-center gap-1.5 px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 text-xs font-medium cursor-pointer transition-colors"
                     >
                       <span className="w-3 h-3">{icons.plus}</span> Novo
                       Registro
@@ -915,7 +923,7 @@ export default function ProfessionalDashboardPage({
                   <button
                     type="button"
                     onClick={() => setIsQuickSelectOpen((prev) => !prev)}
-                    className="w-full p-2 pl-3 pr-10 border border-gray-300 rounded-lg text-sm bg-white text-left flex justify-between items-center transition-all duration-150 hover:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full p-2 pl-3 pr-10 border border-gray-300 rounded-lg text-sm bg-white text-left flex justify-between items-center transition-all duration-150 hover:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer"
                   >
                     <span
                       className={
@@ -944,7 +952,7 @@ export default function ProfessionalDashboardPage({
 
                       <div className="overflow-y-auto">
                         <div
-                          className="p-2 text-sm text-gray-500 hover:bg-blue-50 cursor-pointer"
+                          className="p-2 text-sm text-gray-500 hover:bg-blue-50 cursor-pointer transition-colors"
                           onClick={() => {
                             setQuickAddPatientId('');
                             setSelectedPatientName('Selecione um paciente...');
@@ -959,7 +967,7 @@ export default function ProfessionalDashboardPage({
                           quickFilteredPatients.map((p) => (
                             <div
                               key={p.id}
-                              className="p-2 text-sm text-gray-800 hover:bg-blue-50 cursor-pointer"
+                              className="p-2 text-sm text-gray-800 hover:bg-blue-50 cursor-pointer transition-colors"
                               onClick={() => {
                                 setQuickAddPatientId(String(p.id));
                                 setSelectedPatientName(p.name);
@@ -983,7 +991,7 @@ export default function ProfessionalDashboardPage({
                 <button
                   onClick={openQuickAddModal}
                   disabled={!quickAddPatientId}
-                  className="flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 w-full sm:w-auto text-sm font-medium transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  className="flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 w-full sm:w-auto text-sm font-medium transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer"
                 >
                   <span className="w-4 h-4">{icons.plus}</span>
                   <span>Adicionar</span>
@@ -999,7 +1007,7 @@ export default function ProfessionalDashboardPage({
                 <button
                   key={status}
                   onClick={() => setStatusFilter(status)}
-                  className={`px-3 py-1 text-xs rounded-full border ${
+                  className={`px-3 py-1 text-xs rounded-full border cursor-pointer transition-colors ${
                     statusFilter === status
                       ? 'bg-blue-600 text-white font-bold border-blue-600'
                       : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
@@ -1038,14 +1046,14 @@ export default function ProfessionalDashboardPage({
                   {currentRecords.map((record) => (
                     <tr
                       key={record.id}
-                      className="border-b border-gray-200 hover:bg-gray-50"
+                      className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
                     >
                       <td className="py-3 px-3 font-medium">
                         <button
                           onClick={() =>
                             handleViewPatientHistory(record.patientId)
                           }
-                          className="text-blue-600 hover:underline text-left"
+                          className="text-blue-600 hover:underline text-left cursor-pointer transition-colors"
                         >
                           {getPatientNameById(record.patientId)}
                         </button>
@@ -1075,7 +1083,7 @@ export default function ProfessionalDashboardPage({
                             <>
                               <button
                                 onClick={() => setAttendingRecord(record)}
-                                className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 font-medium"
+                                className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 font-medium cursor-pointer transition-colors"
                               >
                                 Atender
                               </button>
@@ -1088,7 +1096,7 @@ export default function ProfessionalDashboardPage({
                                       handleCancelRecordStatus(record.id),
                                   })
                                 }
-                                className="px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 font-medium"
+                                className="px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 font-medium cursor-pointer transition-colors"
                               >
                                 Cancelar
                               </button>
@@ -1107,7 +1115,7 @@ export default function ProfessionalDashboardPage({
                                 setIsRecordModalOpen(true);
                               }
                             }}
-                            className="p-1 text-gray-500 hover:text-blue-600"
+                            className="p-1 text-gray-500 hover:text-blue-600 cursor-pointer transition-colors"
                             title="Editar"
                           >
                             <span className="w-4 h-4 block">{icons.edit}</span>
@@ -1120,7 +1128,7 @@ export default function ProfessionalDashboardPage({
                                 onConfirm: () => handleDeleteRecord(record.id),
                               })
                             }
-                            className="p-1 text-gray-500 hover:text-red-600"
+                            className="p-1 text-gray-500 hover:text-red-600 cursor-pointer transition-colors"
                             title="Excluir"
                           >
                             <span className="w-4 h-4 block">{icons.trash}</span>
@@ -1151,7 +1159,7 @@ export default function ProfessionalDashboardPage({
                   {Math.min(
                     (currentPage - 1) * itemsPerPage + 1,
                     filteredRecords.length
-                  )}
+                  )}{' '}
                   {' a '}
                   {Math.min(currentPage * itemsPerPage, filteredRecords.length)}
                   {' de '}
@@ -1161,7 +1169,7 @@ export default function ProfessionalDashboardPage({
                   <button
                     onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
                     disabled={currentPage === 1}
-                    className="px-3 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors"
                   >
                     Anterior
                   </button>
@@ -1173,7 +1181,7 @@ export default function ProfessionalDashboardPage({
                       setCurrentPage((p) => Math.min(p + 1, totalPages))
                     }
                     disabled={currentPage === totalPages || totalPages === 0}
-                    className="px-3 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors"
                   >
                     Próxima
                   </button>
@@ -1183,7 +1191,7 @@ export default function ProfessionalDashboardPage({
             {/* --- FIM (Paginação) --- */}
           </div>
         );
-        
+
       // ===================================================================
       // (NOVO) VISÃO: ENTREGAS (Com Tabela Detalhada)
       // ===================================================================
@@ -1193,99 +1201,99 @@ export default function ProfessionalDashboardPage({
             <h2 className="text-xl md:text-2xl font-bold mb-4 text-gray-800">
               Entregas Atendidas (Última Semana)
             </h2>
-            
+
             {/* Mensagem se não houver entregas recentes */}
             {recentDeliveries.length === 0 ? (
-                <div className="flex-grow flex items-center justify-center">
-                    <p className="text-center text-gray-500 py-10">
-                        Nenhuma entrega registrada na última semana.
-                    </p>
-                </div>
+              <div className="flex-grow flex items-center justify-center">
+                <p className="text-center text-gray-500 py-10">
+                  Nenhuma entrega registrada na última semana.
+                </p>
+              </div>
             ) : (
-                // Container da Tabela (com scroll)
-                <div className="overflow-x-auto overflow-y-auto flex-grow min-h-0">
-                    <table className="min-w-full bg-white text-sm">
-                        <thead className="bg-gray-50 sticky top-0 border-b border-gray-200">
-                            <tr>
-                                <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Data da Entrega
-                                </th>
-                                <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Paciente
-                                </th>
-                                <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Medicações Entregues
-                                </th>
-                                <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Data da Entrada
-                                </th>
-                                <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Status
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {recentDeliveries.map((record) => (
-                                <tr
-                                key={record.id}
-                                className="border-b border-gray-200 hover:bg-gray-50"
-                                >
-                                {/* Data da Entrega */}
-                                <td className="py-3 px-3 font-medium text-gray-800">
-                                    {/* Adiciona T00:00:00 para evitar problemas de fuso ao formatar só a data */}
-                                    {new Date(record.deliveryDate + 'T00:00:00').toLocaleDateString('pt-BR', {
-                                        day: '2-digit',
-                                        month: '2-digit',
-                                        year: 'numeric',
-                                    })}
-                                </td>
-                                
-                                {/* Paciente (Linkável) */}
-                                <td className="py-3 px-3">
-                                    <button
-                                    onClick={() => handleViewPatientHistory(record.patientId)}
-                                    className="text-blue-600 hover:underline font-medium text-left"
-                                    >
-                                    {getPatientNameById(record.patientId)}
-                                    </button>
-                                </td>
-                                
-                                {/* Medicações */}
-                                <td className="py-3 px-3 text-gray-700">
-                                    {Array.isArray(record.medications)
-                                    ? record.medications
-                                        .map(
-                                            (m) =>
-                                            `${getMedicationName(m.medicationId, medications)} (${m.quantity || 'N/A'})`
-                                        )
-                                        .join(', ')
-                                    : 'N/A'}
-                                </td>
-                                
-                                {/* Data da Entrada (Original) */}
-                                <td className="py-3 px-3 text-gray-700">
-                                    {new Date(record.entryDate).toLocaleString('pt-BR', {
-                                    dateStyle: 'short',
-                                    timeStyle: 'short',
-                                    })}
-                                </td>
-                                
-                                {/* Status */}
-                                <td className="py-3 px-3">
-                                    <StatusBadge status={record.status} />
-                                </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
+              // Container da Tabela (com scroll)
+              <div className="overflow-x-auto overflow-y-auto flex-grow min-h-0">
+                <table className="min-w-full bg-white text-sm">
+                  <thead className="bg-gray-50 sticky top-0 border-b border-gray-200">
+                    <tr>
+                      <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Data da Entrega
+                      </th>
+                      <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Paciente
+                      </th>
+                      <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Medicações Entregues
+                      </th>
+                      <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Data da Entrada
+                      </th>
+                      <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentDeliveries.map((record) => (
+                      <tr
+                        key={record.id}
+                        className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
+                      >
+                        {/* Data da Entrega */}
+                        <td className="py-3 px-3 font-medium text-gray-800">
+                          {/* Adiciona T00:00:00 para evitar problemas de fuso ao formatar só a data */}
+                          {new Date(record.deliveryDate + 'T00:00:00').toLocaleDateString('pt-BR', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                          })}
+                        </td>
+
+                        {/* Paciente (Linkável) */}
+                        <td className="py-3 px-3">
+                          <button
+                            onClick={() => handleViewPatientHistory(record.patientId)}
+                            className="text-blue-600 hover:underline font-medium text-left cursor-pointer transition-colors"
+                          >
+                            {getPatientNameById(record.patientId)}
+                          </button>
+                        </td>
+
+                        {/* Medicações */}
+                        <td className="py-3 px-3 text-gray-700">
+                          {Array.isArray(record.medications)
+                            ? record.medications
+                                .map(
+                                  (m) =>
+                                    `${getMedicationName(m.medicationId, medications)} (${m.quantity || 'N/A'})`
+                                )
+                                .join(', ')
+                            : 'N/A'}
+                        </td>
+
+                        {/* Data da Entrada (Original) */}
+                        <td className="py-3 px-3 text-gray-700">
+                          {new Date(record.entryDate).toLocaleString('pt-BR', {
+                            dateStyle: 'short',
+                            timeStyle: 'short',
+                          })}
+                        </td>
+
+                        {/* Status */}
+                        <td className="py-3 px-3">
+                          <StatusBadge status={record.status} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         );
       // ===================================================================
       // FIM DA MODIFICAÇÃO
       // ===================================================================
-        
+
       default:
         return (
           <div className="text-center p-10">

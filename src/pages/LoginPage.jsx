@@ -111,7 +111,7 @@ export default function LoginPage({ onLogin, setUsers, addToast, addLog, MOCK_US
             {BrandIcon}
           </div>
           {/* Use o nome do seu sistema */}
-          <h1 className="text-3xl font-bold mb-3 text-center">SysMed</h1>
+          <h1 className="text-3xl font-bold mb-3 text-center">MedLogs</h1>
           <p className="text-center text-blue-100">Gestão Inteligente de Pacientes e Medicações.</p>
           {/* Você pode adicionar mais informações aqui se desejar */}
         </div>
