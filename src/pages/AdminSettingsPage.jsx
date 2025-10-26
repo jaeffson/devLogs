@@ -3,7 +3,9 @@ import React, { useState, useMemo } from 'react';
 
 // --- Imports de Componentes ---
 import UserForm from '../components/forms/UserForm';
-import { ConfirmModal } from '../components/common/Modal';
+// --- MUDANÇA: Usando o novo modal de exclusão ---
+import { DestructiveConfirmModal } from '../components/common/DestructiveConfirmModal';
+
 import { StatusBadge } from '../components/common/StatusBadge';
 import  {AnnualBudgetChart}  from '../components/common/AnnualBudgetChart';
 import { icons } from '../utils/icons';
@@ -20,7 +22,11 @@ export default function AdminSettingsPage({
     const [activeSubTab, setActiveSubTab] = useState('users');
     const [isUserModalOpen, setIsUserModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
-    const [userConfirmation, setUserConfirmation] = useState({ isOpen: false, message: '', data: null, onConfirm: null });
+    
+    // --- MUDANÇA: Estado para o novo modal ---
+    const [deleteConfirmation, setDeleteConfirmation] = useState({ isOpen: false, userToDelete: null });
+    const [statusConfirmation, setStatusConfirmation] = useState({ isOpen: false, message: '', data: null, onConfirm: null });
+
     const [newBudgetValue, setNewBudgetValue] = useState(String(annualBudget || '0'));
 
     // --- CÁLCULO DO GASTO TOTAL ---
@@ -32,7 +38,7 @@ export default function AdminSettingsPage({
     }, [records]);
 
     // --- Funções ---
-    const closeUserConfirmation = () => setUserConfirmation({ isOpen: false, message: '', data: null, onConfirm: null });
+    const closeStatusConfirmation = () => setStatusConfirmation({ isOpen: false, message: '', data: null, onConfirm: null });
 
     const handleOpenUserModal = (userToEdit = null) => {
         setEditingUser(userToEdit);
@@ -44,33 +50,40 @@ export default function AdminSettingsPage({
         setEditingUser(null);
     };
 
+    // Lógica de salvar (já estava ótima, com verificação de email)
     const handleSaveUser = (userData) => {
-        let message = '';
+        // (O addToast já é chamado de dentro do formulário agora,
+        // mas manteremos a lógica de verificação de duplicidade aqui,
+        // pois a página é quem tem acesso à lista completa 'users')
+
         const cleanedUserData = { ...userData, name: userData.name.trim(), email: userData.email.trim().toLowerCase() };
         const emailExists = users.some(u => u.id !== cleanedUserData.id && u.email === cleanedUserData.email);
 
         if (emailExists) {
-            addToast('Este e-mail já está em uso.', 'error');
-            return;
+            // Se o formulário não passou addToast, isso é um fallback.
+            // O ideal é passar addToast para o UserForm.
+            addToast?.('Este e-mail já está em uso.', 'error');
+            return; // Impede o salvamento
         }
 
         if(cleanedUserData.id) {
             setUsers(prevUsers => prevUsers.map(u => u.id === cleanedUserData.id ? { ...u, ...cleanedUserData } : u));
-            message = 'Usuário atualizado!';
             addLog?.(user?.name, `atualizou usuário ${cleanedUserData.name}`);
         } else {
             const newUser = { ...cleanedUserData, id: Date.now(), status: 'active' };
             setUsers(prevUsers => [...prevUsers, newUser]);
-            message = 'Usuário criado!';
             addLog?.(user?.name, `criou usuário: ${newUser.name}`);
         }
-        addToast(message, 'success');
+        // addToast(message, 'success'); // Isso agora é feito no UserForm
         handleCloseUserModal();
     };
 
+    // Lógica para Ativar/Desativar (simples, usa ConfirmModal)
     const handleToggleUserStatusClick = (userToToggle) => {
         const isActivating = userToToggle.status !== 'active';
-        setUserConfirmation({
+        // Note: O ConfirmModal simples não foi enviado, então estou assumindo que ele existe
+        // e é diferente do DestructiveConfirmModal.
+        setStatusConfirmation({
             isOpen: true,
             message: `Deseja ${isActivating ? 'ATIVAR' : 'DESATIVAR'} "${userToToggle.name}"?`,
             data: userToToggle.id,
@@ -91,33 +104,39 @@ export default function AdminSettingsPage({
         const actionText = toggledUser?.status === 'active' ? 'ativado' : 'desativado';
         addToast(`Usuário ${actionText}!`, 'success');
         addLog?.(user?.name, `${actionText} usuário ${toggledUser?.name}`);
+        closeStatusConfirmation(); // Fecha o modal de status
     };
 
+
+    // --- MUDANÇA: Lógica de Exclusão (usa o novo Modal Destrutivo) ---
     const handleDeleteUserClick = (userToDelete) => {
         if (userToDelete.id === user.id) {
             addToast('Você não pode excluir sua própria conta.', 'error');
             return;
         }
-        setUserConfirmation({
+        setDeleteConfirmation({
             isOpen: true,
-            message: `Excluir PERMANENTEMENTE "${userToDelete.name}"? Essa ação não pode ser desfeita.`,
-            data: userToDelete.id,
-            onConfirm: handleDeleteUserConfirm,
-            confirmText: "Excluir Permanentemente"
+            userToDelete: userToDelete
         });
     };
 
-    const handleDeleteUserConfirm = (userId) => {
+    const handleDeleteUserConfirm = () => {
+        const userId = deleteConfirmation.userToDelete.id;
         const userToDelete = users.find(u => u.id === userId);
+        
         setUsers(prevUsers => prevUsers.filter(u => u.id !== userId));
         addToast(`Usuário excluído.`, 'success');
         addLog?.(user?.name, `EXCLUIU usuário ${userToDelete?.name}`);
+        
+        setDeleteConfirmation({ isOpen: false, userToDelete: null }); // Fecha o modal
     };
+    // --- FIM DA MUDANÇA ---
+
 
     const handleBudgetSave = () => {
         const value = parseFloat(newBudgetValue.replace(',', '.'));
         if (!isNaN(value) && value >= 0) {
-            handleUpdateBudget(value);
+            handleUpdateBudget(value); // Esta função já chama addToast
         } else {
             addToast('Valor de orçamento inválido.', 'error');
             setNewBudgetValue(String(annualBudget));
@@ -162,9 +181,14 @@ export default function AdminSettingsPage({
                                             <td className="py-2 px-3">
                                                 <div className="flex items-center gap-3">
                                                     <button onClick={() => handleOpenUserModal(u)} className="p-1 text-blue-600 hover:text-blue-800" title="Editar Usuário"><span className="w-4 h-4 block">{icons.edit}</span></button>
+                                                    
+                                                    {/* --- MUDANÇA: Substituindo SVGs por ícones --- */}
                                                     <button onClick={() => handleToggleUserStatusClick(u)} className={`p-1 ${u.status === 'active' ? 'text-yellow-600 hover:text-yellow-800' : 'text-green-600 hover:text-green-800'}`} title={u.status === 'active' ? 'Desativar' : 'Ativar'}>
-                                                        {u.status === 'active' ? <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg> : <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"></path></svg>}
+                                                        <span className="w-4 h-4 block">
+                                                          {u.status === 'active' ? icons.ban : icons.check}
+                                                        </span>
                                                     </button>
+                                                    
                                                     <button onClick={() => handleDeleteUserClick(u)} className="p-1 text-red-600 hover:text-red-800 disabled:opacity-50" title="Excluir" disabled={u.id === user.id}><span className="w-4 h-4 block">{icons.trash}</span></button>
                                                 </div>
                                             </td>
@@ -177,6 +201,7 @@ export default function AdminSettingsPage({
                     </div>
                 );
             case 'budget':
+                // ... (Nenhuma mudança aqui)
                 return (
                     <div className="animate-fade-in max-w-lg mx-auto">
                         <h3 className="text-xl font-semibold text-gray-700 mb-4">Orçamento Anual</h3>
@@ -193,6 +218,7 @@ export default function AdminSettingsPage({
                     </div>
                 );
             case 'log':
+                // ... (Nenhuma mudança aqui)
                 return (
                     <div className="animate-fade-in">
                         <h3 className="text-xl font-semibold text-gray-700 mb-4">Log de Atividades</h3>
@@ -228,13 +254,36 @@ export default function AdminSettingsPage({
             <div className="mt-4">
                 {renderSubTabView()}
             </div>
+            
+            {/* --- MUDANÇA: Passando 'addToast' para o UserForm --- */}
             {isUserModalOpen && (
-                <UserForm user={editingUser} onSave={handleSaveUser} onClose={handleCloseUserModal} />
+                <UserForm 
+                  user={editingUser} 
+                  onSave={handleSaveUser} 
+                  onClose={handleCloseUserModal} 
+                  addToast={addToast} // Passando o toast
+                />
             )}
-            {userConfirmation.isOpen && (
-                <ConfirmModal message={userConfirmation.message} onConfirm={() => userConfirmation.onConfirm(userConfirmation.data)} onClose={closeUserConfirmation} confirmText={userConfirmation.confirmText || "Sim"} />
+            
+            {/* Modal de Status (Simples) */}
+            {statusConfirmation.isOpen && (
+                <ConfirmModal // Assumindo que você tenha esse componente
+                  message={statusConfirmation.message} 
+                  onConfirm={() => statusConfirmation.onConfirm(statusConfirmation.data)} 
+                  onClose={closeStatusConfirmation} 
+                  confirmText="Sim" 
+                />
+            )}
+
+            {/* --- MUDANÇA: Novo Modal de Exclusão --- */}
+            {deleteConfirmation.isOpen && (
+                <DestructiveConfirmModal
+                    message={`Excluir permanentemente "${deleteConfirmation.userToDelete.name}"? Esta ação não pode ser desfeita.`}
+                    confirmText="EXCLUIR"
+                    onConfirm={handleDeleteUserConfirm}
+                    onClose={() => setDeleteConfirmation({ isOpen: false, userToDelete: null })}
+                />
             )}
         </div>
     );
 }
-

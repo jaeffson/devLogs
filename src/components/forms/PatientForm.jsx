@@ -1,9 +1,8 @@
 // src/components/forms/PatientForm.jsx
 import React, { useState, useEffect } from 'react';
-// CORREÇÃO: Removendo a extensão .jsx do caminho de importação
 import { Modal } from '../common/Modal'; // Importa Modal da pasta common
 
-// Funções utilitárias (podem ser movidas para utils/helpers.js futuramente, mas ok aqui por enquanto)
+// Funções utilitárias (formatCPF, capitalizeName)
 const formatCPF = (cpf) => {
   if (!cpf) return '';
   const cleaned = String(cpf).replace(/\D/g, '');
@@ -37,7 +36,8 @@ export default function PatientForm({
     patient, // Paciente a ser editado (null se for novo)
     onSave, // Função chamada ao salvar (recebe dados do form)
     onClose, // Função para fechar o modal
-    checkDuplicate // <--- Prop de validação agora será usada
+    checkDuplicate, // Prop de validação
+    addToast // <-- 1. RECEBA A PROP addToast
 }) {
     // --- Estado do Formulário ---
     const [formData, setFormData] = useState({
@@ -46,9 +46,9 @@ export default function PatientForm({
         susCard: '',
         observations: '',
         generalNotes: '',
-        status: 'Ativo', // Status padrão para novos
+        status: 'Ativo', 
     });
-    const [errors, setErrors] = useState({}); // Estado para erros de validação
+    const [errors, setErrors] = useState({}); 
 
     // --- Efeito para Carregar Dados ou Resetar ---
     useEffect(() => {
@@ -100,7 +100,6 @@ export default function PatientForm({
     // --- Manipulador de Submissão ---
     const handleSubmit = (e) => {
         e.preventDefault();
-        // Limpa erros antigos antes de validar novamente
         setErrors({});
 
         const formErrors = validateForm();
@@ -109,30 +108,39 @@ export default function PatientForm({
             return;
         }
 
-        // --- Validação de Duplicidade (AGORA ATIVADA) ---
+        // --- Validação de Duplicidade ---
         if (typeof checkDuplicate === 'function') {
             const cleanCPF = (cpf) => String(cpf || '').replace(/\D/g, '');
             const cleanSus = (sus) => String(sus || '').replace(/\D/g, '');
             const cpfToCheck = cleanCPF(formData.cpf);
             const susToCheck = cleanSus(formData.susCard);
 
-            // Só executa a verificação se CPF ou SUS foi preenchido
             if (cpfToCheck || susToCheck) {
                 const isDuplicate = checkDuplicate({
                     cpf: cpfToCheck,
                     susCard: susToCheck,
-                    currentId: formData.id // Passa o ID atual (undefined se for novo)
+                    currentId: formData.id 
                 });
 
                 if (isDuplicate) {
                     setErrors({ cpf: 'Já existe um paciente com este CPF ou Cartão SUS.' });
-                    return; // PARA A EXECUÇÃO AQUI se for duplicado
+                    return; 
                 }
             }
         }
         // --- FIM DA VALIDAÇÃO ---
 
         onSave(formData);
+        
+        // --- 2. ADICIONE O TOAST ---
+        if (addToast) {
+            addToast(
+                patient ? 'Paciente atualizado com sucesso!' : 'Paciente cadastrado com sucesso!',
+                'success'
+            );
+        }
+        // --- 3. FECHE O MODAL ---
+        onClose();
     };
 
     // --- Renderização do Componente ---
@@ -185,7 +193,6 @@ export default function PatientForm({
                         />
                     </div>
                 </div>
-                {/* Exibe o erro de CPF/SUS aqui */}
                 {errors.cpf && <p className="text-red-600 text-xs mt-1 mb-3">{errors.cpf}</p>}
 
 
@@ -244,4 +251,3 @@ export default function PatientForm({
         </Modal>
     );
 }
-

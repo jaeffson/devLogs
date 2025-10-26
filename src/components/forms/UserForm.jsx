@@ -1,33 +1,34 @@
+// src/components/forms/UserForm.jsx
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../common/Modal'; // Importa Modal
 
-// !! IMPORTANTE: Remova a dependência de `users` para validação de email.
-// Isso deve ser feito no backend ou via prop checkDuplicateEmail.
-
-// Exportação Default
-export default function UserForm({ user, onSave, onClose /* Adicione prop checkDuplicateEmail */ }) {
+export default function UserForm({ 
+    user, 
+    onSave, 
+    onClose, 
+    addToast // <-- 1. RECEBA A PROP addToast
+}) {
   const [formData, setFormData] = useState({
-    name: '', email: '', role: 'profissional', password: '', status: 'active', // Status padrão
+    name: '', email: '', role: 'profissional', password: '', status: 'active',
   });
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
-    // Carrega dados do usuário ou reseta o formulário
     setFormData({
       name: user?.name || '',
       email: user?.email || '',
       role: user?.role || 'profissional',
-      password: '', // Senha sempre vazia ao abrir (segurança)
+      password: '', 
       status: user?.status || 'active',
-      id: user?.id, // Mantém ID se editando
+      id: user?.id,
     });
-    setErrors({}); // Limpa erros
+    setErrors({});
   }, [user]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    if (errors[name]) setErrors(prev => ({ ...prev, [name]: null })); // Limpa erro ao digitar
+    if (errors[name]) setErrors(prev => ({ ...prev, [name]: null }));
   };
 
   const validateForm = () => {
@@ -38,23 +39,12 @@ export default function UserForm({ user, onSave, onClose /* Adicione prop checkD
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = 'Formato de e-mail inválido.';
     }
-    // Senha obrigatória apenas para *novos* usuários E se o campo estiver vazio
     if (!user && !formData.password.trim()) {
         newErrors.password = 'A senha é obrigatória para novos usuários.';
     }
-    // Senha opcional ao editar, mas se preenchida, pode ter validação de força
-    // if (user && formData.password && formData.password.length < 6) {
-    //     newErrors.password = 'A senha deve ter pelo menos 6 caracteres.';
-    // }
-
-    // --- Validação de Duplicidade de Email (COMENTADA) ---
-    /*
-    // Exemplo usando prop:
-    // const emailExists = checkDuplicateEmail({ email: formData.email.trim().toLowerCase(), currentId: user?.id });
-    // if (emailExists) {
-    //     newErrors.email = 'Este e-mail já está em uso.';
-    // }
-    */
+    
+    // --- Validação de Duplicidade (COMENTADA - como no original) ---
+    // ...
 
     return newErrors;
   }
@@ -66,13 +56,21 @@ export default function UserForm({ user, onSave, onClose /* Adicione prop checkD
       setErrors(formErrors);
       return;
     }
-    // Remove o campo password do objeto se estiver vazio (para não sobrescrever senha ao editar sem querer)
     const dataToSave = { ...formData };
     if (!dataToSave.password) {
       delete dataToSave.password;
     }
     onSave(dataToSave);
-    onClose();
+    
+    // --- 2. ADICIONE O TOAST ---
+    if (addToast) {
+        addToast(
+            user ? 'Usuário atualizado com sucesso!' : 'Usuário cadastrado com sucesso!',
+            'success'
+        );
+    }
+    
+    onClose(); 
   };
 
   return (
@@ -102,7 +100,7 @@ export default function UserForm({ user, onSave, onClose /* Adicione prop checkD
              onChange={handleChange}
              className={`w-full p-2 border rounded ${errors.password ? 'border-red-500' : 'border-gray-300'}`}
              placeholder={user ? 'Deixe em branco para não alterar' : ''}
-             required={!user} // Obrigatório apenas se for novo usuário
+             required={!user} 
            />
            {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password}</p>}
          </div>

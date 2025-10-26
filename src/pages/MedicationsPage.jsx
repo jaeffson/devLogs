@@ -3,7 +3,8 @@ import React, { useState, useMemo } from 'react';
 
 // --- Imports de Componentes ---
 import MedicationForm from '../components/forms/MedicationForm';
-import { ConfirmModal } from '../components/common/Modal';
+// --- MUDANÇA: Usando o novo modal de exclusão ---
+import { DestructiveConfirmModal } from '../components/common/DestructiveConfirmModal';
 import { icons } from '../utils/icons';
 
 export default function MedicationsPage({
@@ -16,12 +17,11 @@ export default function MedicationsPage({
     // --- Estados Internos ---
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingMedication, setEditingMedication] = useState(null);
-    const [confirmation, setConfirmation] = useState({ isOpen: false, message: '', data: null, onConfirm: null });
+    // --- MUDANÇA: Estado para o novo modal ---
+    const [deleteConfirmation, setDeleteConfirmation] = useState({ isOpen: false, medication: null });
     const [searchTerm, setSearchTerm] = useState('');
 
     // --- Funções ---
-    const closeConfirmation = () => setConfirmation({ isOpen: false, message: '', data: null, onConfirm: null });
-
     const handleOpenModal = (medication = null) => {
         setEditingMedication(medication);
         setIsModalOpen(true);
@@ -32,41 +32,59 @@ export default function MedicationsPage({
         setEditingMedication(null);
     };
 
+    // --- MUDANÇA: Lógica de verificação de duplicados ---
     const handleSaveMedication = (medData) => {
+        const cleanedName = medData.name.trim().toLowerCase();
+        
+        // 1. Verifica duplicidade
+        const isDuplicate = medications.some(
+            m => m.id !== medData.id && m.name.toLowerCase() === cleanedName
+        );
+
+        if (isDuplicate) {
+            addToast('Uma medicação com este nome já existe.', 'error');
+            return; // Impede o salvamento
+        }
+
+        // 2. Continua com o salvamento
         let message = '';
         if(medData.id) {
-            setMedications(prevMeds => prevMeds.map(m => m.id === medData.id ? { ...m, ...medData } : m)
+            setMedications(prevMeds => prevMeds.map(m => m.id === medData.id ? { ...m, ...medData, name: medData.name.trim() } : m)
                                               .sort((a,b) => a.name.localeCompare(b.name)));
             message = 'Medicação atualizada com sucesso!';
             addLog?.(user?.name, `atualizou medicação ${medData.name} (ID: ${medData.id})`);
         } else {
             const newMed = {
-                id: Date.now(), // Usando timestamp como ID temporário
-                name: medData.name,
+                id: Date.now(),
+                name: medData.name.trim(),
                 createdAt: new Date().toISOString().slice(0, 10)
             };
             setMedications(prevMeds => [...prevMeds, newMed].sort((a,b) => a.name.localeCompare(b.name)));
             message = 'Medicação cadastrada com sucesso!';
             addLog?.(user?.name, `cadastrou nova medicação: ${newMed.name}`);
         }
-        addToast(message, 'success');
+        // addToast(message, 'success'); // Isso agora é feito no MedicationForm
     };
 
+    // --- MUDANÇA: Lógica de exclusão ---
     const handleDeleteClick = (medication) => {
-        setConfirmation({
+        setDeleteConfirmation({
             isOpen: true,
-            message: `Tem certeza que deseja excluir a medicação "${medication.name}"?`,
-            data: medication.id,
-            onConfirm: handleDeleteConfirm
+            medication: medication
         });
     };
 
-    const handleDeleteConfirm = (medId) => {
+    const handleDeleteConfirm = () => {
+        const medId = deleteConfirmation.medication.id;
         const medToDelete = medications.find(m => m.id === medId);
+        
         setMedications(prevMeds => prevMeds.filter(m => m.id !== medId));
         addToast('Medicação excluída com sucesso!', 'success');
         addLog?.(user?.name, `excluiu medicação ${medToDelete?.name || ''} (ID: ${medId})`);
+        
+        setDeleteConfirmation({ isOpen: false, medication: null }); // Fecha o modal
     };
+    // --- FIM DA MUDANÇA ---
 
     const formatDate = (isoDate) => {
         if (!isoDate) return '---';
@@ -114,27 +132,44 @@ export default function MedicationsPage({
                     aria-label="Buscar medicação"
                 />
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
-                    {icons.search}
+                    <span className="w-5 h-5">{icons.search}</span>
                 </div>
             </div>
 
-            {/* Tabela de Medicações */}
+            {/* --- MUDANÇA: Lógica de "Empty State" --- */}
             <div className="overflow-x-auto max-h-[70vh] overflow-y-auto border rounded-lg">
-                {filteredMedications.length > 0 ? (
-                    <table className="min-w-full bg-white text-sm table-auto"> {/* Mudado para table-auto */}
+                {medications.length === 0 ? (
+                    // 1. Tela Vazia (Nenhuma medicação cadastrada)
+                    <div className="text-center text-gray-500 py-16 px-6">
+                      <div className="mb-4 text-gray-300 w-16 h-16 mx-auto">{icons.pill}</div>
+                      <h3 className="font-semibold text-lg text-gray-700 mb-1">Nenhuma Medicação Cadastrada</h3>
+                      <p className="text-sm mb-4">Comece cadastrando a primeira medicação no sistema.</p>
+                      <button 
+                        onClick={() => handleOpenModal()} 
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium mx-auto"
+                      >
+                        <span className="w-4 h-4">{icons.plus}</span> Cadastrar Medicação
+                      </button>
+                    </div>
+                ) : filteredMedications.length === 0 ? (
+                    // 2. Tela Vazia (Busca não encontrada)
+                    <p className="text-center text-gray-500 py-8 text-base">
+                        Nenhuma medicação encontrada para "<strong>{searchTerm}</strong>".
+                    </p>
+                ) : (
+                    // 3. Tabela de resultados
+                    <table className="min-w-full bg-white text-sm table-auto">
                         <thead className="bg-gray-100 sticky top-0 z-10">
                             <tr>
-                                {/* --- COLUNA DE ID ADICIONADA --- */}
                                 <th className="w-24 text-left py-3 px-4 font-semibold text-gray-700 uppercase tracking-wider">ID</th>
                                 <th className="text-left py-3 px-4 font-semibold text-gray-700 uppercase tracking-wider">Nome da Medicação</th>
-                                <th className="w-36 text-left py-3 px-4 font-semibold text-gray-700 uppercase tracking-wider">Data Cadastro</th> {/* Largura fixa para data */}
-                                <th className="w-28 text-left py-3 px-4 font-semibold text-gray-700 uppercase tracking-wider">Ações</th> {/* Largura fixa para ações */}
+                                <th className="w-36 text-left py-3 px-4 font-semibold text-gray-700 uppercase tracking-wider">Data Cadastro</th>
+                                <th className="w-28 text-left py-3 px-4 font-semibold text-gray-700 uppercase tracking-wider">Ações</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
                             {filteredMedications.map(med => (
                                 <tr key={med.id} className="hover:bg-gray-50 transition-colors duration-150">
-                                    {/* --- CÉLULA DE ID ADICIONADA --- */}
                                     <td className="py-3 px-4 text-gray-500 text-xs font-mono whitespace-nowrap">{med.id}</td>
                                     <td className="py-3 px-4 font-medium text-gray-800 break-words">{med.name}</td>
                                     <td className="py-3 px-4 text-gray-600 whitespace-nowrap">{formatDate(med.createdAt)}</td>
@@ -160,15 +195,10 @@ export default function MedicationsPage({
                             ))}
                         </tbody>
                     </table>
-                ) : (
-                    <p className="text-center text-gray-500 py-8 text-base">
-                        {searchTerm
-                            ? <>Nenhuma medicação encontrada para "<strong>{searchTerm}</strong>".</>
-                            : 'Nenhuma medicação cadastrada.'
-                        }
-                    </p>
                 )}
             </div>
+            {/* --- FIM DA MUDANÇA --- */}
+
 
             {/* Modais */}
             {isModalOpen && (
@@ -176,16 +206,17 @@ export default function MedicationsPage({
                     medication={editingMedication}
                     onSave={handleSaveMedication}
                     onClose={handleCloseModal}
-                    // allMedications={medications} // Descomente se precisar verificar duplicidade no form
+                    addToast={addToast} // Passando o toast
                 />
             )}
-            {confirmation.isOpen && (
-                <ConfirmModal
-                    message={confirmation.message}
-                    onConfirm={() => confirmation.onConfirm(confirmation.data)}
-                    onClose={closeConfirmation}
-                    confirmText="Excluir"
-                    isDestructive
+            
+            {/* --- MUDANÇA: Novo Modal de Exclusão --- */}
+            {deleteConfirmation.isOpen && (
+                <DestructiveConfirmModal
+                    message={`Excluir permanentemente a medicação "${deleteConfirmation.medication.name}"? Esta ação não pode ser desfeita.`}
+                    confirmText="EXCLUIR"
+                    onConfirm={handleDeleteConfirm}
+                    onClose={() => setDeleteConfirmation({ isOpen: false, medication: null })}
                 />
             )}
         </div>

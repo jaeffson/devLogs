@@ -22,10 +22,12 @@ import {
   HiOutlineChevronRight,
   HiOutlineChevronDown,
   HiOutlineBuildingOffice2,
-  
-  // --- ÍCONES QUE FALTAVAM ---
-  HiOutlineUserCircle, // Para o avatar do perfil
-  HiOutlineUser,       // Para o link "Meu Perfil"
+  HiOutlineUserCircle,
+  HiOutlineUser,
+
+  // --- ADICIONE ESTAS DUAS LINHAS ---
+  HiOutlineCheck,
+  HiOutlineNoSymbol 
 
 } from 'react-icons/hi2';
 
@@ -51,8 +53,10 @@ export const icons = {
   chevronRight: <HiOutlineChevronRight />,
   chevronDown: <HiOutlineChevronDown />,
   organization: <HiOutlineBuildingOffice2 />,
-
-  // --- ÍCONES ADICIONADOS ---
   userCircle: <HiOutlineUserCircle />,
   user: <HiOutlineUser />,
+
+  // --- Ícones adicionados para Ativar/Desativar ---
+  check: <HiOutlineCheck />,    // <-- Linha 56 provavelmente
+  ban: <HiOutlineNoSymbol />,
 };

@@ -1,36 +1,160 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+// (NOVO) Importa os ícones de clima
+import {
+  WiDaySunny,
+  WiDayCloudy,
+  WiCloud,
+  WiCloudy,
+  WiRain,
+  WiShowers,
+  WiThunderstorm,
+  WiSnow,
+  WiFog,
+  WiNightClear,
+  WiNightCloudy,
+  WiNightRain,
+  WiNightShowers,
+  WiNightThunderstorm,
+  WiNightFog,
+  WiNightSnow,
+  WiDayRain,
+  WiDayShowers,
+  WiDayThunderstorm,
+  WiDaySnow,
+  WiDayFog,
+} from 'react-icons/wi';
 
 // --- Imports de Componentes e Utils ---
-import { AnnualBudgetChart } from '../components/common/AnnualBudgetChart'; 
-import { formatUserName } from '../utils/helpers'; 
-import {icons}  from '../utils/icons'; // Verifique o caminho
+import { AnnualBudgetChart } from '../components/common/AnnualBudgetChart';
+import { formatUserName } from '../utils/helpers';
+import { icons } from '../utils/icons';
 
-export default function MainLayout({ user, handleLogout, annualBudget, records }) {
+// --- (NOVO) Helper para traduzir o código do clima em ícone e texto ---
+function getWeatherInfo(code, isDay = true) {
+  const weatherMap = {
+    0: { text: 'Céu limpo', icon: isDay ? WiDaySunny : WiNightClear },
+    1: { text: 'Quase limpo', icon: isDay ? WiDaySunny : WiNightClear },
+    2: { text: 'Parcialmente nublado', icon: isDay ? WiDayCloudy : WiNightCloudy },
+    3: { text: 'Nublado', icon: WiCloudy },
+    45: { text: 'Nevoeiro', icon: isDay ? WiDayFog : WiNightFog },
+    48: { text: 'Nevoeiro gelado', icon: isDay ? WiDayFog : WiNightFog },
+    51: { text: 'Garoa leve', icon: isDay ? WiDayRain : WiNightRain },
+    53: { text: 'Garoa moderada', icon: isDay ? WiDayRain : WiNightRain },
+    55: { text: 'Garoa forte', icon: isDay ? WiDayRain : WiNightRain },
+    61: { text: 'Chuva leve', icon: isDay ? WiDayShowers : WiNightShowers },
+    63: { text: 'Chuva moderada', icon: isDay ? WiShowers : WiNightShowers },
+    65: { text: 'Chuva forte', icon: isDay ? WiRain : WiNightRain },
+    71: { text: 'Neve leve', icon: isDay ? WiDaySnow : WiNightSnow },
+    73: { text: 'Neve moderada', icon: isDay ? WiDaySnow : WiNightSnow },
+    75: { text: 'Neve forte', icon: isDay ? WiSnow : WiNightSnow },
+    80: { text: 'Pancadas leves', icon: isDay ? WiDayShowers : WiNightShowers },
+    81: { text: 'Pancadas moderadas', icon: isDay ? WiShowers : WiNightShowers },
+    82: { text: 'Pancadas fortes', icon: isDay ? WiRain : WiNightRain },
+    95: { text: 'Trovoada', icon: isDay ? WiDayThunderstorm : WiNightThunderstorm },
+  };
+  return weatherMap[code] || { text: 'Indefinido', icon: WiCloud };
+}
+
+// --- Hook customizado para formatar a data (Sem mudanças) ---
+function useFormattedDate() {
+  const [formattedDate, setFormattedDate] = useState('');
+  useEffect(() => {
+    const today = new Date();
+    const options = { weekday: 'long', day: 'numeric', month: 'long' };
+    const dateStr = new Intl.DateTimeFormat('pt-BR', options).format(today);
+    setFormattedDate(dateStr.charAt(0).toUpperCase() + dateStr.slice(1));
+  }, []);
+  return formattedDate;
+}
+
+// --- (MODIFICADO) Hook customizado para buscar o clima (Open-Meteo) ---
+function useWeather(latitude, longitude) {
+  const [weather, setWeather] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    // URL da API Open-Meteo
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,is_day,weather_code&timezone=America/Sao_Paulo`;
+
+    const fetchWeather = async () => {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Resposta da API não foi OK.');
+        
+        const data = await res.json();
+        
+        if (!data.current) throw new Error('Dados de clima não encontrados.');
+
+        const {
+          temperature_2m: temp,
+          is_day: isDay,
+          weather_code: code,
+        } = data.current;
+
+        const { text, icon } = getWeatherInfo(code, isDay === 1);
+
+        setWeather({
+          temp: Math.round(temp),
+          description: text,
+          IconComponent: icon, // Salva o componente do ícone
+        });
+        setError(null);
+      } catch (err) {
+        console.error('Erro ao buscar clima:', err);
+        setError('Clima indisponível.');
+      }
+    };
+
+    fetchWeather();
+    const intervalId = setInterval(fetchWeather, 1800000); // Atualiza a cada 30 min
+    return () => clearInterval(intervalId);
+    
+  }, [latitude, longitude]);
+
+  return { weather, error };
+}
+
+export default function MainLayout({
+  user,
+  handleLogout,
+  annualBudget,
+  records,
+}) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const location = useLocation();
   const [filterYear, setFilterYear] = useState(new Date().getFullYear());
-  
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  
+
+  // --- (MODIFICADO) Hooks de Data e Clima ---
+  const formattedDate = useFormattedDate();
+  // Coordenadas de Parari, PB
+  const { weather, error } = useWeather(-7.02, -36.5);
+  const fixedLocationName = 'Parari, PB';
+  // --- FIM (MODIFICADO) ---
+
   const profileRef = useRef(null);
   const navigate = useNavigate();
 
   // (Lógica de cálculo e getRoleName - sem mudanças)
-  const totalSpentForYear = useMemo(() =>
-    (records || [])
-      .filter(r => new Date(r.entryDate).getFullYear() === filterYear)
-      .reduce((sum, item) => sum + (Number(item.totalValue) || 0), 0),
+  const totalSpentForYear = useMemo(
+    () =>
+      (records || [])
+        .filter((r) => new Date(r.entryDate).getFullYear() === filterYear)
+        .reduce((sum, item) => sum + (Number(item.totalValue) || 0), 0),
     [records, filterYear]
   );
-  
   const getRoleName = (role) => {
-    const names = { profissional: "Profissional", secretario: "Secretário(a)", admin: "Administrador(a)" };
+    const names = {
+      profissional: 'Profissional',
+      secretario: 'Secretário(a)',
+      admin: 'Administrador(a)',
+    };
     return names[role] || role;
   };
 
-  // (Definição dos menus - sem mudanças)
+  // --- (CORRIGIDO) Definição dos menus ---
   const menuItems = useMemo(() => {
     const professionalMenu = [
       { path: '/dashboard', label: 'Dashboard', icon: icons.dashboard },
@@ -56,13 +180,18 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
       { path: '/settings', label: 'Configurações', icon: icons.settings },
     ];
 
-    switch(user?.role) {
-      case 'admin': return adminMenu;
-      case 'secretario': return secretaryMenu;
-      case 'profissional': return professionalMenu;
-      default: return [];
+    switch (user?.role) {
+      case 'admin':
+        return adminMenu;
+      case 'secretario':
+        return secretaryMenu;
+      case 'profissional':
+        return professionalMenu;
+      default:
+        return [];
     }
   }, [user?.role]);
+  // --- FIM DA CORREÇÃO ---
 
   // (useEffect para fechar sidebar - sem mudanças)
   useEffect(() => {
@@ -82,8 +211,8 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
         setIsProfileOpen(false);
       }
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [profileRef]);
 
   // (Função de logout - sem mudanças)
@@ -94,12 +223,10 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
   };
 
   return (
-   
     <div className="relative min-h-screen md:h-screen md:flex md:overflow-hidden bg-gray-100">
-      
       {/* Overlay */}
       {isSidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/40 z-20 md:hidden"
           onClick={() => setIsSidebarOpen(false)}
           aria-hidden="true"
@@ -107,7 +234,7 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
       )}
 
       {/* --- SIDEBAR --- */}
-      <aside 
+      <aside
         className={`fixed inset-y-0 left-0 bg-white shadow-xl flex-shrink-0 flex flex-col z-30
                 transition-all duration-300 ease-in-out
                 ${isSidebarCollapsed ? 'md:w-20' : 'md:w-64'}
@@ -117,25 +244,31 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
       >
         {/* Header da Sidebar */}
         <div className="p-4 border-b flex justify-between items-center h-16">
-          <div className={`overflow-hidden transition-all ${isSidebarCollapsed ? 'md:w-0' : 'md:w-auto'}`}>
-            <h1 className="text-2xl font-bold text-indigo-700 whitespace-nowrap">SysMed</h1>
+          <div
+            className={`overflow-hidden transition-all ${isSidebarCollapsed ? 'md:w-0' : 'md:w-auto'}`}
+          >
+            <h1 className="text-2xl font-bold text-indigo-700 whitespace-nowrap">
+              SysMed
+            </h1>
             <p className="text-sm text-gray-500 hidden md:block whitespace-nowrap">
               Painel de {getRoleName(user?.role)}
             </p>
           </div>
-          
-          <button 
+
+          <button
             className="md:hidden text-gray-500 hover:text-gray-900 p-1"
             onClick={() => setIsSidebarOpen(false)}
             aria-label="Fechar menu"
           >
             <span className="w-6 h-6">{icons.close}</span>
           </button>
-          
-          <button 
+
+          <button
             className="hidden md:block text-gray-500 hover:text-indigo-600 p-1 transition-colors"
             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-            aria-label={isSidebarCollapsed ? "Expandir menu" : "Retrair menu"}
+            aria-label={
+              isSidebarCollapsed ? 'Expandir menu' : 'Retrair menu'
+            }
           >
             <span className="w-5 h-5">
               {isSidebarCollapsed ? icons.chevronRight : icons.chevronLeft}
@@ -143,13 +276,12 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
           </button>
         </div>
 
-        {/* --- NAVEGAÇÃO ---
-           Note que esta <nav> JÁ TEM 'overflow-y-auto'.
-           Isso é ótimo, significa que se o SEU MENU for longo, ele rolará.
-        */}
+        {/* --- NAVEGAÇÃO --- */}
         <nav className="flex-grow p-4 overflow-y-auto">
-          {menuItems.map(item => {
-            const isActive = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
+          {menuItems.map((item) => {
+            const isActive =
+              location.pathname === item.path ||
+              (item.path !== '/' && location.pathname.startsWith(item.path));
             return (
               <Link
                 key={item.path}
@@ -157,18 +289,23 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
                 onClick={() => setIsSidebarOpen(false)}
                 title={isSidebarCollapsed ? item.label : undefined}
                 className={`relative w-full text-left p-3 rounded-lg text-sm font-medium transition-all duration-150 mb-2 flex items-center gap-4
-                        ${isSidebarCollapsed ? 'md:justify-center' : ''}
-                        ${isActive
-                          ? 'bg-indigo-50 text-indigo-700 font-semibold'
-                          : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                        }`}
+                          ${isSidebarCollapsed ? 'md:justify-center' : ''}
+                          ${
+                            isActive
+                              ? 'bg-indigo-50 text-indigo-700 font-semibold'
+                              : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                          }`}
                 aria-current={isActive ? 'page' : undefined}
               >
                 {isActive && (
                   <span className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 bg-indigo-600 rounded-r-full"></span>
                 )}
-                <span className="w-5 h-5 flex-shrink-0 text-lg">{item.icon}</span>
-                <span className={`transition-opacity whitespace-nowrap ${isSidebarCollapsed ? 'md:opacity-0 md:hidden' : 'md:opacity-100'}`}>
+                <span className="w-5 h-5 flex-shrink-0 text-lg">
+                  {item.icon}
+                </span>
+                <span
+                  className={`transition-opacity whitespace-nowrap ${isSidebarCollapsed ? 'md:opacity-0 md:hidden' : 'md:opacity-100'}`}
+                >
                   {item.label}
                 </span>
               </Link>
@@ -176,44 +313,79 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
           })}
         </nav>
 
-        <div className="p-4 border-t">
-        </div>
+        <div className="p-4 border-t"></div>
       </aside>
-      
-      {/* --- CONTEÚDO PRINCIPAL E HEADER ---
-         Esta <div> JÁ TEM 'overflow-hidden', o que é perfeito.
-         Ela vai conter a rolagem do <main>.
-      */}
+
+      {/* --- CONTEÚDO PRINCIPAL E HEADER --- */}
       <div className="flex-1 flex flex-col overflow-hidden">
-          
         {/* --- HEADER (Não rola) --- */}
         <header className="bg-white shadow-sm p-4 flex justify-between items-center flex-shrink-0 z-10 h-16">
-          
           {/* Lado Esquerdo */}
           <div className="flex items-center gap-4">
-            <button 
+            <button
               className="text-gray-600 hover:text-gray-900 md:hidden p-1"
               onClick={() => setIsSidebarOpen(true)}
               aria-label="Abrir menu"
             >
               <span className="w-6 h-6">{icons.menu}</span>
             </button>
-            
-            <div className="relative hidden md:block">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5">
-                {icons.search}
-              </span>
-              <input
-                type="text"
-                placeholder="Buscar pacientes, médicos..."
-                className="pl-10 pr-4 py-2 text-sm w-72 rounded-lg border border-gray-200 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
+
+            {/* ========================================================= */}
+            {/* --- (INÍCIO DA MODIFICAÇÃO) --- */}
+            {/* O 'div' da busca foi substituído por este widget */}
+            {/* ========================================================= */}
+            <div className="hidden md:flex items-center gap-3">
+              {/* Clima */}
+              <div className="flex items-center gap-1">
+                {/* O Ícone agora é um componente, não uma <img> */}
+                {weather && weather.IconComponent ? (
+                  <span
+                    className="text-3xl text-indigo-500" // Ajuste a cor/tamanho se precisar
+                    title={weather.description}
+                  >
+                    {/* Renderiza o componente do ícone salvo no estado */}
+                    <weather.IconComponent />
+                  </span>
+                ) : (
+                  // Placeholder enquanto carrega ou se der erro
+                  <span className="w-8 h-8 flex items-center justify-center text-gray-400">
+                    <WiCloud />
+                  </span>
+                )}
+                <div className="text-left">
+                  <p className="text-base font-bold text-gray-800 leading-tight">
+                    {weather ? `${weather.temp}°C` : '...'}
+                  </p>
+                  <p className="text-xs text-gray-500 capitalize leading-tight">
+                    {error
+                      ? error
+                      : weather
+                        ? weather.description
+                        : '...'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Divisor Visual */}
+              <div className="h-8 w-px bg-gray-200"></div>
+
+              {/* Data e Local */}
+              <div className="text-left">
+                <p className="text-sm font-medium text-gray-800 leading-tight">
+                  {formattedDate || 'Carregando data...'}
+                </p>
+                <p className="text-xs text-gray-500 leading-tight">
+                  {fixedLocationName}
+                </p>
+              </div>
             </div>
+            {/* ========================================================= */}
+            {/* --- (FIM DA MODIFICAÇÃO) --- */}
+            {/* ========================================================= */}
           </div>
-          
+
           {/* Lado Direito */}
           <div className="flex items-center gap-4 md:gap-6">
-            
             {(user?.role === 'admin' || user?.role === 'secretario') && (
               <div className="hidden sm:flex items-center gap-4 border-r border-gray-200 pr-4 md:pr-6">
                 <AnnualBudgetChart
@@ -222,10 +394,12 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
                   budgetLimit={annualBudget}
                 />
                 <div className="flex items-center">
-                  <label className="text-xs font-medium text-gray-700 mr-2 hidden md:inline">Ano:</label>
+                  <label className="text-xs font-medium text-gray-700 mr-2 hidden md:inline">
+                    Ano:
+                  </label>
                   <select
                     value={filterYear}
-                    onChange={e => setFilterYear(parseInt(e.target.value))}
+                    onChange={(e) => setFilterYear(parseInt(e.target.value))}
                     className="p-1 border rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     aria-label="Selecionar Ano para Filtro"
                   >
@@ -243,40 +417,64 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
                 className="flex items-center gap-2 text-sm font-medium text-gray-700 rounded-full hover:bg-gray-100 p-1"
               >
-                 <span className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xl">
-                   {icons.userCircle}
-                 </span>
-                 <span className="hidden md:block font-semibold">{formatUserName(user?.name)}</span>
-                 <span className={`transition-transform text-gray-500 w-5 h-5 ${isProfileOpen ? 'rotate-180' : ''}`}>
-                   {icons.chevronDown}
-                 </span>
+                <span className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xl">
+                  {icons.userCircle}
+                </span>
+                <span className="hidden md:block font-semibold">
+                  {formatUserName(user?.name)}
+                </span>
+                <span
+                  className={`transition-transform text-gray-500 w-5 h-5 ${isProfileOpen ? 'rotate-180' : ''}`}
+                >
+                  {icons.chevronDown}
+                </span>
               </button>
 
               {/* Menu Dropdown */}
               {isProfileOpen && (
                 <div className="absolute right-0 mt-2 w-60 bg-white rounded-lg shadow-xl py-2 z-50 border border-gray-100">
                   <div className="px-4 py-3 border-b border-gray-100">
-                    <p className="text-sm font-semibold text-gray-900">{user?.name}</p>
-                    <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+                    <p className="text-sm font-semibold text-gray-900">
+                      {user?.name}
+                    </p>
+                    <p className="text-xs text-gray-500 truncate">
+                      {user?.email}
+                    </p>
                   </div>
-                  <Link 
-                    to="/profile" 
+                  <Link
+                    to="/profile"
                     onClick={() => setIsProfileOpen(false)}
                     className="flex items-center gap-3 w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
                   >
                     <span className="w-5 h-5">{icons.user}</span>
                     <span>Meu Perfil</span>
                   </Link>
-                  <Link 
-                    to="/settings" 
-                    onClick={() => setIsProfileOpen(false)}
-                    className="flex items-center gap-3 w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
-                  >
-                    <span className="w-5 h-5">{icons.organization}</span>
-                    <span>Configuração</span>
-                  </Link>
+
+                  {(user?.role === 'admin' || user?.role === 'secretario') && (
+                    <Link
+                      to="/settings"
+                      onClick={() => setIsProfileOpen(false)}
+                      className="flex items-center gap-3 w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                      <span className="w-5 h-5">{icons.organization}</span>
+                      <span>Configuração</span>
+                    </Link>
+                  )}
+
+                  {(user?.role === 'admin' ||
+                    user?.role === 'profissional') && (
+                    <Link
+                      to="/medications"
+                      onClick={() => setIsProfileOpen(false)}
+                      className="flex items-center gap-3 w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                      <span className="w-5 h-5">{icons.pill}</span>
+                      <span>Gerenciar Medicações</span>
+                    </Link>
+                  )}
+
                   <div className="border-t border-gray-100 my-1"></div>
-                  <button 
+                  <button
                     onClick={handleLogoutClick}
                     className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-3 transition-colors"
                   >
@@ -286,18 +484,14 @@ export default function MainLayout({ user, handleLogout, annualBudget, records }
                 </div>
               )}
             </div>
-            
           </div>
         </header>
-          
-        {/* --- CONTEÚDO (Rola) ---
-           Esta <main> JÁ TEM 'overflow-auto'.
-           Agora que o container pai está travado, ela vai rolar sozinha.
-        */}
+
+        {/* --- CONTEÚDO (Rola) --- */}
         <main className="flex-grow p-4 md:p-6 overflow-auto bg-gray-100">
           <Outlet />
         </main>
       </div>
     </div>
   );
-};
+}
