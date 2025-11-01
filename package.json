@@ -12,7 +12,9 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.15",
+    "axios": "^1.12.2",
     "bootstrap": "^5.3.8",
+    "firebase": "^12.4.0",
     "jspdf": "^3.0.3",
     "jspdf-autotable": "^5.0.2",
     "react": "^19.1.1",

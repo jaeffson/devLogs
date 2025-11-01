@@ -12,6 +12,9 @@ export function AttendRecordModal({
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const initialDate = record?.referenceDate || today; // Data de referência OU hoje
+  // O Mongoose usa _id
+  const recordId = record?._id; 
+  
   const [deliveryDate, setDeliveryDate] = useState(today); // Padrão: HOJE
 
   const patientName =
@@ -20,16 +23,20 @@ export function AttendRecordModal({
       : 'Paciente desconhecido';
 
   const handleConfirmClick = () => {
-    if (record?.id && deliveryDate) {
+    // 🚨 CORREÇÃO CRÍTICA: Verifica recordId (que é _id) E deliveryDate
+    if (recordId && deliveryDate) { 
       console.log(
-        `[AttendRecordModal] Confirmando Atendimento para Record ID: ${record.id}, Data: ${deliveryDate}`
+        `[AttendRecordModal] Confirmando Atendimento para Record ID: ${recordId}, Data: ${deliveryDate}`
       ); // Debug
-      onConfirm(record.id, deliveryDate);
-      // onClose(); // O onConfirm já deve fechar
+
+      onConfirm(recordId, deliveryDate);
+      
+      // ✅ NOVIDADE: Chama onClose() para fechar o modal
+      onClose(); 
     } else {
       console.error('ID do registro ou data de entrega ausente.');
-      // Idealmente, usar addToast aqui se fosse passado como prop
-      alert('Erro: Selecione uma data de entrega válida.');
+      // 🚨 MELHORIA: Usa alert se a data estiver ausente, mas verifica o ID do MongoDB
+      alert('Erro: ID do registro ausente ou data de entrega inválida.');
     }
   };
 
@@ -72,7 +79,7 @@ export function AttendRecordModal({
           ) : (
             <p className="text-red-500 text-xs">
               Erro: Dados de medicação indisponíveis.
-            </p> // Mensagem de erro se props faltarem
+            </p> 
           )}
         </div>
       </div>
@@ -105,7 +112,8 @@ export function AttendRecordModal({
           type="button"
           onClick={handleConfirmClick}
           className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 font-medium text-sm transition-colors"
-          disabled={!deliveryDate}
+          // O botão só será habilitado se houver uma data preenchida
+          disabled={!deliveryDate || !recordId} 
         >
           Confirmar Entrega
         </button>

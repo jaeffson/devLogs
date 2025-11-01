@@ -1,5 +1,5 @@
 // src/pages/ProfessionalDashboardPage.jsx
-// (Botão "Cancelar" agora oculto para a role 'profissional')
+// (Botões "Excluir Paciente" e "Excluir Registro" agora ocultos para a role 'profissional')
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -946,21 +946,28 @@ export default function ProfessionalDashboardPage({
                       >
                         <span className="w-4 h-4 block">{icons.edit}</span>
                       </button>
-                      <button
-                        onClick={() =>
-                          setConfirmation({
-                            isOpen: true,
-                            message: `Tem certeza? Excluir ${selectedPatient?.name} é uma ação PERMANENTE e não pode ser desfeita.`,
-                            onConfirm: () =>
-                              handleDeletePatient(selectedPatient._id || selectedPatient.id),
-                            data: (selectedPatient._id || selectedPatient.id) // Passando o ID aqui
-                          })
-                        }
-                        className="p-2 text-gray-600 hover:text-red-600 hover:bg-gray-100 rounded-md cursor-pointer transition-colors"
-                        title="Excluir Paciente"
-                      >
-                        <span className="w-4 h-4 block">{icons.trash}</span>
-                      </button>
+                      
+                      {/* --- (INÍCIO DA CORREÇÃO 5) --- */}
+                      {/* Botão Excluir Paciente agora só aparece se a role NÃO for profissional */}
+                      {(user?.role !== 'profissional' && user?.role !== 'Profissional') && (
+                        <button
+                          onClick={() =>
+                            setConfirmation({
+                              isOpen: true,
+                              message: `Tem certeza? Excluir ${selectedPatient?.name} é uma ação PERMANENTE e não pode ser desfeita.`,
+                              onConfirm: () =>
+                                handleDeletePatient(selectedPatient._id || selectedPatient.id),
+                              data: (selectedPatient._id || selectedPatient.id) // Passando o ID aqui
+                            })
+                          }
+                          className="p-2 text-gray-600 hover:text-red-600 hover:bg-gray-100 rounded-md cursor-pointer transition-colors"
+                          title="Excluir Paciente"
+                        >
+                          <span className="w-4 h-4 block">{icons.trash}</span>
+                        </button>
+                      )}
+                      {/* --- (FIM DA CORREÇÃO 5) --- */}
+                      
                     </div>
                   </div>
                   <div className="flex justify-between items-center mt-2 mb-3">
@@ -1224,20 +1231,27 @@ export default function ProfessionalDashboardPage({
                           >
                             <span className="w-4 h-4 block">{icons.edit}</span>
                           </button>
-                          <button
-                            onClick={() =>
-                              setConfirmation({
-                                isOpen: true,
-                                message: 'Excluir registro?',
-                                onConfirm: () => handleDeleteRecord(record._id || record.id),
-                                data: (record._id || record.id) // Passando o ID
-                              })
-                            }
-                            className="p-1 text-gray-500 hover:text-red-600 cursor-pointer transition-colors"
-                            title="Excluir"
-                          >
-                            <span className="w-4 h-4 block">{icons.trash}</span>
-                          </button>
+                          
+                          {/* --- (INÍCIO DA CORREÇÃO 6) --- */}
+                          {/* Botão "Excluir Registro" agora só aparece se a role NÃO for profissional */}
+                          {(user?.role !== 'profissional' && user?.role !== 'Profissional') && (
+                            <button
+                              onClick={() =>
+                                setConfirmation({
+                                  isOpen: true,
+                                  message: 'Excluir registro?',
+                                  onConfirm: () => handleDeleteRecord(record._id || record.id),
+                                  data: (record._id || record.id) // Passando o ID
+                                })
+                              }
+                              className="p-1 text-gray-500 hover:text-red-600 cursor-pointer transition-colors"
+                              title="Excluir"
+                            >
+                              <span className="w-4 h-4 block">{icons.trash}</span>
+                            </button>
+                          )}
+                          {/* --- (FIM DA CORREÇÃO 6) --- */}
+                          
                         </div>
                       </td>
                     </tr>
