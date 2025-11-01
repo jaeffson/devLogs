@@ -37,7 +37,7 @@ export default function PatientForm({
     onSave, // Função chamada ao salvar (recebe dados do form)
     onClose, // Função para fechar o modal
     checkDuplicate, // Prop de validação
-    addToast // <-- 1. RECEBA A PROP addToast
+    addToast // Prop para notificações
 }) {
     // --- Estado do Formulário ---
     const [formData, setFormData] = useState({
@@ -55,12 +55,13 @@ export default function PatientForm({
         if (patient) {
             setFormData({
                name: patient.name || '',
-               cpf: patient.cpf || '',
+               // Se o ID do MongoDB for usado, é '_id', senão é 'id'
+               cpf: patient.cpf || '', 
                susCard: patient.susCard || '',
                observations: patient.observations || '',
                generalNotes: patient.generalNotes || '',
                status: patient.status || 'Ativo',
-               id: patient.id
+               id: patient.id // Assumindo que você usa 'id' para editar
             });
         } else {
             setFormData({
@@ -89,6 +90,7 @@ export default function PatientForm({
         if (!formData.name || !formData.name.trim()) {
             newErrors.name = 'O nome completo é obrigatório.';
         }
+        // As validações aqui verificam se o campo tem algum valor, mesmo que formatado.
         const hasCPF = formData.cpf && String(formData.cpf).replace(/\D/g, '').trim();
         const hasSUS = formData.susCard && String(formData.susCard).replace(/\D/g, '').trim();
         if (!hasCPF && !hasSUS) {
@@ -108,38 +110,47 @@ export default function PatientForm({
             return;
         }
 
-        // --- Validação de Duplicidade ---
-        if (typeof checkDuplicate === 'function') {
-            const cleanCPF = (cpf) => String(cpf || '').replace(/\D/g, '');
-            const cleanSus = (sus) => String(sus || '').replace(/\D/g, '');
-            const cpfToCheck = cleanCPF(formData.cpf);
-            const susToCheck = cleanSus(formData.susCard);
+        const cleanCPF = (cpf) => String(cpf || '').replace(/\D/g, '');
+        const cleanSus = (sus) => String(sus || '').replace(/\D/g, '');
+        const cpfToCheck = cleanCPF(formData.cpf);
+        const susToCheck = cleanSus(formData.susCard);
 
-            if (cpfToCheck || susToCheck) {
-                const isDuplicate = checkDuplicate({
-                    cpf: cpfToCheck,
-                    susCard: susToCheck,
-                    currentId: formData.id 
-                });
+        // --- Validação de Duplicidade (Frontend) ---
+        if (typeof checkDuplicate === 'function' && (cpfToCheck || susToCheck)) {
+            const isDuplicate = checkDuplicate({
+                cpf: cpfToCheck,
+                susCard: susToCheck,
+                currentId: formData.id 
+            });
 
-                if (isDuplicate) {
-                    setErrors({ cpf: 'Já existe um paciente com este CPF ou Cartão SUS.' });
-                    return; 
-                }
+            if (isDuplicate) {
+                setErrors({ cpf: 'Já existe um paciente com este CPF ou Cartão SUS.' });
+                return; 
             }
         }
         // --- FIM DA VALIDAÇÃO ---
 
-        onSave(formData);
+        // 🚨 CORREÇÃO CRÍTICA: Normalização de dados para o MongoDB
+        const dataToSave = {
+            ...formData,
+            // 1. Limpa a formatação
+            cpf: cleanCPF(formData.cpf),
+            susCard: cleanSus(formData.susCard)
+        };
         
-        // --- 2. ADICIONE O TOAST ---
+        // 2. Garante que campos opcionais vazios sejam NULL, não ""
+        // O MongoDB/Mongoose precisa de NULL para ignorar o índice 'sparse'
+        dataToSave.cpf = dataToSave.cpf || null; 
+        dataToSave.susCard = dataToSave.susCard || null;
+
+        onSave(dataToSave);
+        
         if (addToast) {
             addToast(
                 patient ? 'Paciente atualizado com sucesso!' : 'Paciente cadastrado com sucesso!',
                 'success'
             );
         }
-        // --- 3. FECHE O MODAL ---
         onClose();
     };
 

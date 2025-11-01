@@ -1,8 +1,10 @@
 // src/pages/SecretaryDashboardPage.jsx
+// (CORREÇÃO: Reintroduzido 'handleNavigateWithFilter' para setar o estado E navegar)
+
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom'; 
 
 // --- Imports de Componentes (Views) ---
-// Certifique-se de que estes caminhos estão corretos na sua estrutura de pastas
 import { DashboardView } from '../components/views/secretary/DashboardView';
 import { PatientHistoryView } from '../components/views/secretary/PatientHistoryView';
 import { GeneralReportView } from '../components/views/secretary/GeneralReportView';
@@ -19,11 +21,13 @@ export default function SecretaryDashboardPage({
   patients = [],
   records = [],
   medications = [],
-  users = [], // Mantido, mas não usado diretamente nas views
+  users = [], // <-- A prop 'users' é recebida aqui
   filterYear = new Date().getFullYear(),
   activeTabForced,
   addToast,
 }) {
+  const navigate = useNavigate(); // Hook para o 'default' case
+
   // --- Estados do Controlador ---
   const [currentView, setCurrentView] = useState('dashboard');
   
@@ -32,33 +36,50 @@ export default function SecretaryDashboardPage({
   
   // Estado para passar o objeto do paciente (vindo das Entregas Recentes) para o Histórico
   const [initialPatientForHistory, setInitialPatientForHistory] = useState(null);
-
-  // --- Efeitos (Lógica de sincronização de aba) ---
-  useEffect(() => {
-    if (activeTabForced) {
-      if (activeTabForced === 'reports') {
-        setCurrentView('dashboard');
-      } else {
-        setCurrentView(activeTabForced);
-      }
-    } else if (currentView === 'reports') {
-      setCurrentView('dashboard');
-    } else {
-      if (
-        !['dashboard', 'records', 'deliveries', 'all_history'].includes(
-          currentView
-        )
-      ) {
-        setCurrentView('dashboard');
-      }
+  
+  
+  // --- Wrapper de Navegação (Usado apenas para limpar estados) ---
+  const navigateToView = useCallback((view) => {
+    // Se a nova view NÃO for a de histórico, limpa o paciente inicial.
+    if (view !== 'records') {
+        setInitialPatientForHistory(null);
     }
-  }, [activeTabForced, currentView]);
+    // Se a nova view NÃO for a de relatório, limpa o filtro de status.
+    if (view !== 'all_history') {
+        setFilterStatus('all');
+    }
+    // Define a nova view
+    setCurrentView(view);
+  }, []); 
 
-  // --- Helpers Globais (Otimização O(1) do Passo 1) ---
+
+  // --- useEffect (Sincroniza URL com o Estado Interno) ---
+  useEffect(() => {
+    
+    let targetView = activeTabForced || 'dashboard'; // O default é dashboard
+    
+    // Mapeia rotas do App.jsx para os nomes das views internas
+    if (targetView === 'reports' || targetView === 'reports-general') {
+      targetView = 'all_history';
+    }
+    
+    // Se a rota for desconhecida, vá para o dashboard
+    if (!['dashboard', 'records', 'deliveries', 'all_history'].includes(targetView)) {
+      targetView = 'dashboard';
+    }
+    
+    // Chama a função que limpa estados e define a view interna
+    navigateToView(targetView); 
+
+  }, [activeTabForced, navigateToView]); // Depende APENAS da URL
+  
+
+  // --- Helpers Globais (Corrigido para _id) ---
   const patientMap = useMemo(() => {
     if (!Array.isArray(patients)) return {};
     return patients.reduce((acc, patient) => {
-      acc[patient.id] = patient.name || 'Desconhecido';
+      // CORRIGIDO: para usar _id (MongoDB)
+      acc[patient._id] = patient.name || 'Desconhecido';
       return acc;
     }, {});
   }, [patients]);
@@ -70,25 +91,31 @@ export default function SecretaryDashboardPage({
     [patientMap]
   );
   
-  // --- Funções de Callback para os Filhos ---
+  // --- (INÍCIO DA CORREÇÃO) Funções de Callback para os Filhos ---
   
-  // Navegação do Card "Ver Pendências"
-  const handleNavigateWithFilter = (view, status) => {
-    setFilterStatus(status); // Define o filtro
-    setCurrentView(view);     // Muda a view
+  /**
+   * Esta função é usada pelos botões "Pendentes" no DashboardView.
+   * Ela define o filtro ANTES de navegar, garantindo que a página
+   * de relatórios abra com o filtro correto.
+   */
+  const handleNavigateWithFilter = (viewUrl, status) => {
+    setFilterStatus(status); // 1. Define o filtro
+    navigate(viewUrl);       // 2. Navega para a URL
   };
   
-  // Navegação da view "Entregas Recentes" para "Histórico" (CORREÇÃO APLICADA)
+  // Navegação da view "Entregas Recentes" para "Histórico"
   const handleNavigateToPatientHistory = (patientId) => {
-    // Busca o objeto paciente completo no array global
-    const patient = patients.find(p => p.id === patientId); 
+    // CORRIGIDO: para usar p._id (MongoDB)
+    const patient = patients.find(p => p._id === patientId); 
     if (patient) {
       setInitialPatientForHistory(patient); 
-      setCurrentView('records');            
+      // Navega para a URL correta, o 'useEffect' fará o resto
+      navigate('/patient-history');          
     } else {
       addToast?.('Erro: Paciente não encontrado para navegação.', 'error');
     }
   };
+  // --- (FIM DA CORREÇÃO) ---
 
   // --- Renderização Condicional (O Corpo Principal) ---
   const renderCurrentView = () => {
@@ -101,10 +128,12 @@ export default function SecretaryDashboardPage({
             patients={patients}
             records={records}
             medications={medications}
+            users={users} // Prop 'users' mantida
             filterYear={filterYear}
             getPatientNameById={getPatientNameById}
             getMedicationName={getMedicationName}
-            onNavigate={setCurrentView} // Navegação simples
+            icons={icons} 
+            // --- (CORREÇÃO) Passando a função de filtro ---
             onNavigateWithFilter={handleNavigateWithFilter}
           />
         );
@@ -117,8 +146,6 @@ export default function SecretaryDashboardPage({
             medications={medications}
             getMedicationName={getMedicationName}
             initialPatient={initialPatientForHistory}
-            // Limpa o paciente inicial para que a busca funcione normalmente
-            onHistoryViewed={() => setInitialPatientForHistory(null)}
           />
         );
 
@@ -131,9 +158,8 @@ export default function SecretaryDashboardPage({
             addToast={addToast}
             getPatientNameById={getPatientNameById}
             getMedicationName={getMedicationName}
-            initialFilterStatus={filterStatus}
-            // Limpa o filtro após a view ter lido (se ele veio do dashboard)
-            onReportViewed={() => setFilterStatus('all')} 
+            initialFilterStatus={filterStatus} // <-- O filtro é lido aqui
+            onReportViewed={() => {}} // Correção do crash
           />
         );
 
@@ -144,7 +170,7 @@ export default function SecretaryDashboardPage({
             medications={medications}
             getPatientNameById={getPatientNameById}
             getMedicationName={getMedicationName}
-            onPatientClick={handleNavigateToPatientHistory}
+            onPatientClick={handleNavigateToPatientHistory} // Este clique é interno (Pai -> Filho -> Pai)
           />
         );
 
@@ -154,7 +180,7 @@ export default function SecretaryDashboardPage({
           <div className="text-center p-10">
             <h2 className="text-xl font-semibold text-gray-700">Visão Inválida</h2>
             <p className="text-gray-500">A visualização solicitada não foi encontrada.</p>
-            <button onClick={() => setCurrentView('dashboard')} className="mt-4 text-blue-600 hover:underline">
+            <button onClick={() => navigate('/dashboard')} className="mt-4 text-blue-600 hover:underline">
               Voltar ao Dashboard
             </button>
           </div>

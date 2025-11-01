@@ -17,7 +17,7 @@ export default function RecordForm({
   const [referenceDate, setReferenceDate] = useState('');
   const [observation, setObservation] = useState('');
   const [medications, setMedications] = useState([
-    { medicationId: '', quantity: quantityOptions[0], value: '' },
+    { medicationId: '', quantity: quantityOptions[0], value: '', tempId: Date.now() }, 
   ]);
   const [isMedicationModalOpen, setIsMedicationModalOpen] = useState(false);
   const [addingMedicationIndex, setAddingMedicationIndex] = useState(null);
@@ -26,50 +26,80 @@ export default function RecordForm({
   const [medSearchTerm, setMedSearchTerm] = useState('');
   const medSelectRef = useRef(null);
 
+  // 🚨 CORREÇÃO DA DATA: Função para obter a data de hoje no formato YYYY-MM-DD
+  const getTodayIsoDate = () => {
+    return new Date().toISOString().slice(0, 10);
+  };
+  
+  // 🚨 CORREÇÃO DA DATA: Função definida no escopo
+  const formattedDate = (dateString) => {
+    if (!dateString) return 'Data inválida';
+    // O construtor Date precisa de um formato correto, mas se já for 'YYYY-MM-DD', formatamos diretamente
+    const parts = dateString.slice(0, 10).split('-');
+    if (parts.length === 3) {
+        // Assume YYYY-MM-DD
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return 'Data Inválida';
+  };
+
+
+  // --- EFEITO PARA CARREGAR DADOS ---
   useEffect(() => {
+    // 🚨 CORREÇÃO DA DATA: Usa a função getTodayIsoDate para inicializar
+    const today = getTodayIsoDate();
+
     if (record) {
-      setReferenceDate(record.referenceDate || new Date().toISOString().slice(0, 10));
+      // Se houver registro, usa a data dele, garantindo o formato 'YYYY-MM-DD'
+      setReferenceDate(record.referenceDate ? new Date(record.referenceDate).toISOString().slice(0, 10) : today);
       setObservation(record.observation || '');
       const existingMeds =
-        record.medications?.map((m) => ({
-          medicationId: m.medicationId || '',
+        record.medications?.map((m, i) => ({
+          medicationId: m.medicationId || '', 
           quantity: m.quantity || quantityOptions[0],
           value: m.value || '',
-          recordMedId: m.recordMedId,
+          tempId: m.recordMedId || m.id || `edit-${i}`, 
         })) || [];
       setMedications(
         existingMeds.length > 0
           ? existingMeds
-          : [{ medicationId: '', quantity: quantityOptions[0], value: '' }]
+          : [{ medicationId: '', quantity: quantityOptions[0], value: '', tempId: Date.now() }]
       );
     } else {
-      setReferenceDate(new Date().toISOString().slice(0, 10));
+      // Novo registro: usa a data de hoje
+      setReferenceDate(today);
       setObservation('');
-      setMedications([{ medicationId: '', quantity: quantityOptions[0], value: '' }]);
+      setMedications([{ medicationId: '', quantity: quantityOptions[0], value: '', tempId: Date.now() }]);
     }
     setErrors({});
   }, [record]);
 
+  // --- EFEITO PARA FECHAR O DROPDOWN AO CLICAR FORA ---
   useEffect(() => {
     function handleClickOutside(event) {
       if (medSelectRef.current && !medSelectRef.current.contains(event.target)) {
         setOpenMedSelectIndex(null);
-        setMedSearchTerm(''); // Limpa a busca ao fechar
+        setMedSearchTerm('');
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [setMedSearchTerm, setOpenMedSelectIndex]); 
 
+
+  // --- LÓGICA DE FILTRAGEM DE MEDICAÇÕES ---
   const filteredMedicationsList = useMemo(() => {
-    // Se nenhum dropdown estiver aberto, ou não houver termo de busca, não filtre (ou mostre tudo)
-    if (openMedSelectIndex === null || !medSearchTerm) {
-      return medicationsList;
+    if (openMedSelectIndex === null) {
+        return [];
+    }
+    if (!medSearchTerm) {
+        return medicationsList.slice(0, 50); 
     }
     return medicationsList.filter((med) =>
       med.name.toLowerCase().includes(medSearchTerm.toLowerCase())
     );
-  }, [medicationsList, medSearchTerm, openMedSelectIndex]);
+  }, [medicationsList, medSearchTerm, openMedSelectIndex, medicationsList.length]);
+
 
   const handleMedicationChange = (index, field, value) => {
     if (field === 'medicationId' && value === 'new') {
@@ -82,16 +112,18 @@ export default function RecordForm({
     }
     const newMeds = [...medications];
     newMeds[index][field] = value;
-    if (errors[`medications[${index}].${field}`]) {
+    
+    if (errors[`medications[${index}].${field}`] || errors['medications[0].medicationId']) {
       const newErr = { ...errors };
       delete newErr[`medications[${index}].${field}`];
+      delete newErr['medications[0].medicationId'];
       setErrors(newErr);
     }
     setMedications(newMeds);
   };
 
   const addMedicationField = () => {
-    setMedications([...medications, { medicationId: '', quantity: quantityOptions[0], value: '' }]);
+    setMedications([...medications, { medicationId: '', quantity: quantityOptions[0], value: '', tempId: Date.now() }]);
   };
 
   const removeMedicationField = (index) => {
@@ -104,7 +136,7 @@ export default function RecordForm({
     const newMed =
       typeof onNewMedication === 'function' ? onNewMedication(newMedData) : null;
     if (newMed && addingMedicationIndex !== null) {
-      handleMedicationChange(addingMedicationIndex, 'medicationId', newMed.id);
+      handleMedicationChange(addingMedicationIndex, 'medicationId', newMed.id); 
     }
     setIsMedicationModalOpen(false);
     setAddingMedicationIndex(null);
@@ -113,10 +145,22 @@ export default function RecordForm({
   const validateRecordForm = () => {
     const newErrors = {};
     if (!referenceDate) newErrors.referenceDate = 'Data de referência é obrigatória.';
+    
     const validMeds = medications.filter((m) => m.medicationId);
-    if (validMeds.length === 0) {
-      newErrors['medications[0].medicationId'] = 'Adicione pelo menos uma medicação.';
+    
+    if (medications.length === 0 || validMeds.length === 0) { 
+        newErrors['medications[0].medicationId'] = 'É obrigatório adicionar pelo menos uma medicação.';
     }
+    
+    validMeds.forEach((med, index) => {
+        if (!med.quantity) {
+             newErrors[`medications[${index}].quantity`] = 'Quantidade obrigatória.';
+        }
+        if (Number(med.value) < 0) {
+             newErrors[`medications[${index}].value`] = 'Valor inválido.';
+        }
+    });
+
     return newErrors;
   };
 
@@ -125,6 +169,7 @@ export default function RecordForm({
     const formErrors = validateRecordForm();
     if (Object.keys(formErrors).length > 0) {
       setErrors(formErrors);
+      addToast?.('Preencha os campos obrigatórios.', 'error');
       return;
     }
 
@@ -133,17 +178,16 @@ export default function RecordForm({
       .map((m) => ({
         ...m,
         value: Number(m.value) || 0,
-        recordMedId:
-          m.recordMedId ||
-          `rec-med-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        recordMedId: m.recordMedId, 
       }));
 
     const totalValue = validMedications.reduce((sum, med) => sum + med.value, 0);
 
     const recordData = {
-      id: record?.id,
-      patientId: patient.id,
+      id: record?.id, 
+      patientId: patient._id || patient.id, 
       professionalId,
+      // 🚨 CORREÇÃO DA DATA: Envia a string YYYY-MM-DD
       referenceDate,
       observation: observation.trim(),
       status: record?.status || 'Pendente',
@@ -156,12 +200,6 @@ export default function RecordForm({
     onSave(recordData);
     addToast?.(record ? 'Registro atualizado!' : 'Registro salvo!', 'success');
     onClose();
-  };
-
-  const formattedDate = (dateString) => {
-    if (!dateString) return 'Data inválida';
-    const [year, month, day] = dateString.slice(0, 10).split('-');
-    return `${day}/${month}/${year}`;
   };
 
   return (
@@ -192,23 +230,29 @@ export default function RecordForm({
               {/* Medicações */}
               <div className="border-t pt-4">
                 <h3 className="text-lg font-semibold mb-3 text-gray-800">Medicações</h3>
+                
+                {/* Mensagem de Erro Geral de Medicação */}
+                {errors['medications[0].medicationId'] && (
+                     <p className="text-red-600 text-sm mb-3">
+                         {errors['medications[0].medicationId']}
+                     </p>
+                )}
 
-                {/* Scroll interno só nas medicações */}
                 <div
                   className="overflow-y-auto max-h-[500px] space-y-3 bg-gray-50 p-4 rounded-lg border border-gray-200"
                   ref={medSelectRef}
                 >
                   {medications.map((med, index) => {
                     const selectedMedName =
-                      medicationsList.find((m) => m.id === med.medicationId)?.name || '';
+                      medicationsList.find((m) => m.id === med.medicationId)?.name || ''; 
                     
                     return (
                       <div
-                        key={index}
+                        key={med.tempId} 
                         className="grid grid-cols-12 gap-3 items-start bg-white p-3 rounded-lg shadow-sm border border-gray-200"
                       >
-                        {/* Medicação (COMBOBOX) - ALTERADO */}
-                        <div className="col-span-12 md:col-span-5"> {/* <-- Alterado de 4 para 5 */}
+                        {/* Medicação (COMBOBOX) */}
+                        <div className="col-span-12 md:col-span-5">
                           <label className="text-xs text-gray-600 mb-1 block">Medicação</label>
                           <div className="relative">
                             <input
@@ -221,29 +265,35 @@ export default function RecordForm({
                                 setMedSearchTerm(''); 
                               }}
                               className={`w-full p-2 border rounded text-sm h-10 ${ 
-                                errors[`medications[${index}].medicationId`]
+                                errors[`medications[${index}].medicationId`] || errors['medications[0].medicationId']
                                   ? 'border-red-500'
                                   : 'border-gray-300'
                               } bg-white`}
                             />
 
                             {openMedSelectIndex === index && (
-                              <div className="absolute z-10 w-full bg-white border border-gray-300 rounded-lg shadow-lg mt-1 max-h-60 flex flex-col">
+                              <div 
+                                className="absolute z-10 w-full bg-white border border-gray-300 rounded-lg shadow-lg mt-1 max-h-60 flex flex-col"
+                                onMouseDown={(e) => e.preventDefault()} 
+                              >
                                 <div className="overflow-y-auto">
                                   {/* 1. Lista de resultados */}
-                                  {filteredMedicationsList.map((m) => (
+                                  {filteredMedicationsList.map((m) => {
+                                    const finalId = m.id || m._id; 
+                                    
+                                    return (
                                     <div
-                                      key={m.id}
+                                      key={finalId} 
                                       className="p-2 text-sm text-gray-800 hover:bg-blue-50 cursor-pointer"
                                       onClick={() => {
-                                        handleMedicationChange(index, 'medicationId', m.id);
+                                        handleMedicationChange(index, 'medicationId', finalId); 
                                         setOpenMedSelectIndex(null);
                                         setMedSearchTerm('');
                                       }}
                                     >
                                       {m.name}
                                     </div>
-                                  ))}
+                                  )})}
                                   
                                   {/* 2. Mensagem de 'Nenhum resultado' ou 'Digite' */}
                                   {filteredMedicationsList.length === 0 && (
@@ -269,8 +319,8 @@ export default function RecordForm({
                           </div>
                         </div>
 
-                        {/* Quantidade (ALINHADO) */}
-                        <div className="col-span-4 md:col-span-3"> {/* <-- Mantido como 3 */}
+                        {/* Quantidade */}
+                        <div className="col-span-4 md:col-span-3">
                           <label className="text-xs text-gray-600 mb-1 block">Quantidade</label>
                           <input
                             type="text"
@@ -288,8 +338,8 @@ export default function RecordForm({
                           </datalist>
                         </div>
 
-                        {/* Valor (ALINHADO) - ALTERADO */}
-                        <div className="col-span-4 md:col-span-2"> {/* <-- Alterado de 3 para 2 */}
+                        {/* Valor */}
+                        <div className="col-span-4 md:col-span-2">
                           <label className="text-xs text-gray-600 mb-1 block">Valor (R$)</label>
                           <input
                             type="number"
@@ -303,9 +353,9 @@ export default function RecordForm({
                           />
                         </div>
 
-                        {/* Remover (ALINHADO) */}
-                        <div className="col-span-4 md:col-span-2"> {/* <-- Mantido como 2 */}
-                          <label className="text-xs text-gray-600 mb-1 block">&nbsp;</label> {/* Label fantasma para alinhar */}
+                        {/* Remover */}
+                        <div className="col-span-4 md:col-span-2">
+                          <label className="text-xs text-gray-600 mb-1 block">&nbsp;</label>
                           <button
                             type="button"
                             onClick={() => removeMedicationField(index)}

@@ -6,6 +6,9 @@ import { StatusBadge } from '../../common/StatusBadge';
 import { icons } from '../../../utils/icons';
 import useDebounce from '../../../hooks/useDebounce';
 
+// (INÍCIO DA CORREÇÃO) Adicionada a constante de 30 dias
+const MS_IN_30_DAYS = 30 * 24 * 60 * 60 * 1000;
+
 export function GeneralReportView({
   user,
   records = [],
@@ -30,9 +33,9 @@ export function GeneralReportView({
 
   // Efeito para sincronizar e limpar o 'initialFilterStatus' no controlador
   useEffect(() => {
-    if (initialFilterStatus && initialFilterStatus !== 'all') {
+    if (initialFilterStatus) { // Mantém o filtro 'Vencido' ou 'Pendente'
       setFilterStatus(initialFilterStatus);
-      onReportViewed(); 
+      if (onReportViewed) onReportViewed(); 
     }
   }, [initialFilterStatus, onReportViewed]);
 
@@ -41,6 +44,26 @@ export function GeneralReportView({
   useEffect(() => {
     setCurrentPage(1);
   }, [filterPeriod, filterStatus, debouncedReportSearchTerm]);
+
+  
+  // --- (INÍCIO DA CORREÇÃO) Opções do Dropdown de Status ---
+  // Adiciona a opção "Vencido" dinamicamente se for o filtro inicial
+  const statusOptions = useMemo(() => {
+    const options = [
+      { value: 'all', label: 'Todos' },
+      { value: 'Atendido', label: 'Atendido' },
+      { value: 'Pendente', label: 'Pendente' },
+      { value: 'Cancelado', label: 'Cancelado' },
+    ];
+    
+    // Se o filtro inicial (da URL) for "Vencido", e o estado atual for "Vencido",
+    // adiciona ele na lista para o usuário saber o que está selecionado.
+    if (initialFilterStatus === 'Vencido' && filterStatus === 'Vencido') {
+      options.push({ value: 'Vencido', label: 'Vencido (30d+)' });
+    }
+    return options;
+  }, [initialFilterStatus, filterStatus]);
+  // --- (FIM DA CORREÇÃO) ---
 
   
   // --- Memos (Movidos para cá) ---
@@ -61,9 +84,28 @@ export function GeneralReportView({
         });
       }
     }
+
+    // --- (INÍCIO DA CORREÇÃO) Lógica do Filtro de Status ---
+    const now = new Date().getTime();
     if (filterStatus !== 'all') {
-      filtered = filtered.filter((r) => r.status === filterStatus);
+      if (filterStatus === 'Vencido') {
+        // Lógica especial para o filtro "Vencido"
+        filtered = filtered.filter(r => {
+          if (r.status !== 'Pendente' || !r.entryDate) return false;
+          try {
+            const entryTime = new Date(r.entryDate).getTime();
+            return (now - entryTime) > MS_IN_30_DAYS;
+          } catch (e) {
+            return false;
+          }
+        });
+      } else {
+        // Lógica original mantida para "Pendente", "Atendido", "Cancelado"
+        filtered = filtered.filter((r) => r.status === filterStatus);
+      }
     }
+    // --- (FIM DA CORREÇÃO) ---
+
     const searchTermLower = debouncedReportSearchTerm.toLowerCase();
     if (searchTermLower) {
       filtered = filtered.filter((r) =>
@@ -113,11 +155,14 @@ export function GeneralReportView({
     try {
       const doc = new jsPDF();
       const reportTitle = 'Relatório Geral de Entradas';
+      
+      // (CORREÇÃO) Melhora o label do filtro no PDF
+      const statusLabel = statusOptions.find(o => o.value === filterStatus)?.label || 'Todos';
+
       const filtersText = `Filtros: Período (${
         filterPeriod === 'all' ? 'Todos' : `Últimos ${filterPeriod} dias`
-      }), Status (${
-        filterStatus === 'all' ? 'Todos' : filterStatus
-      }), Busca (${reportSearchTerm || 'Nenhuma'})`;
+      }), Status (${statusLabel}), Busca (${reportSearchTerm || 'Nenhuma'})`;
+      
       const generationDate = new Date().toLocaleString('pt-BR', {
         dateStyle: 'short',
         timeStyle: 'short',
@@ -323,6 +368,8 @@ export function GeneralReportView({
           >
             Status
           </label>
+          {/* --- (INÍCIO DA CORREÇÃO) --- */}
+          {/* O select agora usa as 'statusOptions' dinâmicas */}
           <select
             id="report-status-all"
             value={filterStatus}
@@ -333,11 +380,11 @@ export function GeneralReportView({
                 : 'border-gray-300'
             }`}
           >
-            <option value="all">Todos</option>
-            <option value="Atendido">Atendido</option>
-            <option value="Pendente">Pendente</option>
-            <option value="Cancelado">Cancelado</option>
+            {statusOptions.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
           </select>
+          {/* --- (FIM DA CORREÇÃO) --- */}
         </div>
         <div className="text-sm text-gray-600 mt-2 md:mt-0">
           {filteredRecordsForReport.length} registro(s) encontrado(s).

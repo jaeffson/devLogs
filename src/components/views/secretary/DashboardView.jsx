@@ -1,9 +1,13 @@
 // src/components/views/secretary/DashboardView.jsx
+// (CORRIGIDO: Botão "Ver Atrasados" agora envia o filtro "Vencido")
+
 import React, { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom'; 
 import { BarChart } from '../../common/BarChart';
 import { AnnualBudgetChart } from '../../common/AnnualBudgetChart';
 import { SkeletonCard } from '../../common/SkeletonCard';
 import { SkeletonBlock } from '../../common/SkeletonBlock';
+// A importação de 'icons' é mantida para os 'Atalhos Rápidos'
 import { icons } from '../../../utils/icons';
 
 // Define o número de milissegundos em 30 dias
@@ -18,12 +22,15 @@ export function DashboardView({
   medications = [],
   filterYear,
   getMedicationName,
-  onNavigate, // Função para mudar a view (recebe o nome da view)
-  onNavigateWithFilter, // Função para mudar a view com filtro (recebe view, status)
+  icons, 
+  onNavigateWithFilter, // <-- Prop de filtro mantida
 }) {
   
+  const navigate = useNavigate(); // <-- Hook de navegação mantido
+
   // --- Estados (Movidos para cá) ---
   const [isLoading, setIsLoading] = useState(true);
+  const [isOverdueAlertVisible, setIsOverdueAlertVisible] = useState(true);
 
   // Efeito de loading (Movido para cá)
   useEffect(() => {
@@ -200,111 +207,173 @@ export function DashboardView({
       <h2 className="text-2xl md:text-3xl font-bold text-gray-800">
         Dashboard Secretária
       </h2>
-      {/* Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
-        <div className="bg-white p-4 md:p-6 rounded-lg shadow-md border-l-4 border-blue-500">
-          <h3 className="text-lg font-semibold text-blue-800">
-            Total de Pacientes
-          </h3>
-          <p className="text-3xl font-bold mt-2 text-blue-600">
+      
+      {/* --- (INÍCIO) Cards com Novo Visual e Navegação Corrigida --- */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-6">
+        {/* Card 1: Total de Pacientes (Usa navigate) */}
+        <div 
+          className="bg-blue-100 text-blue-900 p-5 rounded-lg shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer"
+          onClick={() => navigate('/patient-history')} // <-- Correto: Só navega
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-blue-500 bg-white p-2 rounded-full">
+              {icons.users || (<span></span>)}
+            </span>
+            <h3 className="text-lg font-semibold">
+              Total de Pacientes
+            </h3>
+          </div>
+          <p className="text-4xl font-bold mt-3 text-blue-800">
             {totalPatients}
           </p>
+          <p className="text-sm text-blue-700 hover:underline mt-2">
+            Ver Histórico de Pacientes
+          </p>
         </div>
-        <div className="bg-white p-4 md:p-6 rounded-lg shadow-md border-l-4 border-yellow-500">
-          <h3 className="text-lg font-semibold text-yellow-800">
-            Registros Pendentes
-          </h3>
-          <p className="text-3xl font-bold mt-2 text-yellow-600">
+
+        {/* Card 2: Registros Pendentes (Usa onNavigateWithFilter) */}
+        <div 
+          className="bg-yellow-100 text-yellow-900 p-5 rounded-lg shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer"
+          onClick={() => onNavigateWithFilter('/reports-general', 'Pendente')} // <-- Correto: Usa filtro "Pendente"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-yellow-500 bg-white p-2 rounded-full">
+              {icons.clipboard || (<span></span>)}
+            </span>
+            <h3 className="text-lg font-semibold">
+              Registros Pendentes
+            </h3>
+          </div>
+          <p className="text-4xl font-bold mt-3 text-yellow-800">
             {totalPending}
           </p>
-          <button
-            onClick={() => onNavigateWithFilter('all_history', 'Pendente')}
-            // Adicionado cursor-pointer e hover na cor do texto do botão do card
-            className="text-sm text-blue-600 hover:text-blue-800 hover:underline mt-2 cursor-pointer transition-colors"
-          >
-            Ver pendências
-          </button>
+          <p className="text-sm text-yellow-700 hover:underline mt-2">
+            Ver Pendências
+          </p>
         </div>
-        <div className="bg-white p-4 md:p-6 rounded-lg shadow-md border-l-4 border-green-500">
-          <h3 className="text-lg font-semibold text-green-800">
-            Gasto Total ({filterYear})
-          </h3>
-          <p className="text-3xl font-bold mt-2 text-green-600">
+
+        {/* Card 3: Gasto Total (Sem clique) */}
+        <div 
+          className="bg-green-100 text-green-900 p-5 rounded-lg shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-green-500 bg-white p-2 rounded-full">
+              {icons.chart || (<span></span>)}
+            </span>
+            <h3 className="text-lg font-semibold">
+              Gasto Total ({filterYear})
+            </h3>
+          </div>
+          <p className="text-4xl font-bold mt-3 text-green-800">
             {totalSpentForYear.toLocaleString('pt-BR', {
               style: 'currency',
               currency: 'BRL',
             })}
           </p>
+          <p className="text-sm text-green-700 mt-2">
+            Relativo ao ano filtrado
+          </p>
         </div>
       </div>
+      {/* --- (FIM) Cards com Novo Visual --- */}
 
-      {/* --- NOVO CARD: Pendências Velhas (30+ dias) --- */}
-      {pendingOver30Days > 0 && (
+
+      {/* --- (INÍCIO) BLOCO DE ALERTA ATUALIZADO (Visual e Lógica) --- */}
+      
+      {/* NOVO CARD: Pendências Velhas (30+ dias) com visual atualizado */}
+      {pendingOver30Days > 0 && isOverdueAlertVisible && (
         <div 
-          className="p-4 rounded-lg shadow-md flex items-center gap-4 bg-red-100 border-l-4 border-red-600 animate-pulse-slow"
+          className="bg-white border-l-8 border-red-600 p-4 rounded-lg shadow-lg flex items-start gap-3"
+          role="alert"
         >
-          <span className="w-8 h-8 flex-shrink-0 text-red-600">
-            {icons.alert} 
-          </span>
+          {/* Ícone com toque visual (SVG) */}
+          <div className="flex-shrink-0 text-red-500 mt-1">
+            <span className="w-6 h-6">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+              </svg>
+            </span>
+          </div>
+          
+          {/* Conteúdo do Texto */}
           <div className="flex-grow">
-            <h4 className="font-bold text-red-800">
+            <h4 className="font-bold text-gray-800">
               ATENÇÃO: Pendências com Entrega Atrasada
             </h4>
             <p className="text-sm text-gray-700">
-              Existem <span className="font-extrabold">{pendingOver30Days}</span> {pendingOver30Days === 1 ? 'registro' : 'registros'} pendentes há mais de 30 dias. Ação Imediata Necessária!
+              Existem <span className="font-extrabold">{pendingOver30Days}</span> {pendingOver30Days === 1 ? 'registro' : 'registros'} pendentes há mais de 30 dias.
             </p>
+            {/* --- (INÍCIO DA CORREÇÃO) ---
+              O onClick agora envia o filtro "Vencido"
+            */}
+            <button 
+              onClick={() => onNavigateWithFilter('/reports-general', 'Vencido')}
+              className="text-sm text-indigo-600 hover:text-indigo-800 hover:underline font-medium mt-1 cursor-pointer transition-colors"
+            >
+              Ver Atrasados
+            </button>
+            {/* --- (FIM DA CORREÇÃO) --- */}
           </div>
-          <button 
-            onClick={() => onNavigateWithFilter('all_history', 'Pendente')}
-            // Adicionado cursor-pointer
-            className="px-3 py-1 text-sm font-medium rounded-lg flex-shrink-0 bg-red-600 text-white hover:bg-red-700 transition-colors cursor-pointer"
+
+          {/* Botão de Fechar (SVG) */}
+          <button
+            onClick={() => setIsOverdueAlertVisible(false)}
+            className="p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 rounded-full cursor-pointer transition-colors"
+            title="Dispensar"
           >
-            Ver Atrasados
+            <span className="w-5 h-5">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </span>
           </button>
         </div>
       )}
-      {/* --- FIM DO CARD PENDÊNCIAS VELHAS --- */}
+      {/* FIM DO CARD PENDÊNCIAS VELHAS */}
 
-      {/* --- CARD DE AVISO DE PENDÊNCIAS GERAIS (MANTIDO) --- */}
-      {totalPending > 0 && (
+      {/* CARD DE AVISO DE PENDÊNCIAS GERAIS (Visual atualizado) */}
+      {totalPending > 0 && (!isOverdueAlertVisible || pendingOver30Days === 0) && (
         <div 
-          className={`p-4 rounded-lg shadow-md flex items-center gap-4 transition-all duration-300 ${
-            pendingOver30Days === 0 // Mostra o alerta amarelo apenas se não houver vermelhos
-              ? 'bg-yellow-50 border-l-4 border-yellow-500' 
-              : 'hidden'
-          }`}
+          className="bg-white border-l-8 border-yellow-500 p-4 rounded-lg shadow-lg flex items-start gap-3"
+          role="alert"
         >
-          <span className={`w-8 h-8 flex-shrink-0 text-yellow-600`}>
-            {icons.alert} 
-          </span>
+          {/* Ícone (SVG) */}
+          <div className="flex-shrink-0 text-yellow-500 mt-1">
+            <span className="w-6 h-6">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.125 2.25h-4.5c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125v-9M10.125 2.25h.375m0 0l3.004 3.004m-3.004-3.004v3.75m0 0v3.75m0-3.75h3.75m-3.75 0h.375m-3.375 0H6.75m10.5 0h.375c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125h-4.5c-.621 0-1.125-.504-1.125-1.125v-1.5c0-.621.504 1.125 1.125-1.125h.375m-3.375 0h.375m0 0l3.004 3.004m-3.004-3.004v3.75m0 0v3.75m0-3.75h3.75m-3.75 0h.375m-3.375 0H6.75" />
+              </svg>
+            </span>
+          </div>
+          {/* Texto */}
           <div className="flex-grow">
-            <h4 className={`font-bold text-yellow-800`}>
+            <h4 className="font-bold text-gray-800">
               Aviso de Pendências
             </h4>
             <p className="text-sm text-gray-700">
               Existem <span className="font-semibold">{totalPending}</span> {totalPending === 1 ? 'registro pendente' : 'registros pendentes'} que necessitam de atenção.
             </p>
+            <button 
+              onClick={() => onNavigateWithFilter('/reports-general', 'Pendente')} // <-- Correto: Usa filtro "Pendente"
+              className="text-sm text-indigo-600 hover:text-indigo-800 hover:underline font-medium mt-1 cursor-pointer transition-colors"
+            >
+              Acessar
+            </button>
           </div>
-          <button 
-            onClick={() => onNavigateWithFilter('all_history', 'Pendente')}
-            // Adicionado cursor-pointer
-            className={`px-3 py-1 text-sm font-medium rounded-lg flex-shrink-0 bg-yellow-400 text-yellow-900 hover:bg-yellow-500 transition-colors cursor-pointer`}
-          >
-            Acessar
-          </button>
         </div>
       )}
-      {/* --- FIM DO CARD DE AVISO --- */}
+      {/* --- (FIM) BLOCO DE ALERTA ATUALIZADO --- */}
 
-      {/* Atalhos */}
+
+      {/* Atalhos (Corrigidos com 'navigate') */}
       <h3 className="text-xl font-semibold text-gray-700 pt-4 border-t mt-2">
         Atalhos Rápidos
       </h3>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
-        {/* Estes já tinham as classes de interação nos passos anteriores */}
+        
         <div
           className="bg-white p-4 md:p-6 rounded-lg shadow hover:shadow-lg transition-shadow flex flex-col items-center justify-center text-center cursor-pointer"
-          onClick={() => onNavigate('records')}
+          onClick={() => navigate('/patient-history')} // <-- Correto: Só navega
           title="Buscar histórico por paciente específico"
         >
           <span className="text-blue-500 w-10 h-10 mb-2">{icons.users}</span>
@@ -317,7 +386,7 @@ export function DashboardView({
         </div>
         <div
           className="bg-white p-4 md:p-6 rounded-lg shadow hover:shadow-lg transition-shadow flex flex-col items-center justify-center text-center cursor-pointer"
-          onClick={() => onNavigate('all_history')}
+          onClick={() => navigate('/reports-general')} // <-- Correto: Só navega (sem filtro)
           title="Ver todos os registros com filtros"
         >
           <span className="text-indigo-500 w-10 h-10 mb-2">
@@ -332,7 +401,7 @@ export function DashboardView({
         </div>
         <div
           className="bg-white p-4 md:p-6 rounded-lg shadow hover:shadow-lg transition-shadow flex flex-col items-center justify-center text-center cursor-pointer"
-          onClick={() => onNavigate('deliveries')}
+          onClick={() => navigate('/deliveries')} // <-- Correto: Só navega
           title="Ver registros atendidos na última semana"
         >
           <span className="text-green-500 w-10 h-10 mb-2">

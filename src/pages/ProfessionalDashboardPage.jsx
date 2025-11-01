@@ -1,34 +1,46 @@
+// src/pages/ProfessionalDashboardPage.jsx
+// (Botão "Cancelar" agora oculto para a role 'profissional')
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios'; 
 
-// --- Imports (Verifique se os caminhos estão corretos para sua estrutura) ---
+// --- Imports (Corrigidos) ---
 import { Modal, ConfirmModal } from '../components/common/Modal';
 import PatientForm from '../components/forms/PatientForm';
 import RecordForm from '../components/forms/RecordForm';
-import MedicationForm from '../components/forms/MedicationForm';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { AttendRecordModal } from '../components/common/AttendRecordModal';
-// import { RecentDeliveriesTab } from '../components/common/RecentDeliveriesTab'; // <- Removido, pois vamos construir a tabela aqui
+// Importando o seu novo modal de cancelamento
+import { CancelRecordModal } from '../components/common/CancelRecordModal';
 import { PatientRecordsTable } from '../components/common/PatientRecordsTable';
+import MedicationForm from '../components/forms/MedicationForm';
 import { icons } from '../utils/icons';
 import { getMedicationName } from '../utils/helpers';
 import { useDebounce } from '../hooks/useDebounce';
 
-// --- Componente da Página ---
+// --- URL BASE DA API ---
+const API_BASE_URL = 'http://localhost:5000/api'; 
+// -----------------------
+
+// --- Componente da Página Principal ---
 export default function ProfessionalDashboardPage({
   user,
   patients = [],
-  setPatients,
+  setPatients, 
   records = [],
-  setRecords,
+  setRecords, 
   medications = [],
-  setMedications,
+  setMedications, 
   addToast,
   addLog,
-  activeTabForced,
+  activeTabForced, // Esta prop vem da URL (via MainLayout)
 }) {
-  const navigate = useNavigate();
+  const navigate = useNavigate(); // Hook para mudar a URL
+  
+  // O currentView agora é um "espelho" do activeTabForced (URL)
   const [currentView, setCurrentView] = useState('dashboard');
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
@@ -42,6 +54,9 @@ export default function ProfessionalDashboardPage({
     onConfirm: null,
   });
   const [attendingRecord, setAttendingRecord] = useState(null);
+
+  // Novo estado para controlar o modal de cancelamento
+  const [cancelingRecord, setCancelingRecord] = useState(null);
 
   // --- Estados do 'Select com Busca' (Histórico) ---
   const [quickAddPatientId, setQuickAddPatientId] = useState('');
@@ -58,22 +73,21 @@ export default function ProfessionalDashboardPage({
   const dashQuickRef = useRef(null);
 
   // --- Estado do Filtro de Histórico ---
-  const [statusFilter, setStatusFilter] = useState('Todos'); // 'Todos', 'Pendente', 'Atendido', 'Cancelado'
-
-  // --- (NOVO) Estado do Alerta de Vencidos ---
-  const [isOverdueAlertVisible, setIsOverdueAlertVisible] = useState(true);
+  const [statusFilter, setStatusFilter] = useState('Todos'); 
 
   // --- Estados de Paginação ---
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(20); // 20 itens por página
+  const [itemsPerPage] = useState(20); 
 
   // --- Debounce ---
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const debouncedQuickSearchTerm = useDebounce(quickSearchTerm, 300);
-  // (NOVO)
   const debouncedDashQuickSearch = useDebounce(dashQuickSearch, 300);
 
+  // --- (CORREÇÃO) useEffect agora é a ÚNICA fonte da verdade para 'currentView' ---
   useEffect(() => {
+    // Sincroniza o estado interno com a URL
+    // As rotas do MainLayout (ex: /patients) definem o 'activeTabForced'
     setCurrentView(activeTabForced || 'dashboard');
   }, [activeTabForced]);
 
@@ -114,31 +128,36 @@ export default function ProfessionalDashboardPage({
     setCurrentPage(1);
   }, [statusFilter]);
 
-  // --- Função de Validação de Duplicidade ---
+  // --- Função de Sincronização de Estado (CRUCIAL) ---
+  const syncGlobalState = async (refetchFunction, errorMsg) => {
+    if (typeof refetchFunction === 'function') {
+        // Assume que as props setPatients, setRecords, setMedications são 
+        // funções assíncronas que buscam dados da API e atualizam o estado global.
+        await refetchFunction();
+    } else {
+        console.error(`Função de recarga não encontrada para ${errorMsg}.`);
+    }
+  };
+  // --- FIM FUNÇÃO SINCRONAÇÃO ---
+
+
+  // --- Função de Validação de Duplicidade (Manter como UX) ---
   const checkDuplicatePatient = ({ cpf, susCard, currentId }) => {
-    console.log(
-      `[Dashboard] checkDuplicatePatient INICIADO. CPF: ${cpf}, SUS: ${susCard}, Ignorando ID: ${currentId}`
-    );
     const isDuplicate =
       Array.isArray(patients) &&
       patients.some((patient) => {
-        if (patient.id === currentId) return false;
+        const currentPatientId = patient._id || patient.id; 
+
+        if (currentPatientId === currentId) return false;
+        
         const patientCPF = String(patient.cpf || '').replace(/\D/g, '');
         const cpfIsMatch = cpf && patientCPF && cpf === patientCPF;
         const patientSusCard = String(patient.susCard || '').replace(/\D/g, '');
         const susIsMatch =
           susCard && patientSusCard && susCard === patientSusCard;
-        if (cpfIsMatch || susIsMatch) {
-          console.log(
-            `[Dashboard] DUPLICADO ENCONTRADO! Comparando com Paciente ID: ${patient.id} (${patient.name}). CPF Match: ${cpfIsMatch}, SUS Match: ${susIsMatch}`
-          );
-          return true;
-        }
-        return false;
+        
+        return cpfIsMatch || susIsMatch;
       });
-    console.log(
-      `[Dashboard] checkDuplicatePatient FINALIZADO. Retornando: ${isDuplicate}`
-    );
     return isDuplicate;
   };
 
@@ -150,12 +169,20 @@ export default function ProfessionalDashboardPage({
       data: null,
       onConfirm: null,
     });
+  
   const getPatientNameById = (patientId) =>
     Array.isArray(patients)
-      ? patients.find((p) => p.id === patientId)?.name || 'Desconhecido'
+      ? patients.find((p) => (p._id || p.id) === patientId)?.name || 'Desconhecido'
       : 'Desconhecido';
 
-  // --- Memos ---
+  // 🚨 FUNÇÃO CORRIGIDA PARA FLICKERING E ESCOPO
+  const handleEditPatient = (patient) => {
+    // Garante que a edição não altere a lista original no estado 'patients'.
+    setEditingPatient(patient ? JSON.parse(JSON.stringify(patient)) : null); 
+    setIsPatientModalOpen(true);
+  };
+  
+  // --- Memos (Mantidos) ---
   const filteredPatients = useMemo(
     () =>
       Array.isArray(patients)
@@ -174,15 +201,17 @@ export default function ProfessionalDashboardPage({
   );
 
   const patientRecords = useMemo(() => {
-    if (!selectedPatient?.id || !Array.isArray(records)) return [];
+    const targetId = selectedPatient?._id || selectedPatient?.id;
+    if (!targetId || !Array.isArray(records)) return [];
+    
     return records
-      .filter((r) => r.patientId === selectedPatient.id)
+      .filter((r) => r.patientId === targetId)
       .sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate));
   }, [records, selectedPatient]);
 
   const pendingRecords = useMemo(
     () =>
-      Array.isArray(records)
+      Array.isArray(records) 
         ? records
             .filter((r) => r.status === 'Pendente')
             .sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate))
@@ -219,20 +248,6 @@ export default function ProfessionalDashboardPage({
     [patients, debouncedDashQuickSearch]
   );
 
-  // (NOVO) Memo para calcular registros pendentes vencidos
-  const overduePendingRecords = useMemo(() => {
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    thirtyDaysAgo.setHours(0, 0, 0, 0); // Normaliza para o início do dia
-
-    return Array.isArray(records)
-      ? records.filter((r) => {
-          const entryDate = new Date(r.entryDate);
-          return r.status === 'Pendente' && entryDate < thirtyDaysAgo;
-        })
-      : [];
-  }, [records]);
-
   const filteredRecords = useMemo(() => {
     const sorted = records.sort(
       (a, b) => new Date(b.entryDate) - new Date(a.entryDate)
@@ -250,181 +265,261 @@ export default function ProfessionalDashboardPage({
 
   const currentRecords = useMemo(() => {
     const indexOfLastItem = currentPage * itemsPerPage;
-    // CORREÇÃO APLICADA: Usando indexOfLastItem
     const indexOfFirstItem = indexOfLastItem - itemsPerPage; 
     return filteredRecords.slice(indexOfFirstItem, indexOfLastItem);
   }, [filteredRecords, currentPage, itemsPerPage]);
 
-  // --- NOVO MEMO (Filtro de 1 Semana para Entregas) ---
+  // --- NOVO MEMO (Filtro de 1 Semana para Entregas) - [CORRIGIDO] ---
   const recentDeliveries = useMemo(() => {
-    const oneWeekAgo = new Date();
-    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    oneWeekAgo.setHours(0, 0, 0, 0); // Começo do dia, 7 dias atrás
-
-    return Array.isArray(records)
-      ? records
-          .filter(
-            (r) =>
-              r.status === 'Atendido' &&
-              r.deliveryDate && // Garante que a data existe
-              new Date(r.deliveryDate + 'T00:00:00') >= oneWeekAgo // Compara datas (adiciona hora para evitar problemas de fuso)
-          )
-          .sort((a, b) => new Date(b.deliveryDate) - new Date(a.deliveryDate)) // Ordena pela data de entrega, mais recente primeiro
-      : [];
-  }, [records]);
-
-  // --- Funções CRUD ---
-  const handleSavePatient = (patientData) => {
-    console.log('[Dashboard] handleSavePatient CHAMADO com:', patientData);
-    let message = '';
-    if (patientData.id) {
-      setPatients((prev) =>
-        Array.isArray(prev)
-          ? prev.map((p) =>
-              p.id === patientData.id ? { ...p, ...patientData } : p
-            )
-          : [patientData]
-      );
-      message = 'Paciente atualizado com sucesso!';
-      addLog?.(user?.name, `atualizou dados do paciente ${patientData.name}`);
-    } else {
-      const newPatient = {
-        ...patientData,
-        id: Date.now(),
-        createdAt: new Date().toISOString().slice(0, 10),
-        status: 'Ativo',
-      };
-      setPatients((prev) =>
-        Array.isArray(prev)
-          ? [...prev, newPatient].sort((a, b) => a.name.localeCompare(b.name))
-          : [newPatient]
-      );
-      message = 'Paciente cadastrado com sucesso!';
-      addLog?.(user?.name, `cadastrou novo paciente ${newPatient.name}`);
-    }
-    addToast(message, 'success');
-    setIsPatientModalOpen(false);
-    setEditingPatient(null);
-  };
-  const handleDeletePatient = (patientId) => {
-    const patient = Array.isArray(patients)
-      ? patients.find((p) => p.id === patientId)
-      : null;
-    setPatients((prev) =>
-      Array.isArray(prev) ? prev.filter((p) => p.id !== patientId) : []
-    );
-    if (selectedPatient?.id === patientId) setSelectedPatient(null);
-    addToast('Paciente excluído!', 'success');
-    addLog?.(user?.name, `excluiu o paciente ${patient?.name}`);
-  };
-  const handleDeleteRecord = (recordId) => {
-    const record = Array.isArray(records)
-      ? records.find((r) => r.id === recordId)
-      : null;
-    setRecords((prev) =>
-      Array.isArray(prev) ? prev.filter((r) => r.id !== recordId) : []
-    );
-    addToast('Registro excluído!', 'success');
-    addLog?.(
-      user?.name,
-      `excluiu registro de ${getPatientNameById(record?.patientId)}`
-    );
-  };
-  const handleSaveRecord = (recordData) => {
-    let message = '';
-    const patientName = getPatientNameById(recordData.patientId);
-    if (recordData.id) {
-      setRecords((prev) =>
-        Array.isArray(prev)
-          ? prev.map((r) =>
-              r.id === recordData.id ? { ...r, ...recordData } : r
-            )
-          : [recordData]
-      );
-      message = 'Registro atualizado!';
-      addLog?.(user?.name, `atualizou registro para ${patientName}`);
-    } else {
-      const newRecord = {
-        ...recordData,
-        id: Date.now(),
-        entryDate: new Date().toISOString(),
-      };
-      setRecords((prev) =>
-        Array.isArray(prev) ? [...prev, newRecord] : [newRecord]
-      );
-      message = 'Registro salvo!';
-      addLog?.(user?.name, `criou registro para ${patientName}`);
-    }
-    addToast(message, 'success');
-    setIsRecordModalOpen(false);
-    setEditingRecord(null);
-
-    // Limpa o select do Histórico
-    setQuickAddPatientId('');
-    setSelectedPatientName('');
-    setQuickSearchTerm('');
-
-    // (NOVO) Limpa o select do Dashboard
-    setDashQuickPatientId('');
-    setDashQuickPatientName('');
-    setDashQuickSearch('');
-  };
-  const handleAddNewMedication = (medData) => {
-    const newMed = {
-      id: Date.now(),
-      name: medData.name,
-      createdAt: new Date().toISOString().slice(0, 10),
+    const parseDateAsUTC = (dateString) => {
+      if (!dateString || !/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+        return null;
+      }
+      const [year, month, day] = dateString.split('-').map(Number);
+      return new Date(Date.UTC(year, month - 1, day));
     };
-    setMedications((prev) =>
-      Array.isArray(prev)
-        ? [...prev, newMed].sort((a, b) => a.name.localeCompare(b.name))
-        : [newMed]
-    );
-    addToast('Medicação cadastrada!', 'success');
-    addLog?.(user?.name, `cadastrou medicação: ${newMed.name}`);
-    return newMed;
+
+    const todayUTC = new Date();
+    todayUTC.setUTCHours(0, 0, 0, 0);
+
+    const oneWeekAgoUTC = new Date(todayUTC);
+    oneWeekAgoUTC.setUTCDate(todayUTC.getUTCDate() - 7);
+
+    if (!Array.isArray(records)) {
+      return [];
+    }
+    
+    return records
+      .filter((r) => {
+        if (r.status !== 'Atendido' || !r.deliveryDate) {
+          return false;
+        }
+        const deliveryDateUTC = parseDateAsUTC(r.deliveryDate);
+        return deliveryDateUTC && deliveryDateUTC >= oneWeekAgoUTC;
+      })
+      .sort((a, b) => {
+        const dateA = parseDateAsUTC(a.deliveryDate);
+        const dateB = parseDateAsUTC(b.deliveryDate);
+        return dateB - dateA;
+      });
+  }, [records]);
+  // --- FIM DO MEMO CORRIGIDO ---
+
+
+  // --- Funções CRUD (REESCRITAS PARA API) ---
+  
+  // 1. SALVAR PACIENTE (CREATE/UPDATE)
+  const handleSavePatient = async (patientData) => {
+    try {
+        let response;
+        const patientId = patientData._id || patientData.id; 
+        const patientName = patientData.name;
+        
+        const payload = {
+            name: patientName,
+            cpf: patientData.cpf,
+            susCard: patientData.susCard,
+            observations: patientData.observations,
+            generalNotes: patientData.generalNotes,
+            status: patientData.status,
+        };
+
+        if (patientId && patientId !== 'new') {
+            // Atualização (PUT)
+            response = await axios.put(`${API_BASE_URL}/patients/${patientId}`, payload);
+            addToast('Paciente atualizado com sucesso!', 'success');
+            addLog?.(user?.name, `atualizou dados do paciente ${patientName}`);
+        } else {
+            // Criação (POST)
+            response = await axios.post(`${API_BASE_URL}/patients`, payload);
+            addToast('Paciente cadastrado com sucesso!', 'success');
+            addLog?.(user?.name, `cadastrou novo paciente ${patientName}`);
+        }
+        
+        await syncGlobalState(setPatients, 'pacientes');
+        
+        const updatedPatient = response.data;
+        setSelectedPatient(updatedPatient);
+
+
+    } catch (error) {
+        console.error('[API Error] Salvar Paciente:', error);
+        const msg = error.response?.data?.message || 'Erro ao salvar paciente. Tente novamente.';
+        addToast(msg, 'error');
+        
+    } finally {
+        setIsPatientModalOpen(false);
+        setEditingPatient(null);
+    }
   };
-  const handleUpdateRecordStatus = (recordId, deliveryDateStr) => {
+  
+  // 2. EXCLUIR PACIENTE (DELETE)
+  const handleDeletePatient = async (patientId) => {
+    const patient = patients.find((p) => (p._id || p.id) === patientId);
+    
+    try {
+        await axios.delete(`${API_BASE_URL}/patients/${patientId}`);
+        
+        addToast('Paciente excluído!', 'success');
+        addLog?.(user?.name, `excluiu o paciente ${patient?.name}`);
+
+        await syncGlobalState(setPatients, 'pacientes');
+        
+        setSelectedPatient(null);
+        
+    } catch (error) {
+        console.error('[API Error] Excluir Paciente:', error);
+        addToast('Falha ao excluir paciente. Pode haver registros associados.', 'error');
+    }
+  };
+  
+  // 3. SALVAR REGISTRO (CREATE/UPDATE)
+  const handleSaveRecord = async (recordData) => {
+    try {
+        let response;
+        const recordId = recordData._id || recordData.id; 
+        const patientName = getPatientNameById(recordData.patientId);
+        
+        const professionalIdentifier = user?._id || user?.id;
+        if (!professionalIdentifier) {
+            throw new Error("ID do profissional não encontrado.");
+        }
+
+        const payload = {
+            patientId: recordData.patientId, 
+            professionalId: professionalIdentifier, // ID do usuário logado
+            medications: recordData.medications, // Array de subdocumentos
+            referenceDate: recordData.referenceDate,
+            observation: recordData.observation,
+            totalValue: recordData.totalValue,
+            status: recordData.status || 'Pendente',
+        };
+
+        if (recordId && recordId !== 'new') {
+            // Atualização (PUT)
+            response = await axios.put(`${API_BASE_URL}/records/${recordId}`, payload); 
+            addToast('Registro atualizado!', 'success');
+            addLog?.(user?.name, `atualizou registro para ${patientName}`);
+        } else {
+            // Criação (POST)
+            response = await axios.post(`${API_BASE_URL}/records`, payload);
+            addToast('Registro salvo!', 'success');
+            addLog?.(user?.name, `criou registro para ${patientName}`);
+        }
+
+        await syncGlobalState(setRecords, 'registros');
+
+    } catch (error) {
+        console.error('[API Error] Salvar Registro:', error); 
+        const msg = error.response?.data?.message || 'Erro ao salvar registro. Verifique os dados.';
+        addToast(msg, 'error');
+        
+    } finally {
+        setIsRecordModalOpen(false);
+        setEditingRecord(null);
+
+        setQuickAddPatientId('');
+        setSelectedPatientName('');
+        setQuickSearchTerm('');
+        setDashQuickPatientId('');
+        setDashQuickPatientName('');
+        setDashQuickSearch('');
+    }
+  };
+  
+  // 4. EXCLUIR REGISTRO (DELETE)
+  const handleDeleteRecord = async (recordId) => {
+    const record = records.find((r) => (r._id || r.id) === recordId);
+    
+    try {
+        await axios.delete(`${API_BASE_URL}/records/${recordId}`);
+        
+        addToast('Registro excluído!', 'success');
+        addLog?.(user?.name, `excluiu registro de ${getPatientNameById(record?.patientId)}`);
+        
+        await syncGlobalState(setRecords, 'registros');
+        
+    } catch (error) {
+        console.error('[API Error] Excluir Registro:', error);
+        addToast('Falha ao excluir registro. Tente novamente.', 'error');
+    }
+  };
+  
+  // 5. CADASTRAR NOVA MEDICAÇÃO (CRIAÇÃO RÁPIDA)
+  const handleAddNewMedication = async (medData) => {
+    try {
+        const response = await axios.post(`${API_BASE_URL}/medications`, { name: medData.name.trim() });
+        const newMed = response.data;
+
+        addToast('Medicação cadastrada!', 'success');
+        addLog?.(user?.name, `cadastrou medicação: ${newMed.name}`);
+        
+        await syncGlobalState(setMedications, 'medicações');
+        
+        return newMed; 
+        
+    } catch (error) {
+        console.error('[API Error] Nova Medicação:', error);
+        const msg = error.response?.data?.message || 'Erro ao cadastrar medicação.';
+        addToast(msg, 'error');
+        return null;
+    }
+  };
+  
+  // 6. ATUALIZAR STATUS (ATENDIMENTO)
+  const handleUpdateRecordStatus = async (recordId, deliveryDateStr) => {
     if (!deliveryDateStr) {
       addToast('Selecione uma data.', 'error');
       return;
     }
-    setRecords((prev) =>
-      Array.isArray(prev)
-        ? prev.map((r) =>
-            r.id === recordId
-              ? { ...r, status: 'Atendido', deliveryDate: deliveryDateStr }
-              : r
-          )
-        : []
-    );
-    addToast('Registro Atendido!', 'success');
-    addLog?.(user?.name, `marcou registro (ID: ${recordId}) como Atendido`);
-    setAttendingRecord(null);
-  };
-  const handleCancelRecordStatus = (recordId) => {
-    setRecords((prev) =>
-      Array.isArray(prev)
-        ? prev.map((r) =>
-            r.id === recordId
-              ? { ...r, status: 'Cancelado', deliveryDate: null }
-              : r
-          )
-        : []
-    );
-    addToast('Registro Cancelado.', 'info');
-    addLog?.(user?.name, `marcou registro (ID: ${recordId}) como Cancelado`);
+
+    try {
+        await axios.patch(`${API_BASE_URL}/records/${recordId}/status`, { 
+            status: 'Atendido', 
+            deliveryDate: deliveryDateStr 
+        });
+
+        addToast('Registro Atendido!', 'success');
+        addLog?.(user?.name, `marcou registro (ID: ${recordId}) como Atendido`);
+        
+        await syncGlobalState(setRecords, 'registros');
+
+    } catch (error) {
+        console.error('[API Error] Atualizar Status:', error);
+        addToast('Falha ao atualizar status. Tente novamente.', 'error');
+    } finally {
+        setAttendingRecord(null);
+    }
   };
 
-  // --- Funções UI ---
-  const handleViewPatientHistory = (patientId) => {
-    const patient = Array.isArray(patients)
-      ? patients.find((p) => p.id === patientId)
-      : null;
-    if (patient) {
-      setSelectedPatient(patient);
-      setCurrentView('patients');
+  // --- (INÍCIO DA CORREÇÃO 3) ---
+  // A função agora aceita 'cancelReason' e o passa para a API
+  const handleCancelRecordStatus = async (recordId, cancelReason) => {
+    try {
+        await axios.patch(`${API_BASE_URL}/records/${recordId}/status`, { 
+            status: 'Cancelado', 
+            deliveryDate: null,
+            cancelReason: cancelReason // <-- Envia o motivo para a API
+        });
+
+        addToast('Registro Cancelado.', 'info');
+        // Adiciona o motivo ao log
+        addLog?.(user?.name, `cancelou registro (ID: ${recordId}). Motivo: ${cancelReason}`);
+        
+        await syncGlobalState(setRecords, 'registros');
+
+    } catch (error) {
+        console.error('[API Error] Cancelar Status:', error);
+        addToast('Falha ao cancelar status. Tente novamente.', 'error');
     }
+    // (O 'finally' foi removido daqui e será tratado pelo modal)
+  };
+  // --- (FIM DA CORREÇÃO 3) ---
+
+  // --- Funções UI (Mantidas) ---
+  const handleViewPatientHistory = (patientId) => {
+    // Esta função agora deve NAVEGAR
+    navigate('/patients');
   };
   const handleQuickAddRecord = (e, patient) => {
     e.stopPropagation();
@@ -436,7 +531,7 @@ export default function ProfessionalDashboardPage({
   const openQuickAddModal = () => {
     if (quickAddPatientId) {
       const patient = Array.isArray(patients)
-        ? patients.find((p) => p.id === parseInt(quickAddPatientId))
+        ? patients.find((p) => (p._id || p.id) === (quickAddPatientId))
         : null;
       if (patient) {
         setSelectedPatient(patient);
@@ -454,14 +549,13 @@ export default function ProfessionalDashboardPage({
   const openDashQuickAddModal = () => {
     if (dashQuickPatientId) {
       const patient = Array.isArray(patients)
-        ? patients.find((p) => p.id === parseInt(dashQuickPatientId))
+        ? patients.find((p) => (p._id || p.id) === (dashQuickPatientId))
         : null;
       if (patient) {
         setSelectedPatient(patient);
         setEditingRecord(null);
         setIsRecordModalOpen(true);
 
-        // Limpar o select do dashboard após abrir
         setDashQuickPatientId('');
         setDashQuickPatientName('');
         setDashQuickSearch('');
@@ -473,120 +567,90 @@ export default function ProfessionalDashboardPage({
     }
   };
 
-  // --- Renderização Condicional ---
+
+  // --- Renderização Condicional (CORRIGIDA) ---
   const renderCurrentView = () => {
     switch (currentView) {
-      // VISÃO: DASHBOARD (ALTERADO)
       case 'dashboard':
         return (
-          <div className="space-y-6 animate-fade-in">
+          // --- (INÍCIO) SEÇÃO DO DASHBOARD REDESENHADA ---
+          <div className="space-y-8 animate-fade-in">
+            
+            {/* Título */}
             <h2 className="text-2xl md:text-3xl font-bold text-gray-800">
               Dashboard Profissional
             </h2>
-
-            {/* --- (NOVO) Alerta de Registros Vencidos --- */}
-            {overduePendingRecords.length > 0 && isOverdueAlertVisible && (
-              <div
-                className="bg-red-100 border-l-4 border-red-500 text-red-800 p-4 rounded-lg shadow-md flex justify-between items-center"
-                role="alert"
+            
+            {/* Grid de Cards com Novo Visual e 'navigate' */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6">
+              
+              {/* Card 1: Entradas Pendentes (CORRIGIDO: usa navigate) */}
+              <div 
+                className="bg-yellow-100 text-yellow-900 p-5 rounded-lg shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer"
+                onClick={() => navigate('/history')} // <-- Sincronizado com o menu da esquerda
               >
-                <div>
-                  <p className="font-bold">Atenção!</p>
-                  <p className="text-sm">
-                    Você tem {overduePendingRecords.length}{' '}
-                    {overduePendingRecords.length === 1
-                      ? 'registro pendente'
-                      : 'registros pendentes'}{' '}
-                    há mais de 30 dias.
-                  </p>
-                  <button
-                    onClick={() => {
-                      setStatusFilter('Pendente'); // Pré-filtra o histórico
-                      setCurrentView('historico');
-                    }}
-                    className="text-sm text-blue-600 hover:underline font-medium mt-1 cursor-pointer transition-colors"
-                  >
-                    Ver registros pendentes
-                  </button>
+                <div className="flex items-center gap-3">
+                  <span className="text-yellow-500 bg-white p-2 rounded-full">
+                    {icons.clipboard || (<span></span>)}
+                  </span>
+                  <h3 className="text-lg font-semibold">
+                    Entradas Pendentes
+                  </h3>
                 </div>
-                <button
-                  onClick={() => setIsOverdueAlertVisible(false)}
-                  className="p-1 text-red-600 hover:bg-red-200 rounded-full cursor-pointer transition-colors"
-                  title="Dispensar"
-                >
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
-              </div>
-            )}
-            {/* --- Fim do Alerta --- */}
-
-            {/* Grid alterado para 4 colunas em telas grandes */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-              {/* Card Pendentes (Estilizado) */}
-              <div className="bg-white p-4 md:p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow border-l-4 border-yellow-500 cursor-pointer"
-                   onClick={() => setCurrentView('historico')}>
-                <h3 className="text-lg font-semibold text-yellow-800">
-                  Entradas Pendentes
-                </h3>
-                <p className="text-3xl font-bold mt-2 text-yellow-600">
+                <p className="text-4xl font-bold mt-3 text-yellow-800">
                   {pendingRecords.length}
                 </p>
-                <button
-                  onClick={(e) => { e.stopPropagation(); setCurrentView('historico'); }}
-                  className="text-sm text-blue-600 hover:underline mt-2 transition-colors"
-                >
+                <p className="text-sm text-yellow-700 hover:underline mt-2">
                   Ver Entradas
-                </button>
-              </div>
-              {/* Card Pacientes (Estilizado) */}
-              <div className="bg-white p-4 md:p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow border-l-4 border-blue-500 cursor-pointer"
-                   onClick={() => setCurrentView('patients')}>
-                <h3 className="text-lg font-semibold text-blue-800">
-                  Total de Pacientes
-                </h3>
-                <p className="text-3xl font-bold mt-2 text-blue-600">
-                  {patients.length}
                 </p>
-                <button
-                  onClick={(e) => { e.stopPropagation(); setCurrentView('patients'); }}
-                  className="text-sm text-blue-600 hover:underline mt-2 transition-colors"
-                >
-                  Gerenciar Pacientes
-                </button>
-              </div>
-              {/* Card Entregas (NOVO) */}
-              <div className="bg-white p-4 md:p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow border-l-4 border-green-500 cursor-pointer"
-                   onClick={() => setCurrentView('deliveries')}>
-                <h3 className="text-lg font-semibold text-green-800">
-                  Entregas da Semana
-                </h3>
-                <p className="text-3xl font-bold mt-2 text-green-600">
-                  {recentDeliveries.length}
-                </p>
-                <button
-                  onClick={(e) => { e.stopPropagation(); setCurrentView('deliveries'); }}
-                  className="text-sm text-blue-600 hover:underline mt-2 transition-colors"
-                >
-                  Ver Entregas
-                </button>
               </div>
 
-              {/* Ação Rápida: Novo Registro (NOVO CARD) */}
+              {/* Card 2: Total de Pacientes (CORRIGIDO: usa navigate) */}
+              <div 
+                className="bg-blue-100 text-blue-900 p-5 rounded-lg shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer"
+                onClick={() => navigate('/patients')} // <-- Sincronizado com o menu da esquerda
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-blue-500 bg-white p-2 rounded-full">
+                    {icons.users || (<span></span>)}
+                  </span>
+                  <h3 className="text-lg font-semibold">
+                    Total de Pacientes
+                  </h3>
+                </div>
+                <p className="text-4xl font-bold mt-3 text-blue-800">
+                  {patients.length}
+                </p>
+                <p className="text-sm text-blue-700 hover:underline mt-2">
+                  Gerenciar Pacientes
+                </p>
+              </div>
+
+              {/* Card 3: Entregas da Semana (CORRIGIDO: usa navigate) */}
+              <div 
+                className="bg-green-100 text-green-900 p-5 rounded-lg shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer"
+                onClick={() => navigate('/deliveries')} // <-- Sincronizado com o menu da esquerda
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-green-500 bg-white p-2 rounded-full">
+                    {icons.check || (<span></span>)}
+                  </span>
+                  <h3 className="text-lg font-semibold">
+                    Entregas da Semana
+                  </h3>
+                </div>
+                <p className="text-4xl font-bold mt-3 text-green-800">
+                  {recentDeliveries.length}
+                </p>
+                <p className="text-sm text-green-700 hover:underline mt-2">
+                  Ver Entregas
+                </p>
+              </div>
+
+              {/* Card 4: Registro Rápido (Visual Sutil) */}
               <div
-                className="bg-white p-4 md:p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow border-l-4 border-indigo-500 flex flex-col justify-center gap-3"
-                ref={dashQuickRef} // (NOVO) Usa a ref do dashboard
+                className="bg-white p-5 rounded-lg shadow-lg hover:shadow-xl border-l-8 border-indigo-500 transition-all duration-300 flex flex-col justify-center gap-3"
+                ref={dashQuickRef} 
               >
                 <h3 className="text-lg font-semibold text-indigo-800 mb-1">
                   Registro Rápido
@@ -596,58 +660,57 @@ export default function ProfessionalDashboardPage({
                 <div className="relative flex-grow w-full">
                   <button
                     type="button"
-                    onClick={() => setIsDashQuickOpen((prev) => !prev)} // (NOVO)
-                    className="w-full p-2 pl-3 pr-10 border rounded-lg text-sm bg-white text-left flex justify-between items-center cursor-pointer hover:border-blue-500 transition-colors"
+                    onClick={() => setIsDashQuickOpen((prev) => !prev)} 
+                    className="w-full p-2 pl-3 pr-10 border rounded-lg text-sm bg-gray-50 text-left flex justify-between items-center cursor-pointer hover:border-indigo-500 transition-colors"
                   >
                     <span
                       className={
-                        dashQuickPatientId ? 'text-gray-900' : 'text-gray-500' // (NOVO)
+                        dashQuickPatientId ? 'text-gray-900' : 'text-gray-500' 
                       }
                     >
                       {dashQuickPatientName || 'Selecione um paciente...'}
-                      {/* (NOVO) */}
                     </span>
                     <span className="absolute right-3 top-2.5 text-gray-400 text-xs">
                       &#9660;
                     </span>
                   </button>
 
-                  {isDashQuickOpen && ( // (NOVO)
+                  {isDashQuickOpen && ( 
                     <div className="absolute z-10 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-60 flex flex-col">
                       <div className="p-2 border-b sticky top-0 bg-white">
                         <input
                           type="text"
                           placeholder="Buscar paciente..."
-                          className="w-full p-2 border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          value={dashQuickSearch} // (NOVO)
-                          onChange={(e) => setDashQuickSearch(e.target.value)} // (NOVO)
+                          className="w-full p-2 border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          value={dashQuickSearch} 
+                          onChange={(e) => setDashQuickSearch(e.target.value)} 
                           autoFocus
                         />
                       </div>
 
                       <div className="overflow-y-auto">
                         <div
-                          className="p-2 text-sm text-gray-500 hover:bg-blue-100 cursor-pointer transition-colors"
+                          className="p-2 text-sm text-gray-500 hover:bg-indigo-50 cursor-pointer transition-colors"
                           onClick={() => {
-                            setDashQuickPatientId(''); // (NOVO)
-                            setDashQuickPatientName('Selecione um paciente...'); // (NOVO)
-                            setIsDashQuickOpen(false); // (NOVO)
-                            setDashQuickSearch(''); // (NOVO)
+                            setDashQuickPatientId(''); 
+                            setDashQuickPatientName('Selecione um paciente...'); 
+                            setIsDashQuickOpen(false); 
+                            setDashQuickSearch(''); 
                           }}
                         >
                           -- Limpar seleção --
                         </div>
 
-                        {dashQuickFilteredPatients.length > 0 ? ( // (NOVO)
-                          dashQuickFilteredPatients.map((p) => ( // (NOVO)
+                        {dashQuickFilteredPatients.length > 0 ? ( 
+                          dashQuickFilteredPatients.map((p) => ( 
                             <div
-                              key={p.id}
-                              className="p-2 text-sm hover:bg-blue-100 cursor-pointer transition-colors"
+                              key={p._id || p.id}
+                              className="p-2 text-sm hover:bg-indigo-50 cursor-pointer transition-colors"
                               onClick={() => {
-                                setDashQuickPatientId(String(p.id)); // (NOVO)
-                                setDashQuickPatientName(p.name); // (NOVO)
-                                setIsDashQuickOpen(false); // (NOVO)
-                                setDashQuickSearch(''); // (NOVO)
+                                setDashQuickPatientId(String(p._id || p.id)); 
+                                setDashQuickPatientName(p.name); 
+                                setIsDashQuickOpen(false); 
+                                setDashQuickSearch(''); 
                               }}
                             >
                               {p.name}
@@ -665,21 +728,73 @@ export default function ProfessionalDashboardPage({
 
                 {/* Botão de Adicionar (Dashboard) */}
                 <button
-                  onClick={openDashQuickAddModal} // (NOVO)
-                  disabled={!dashQuickPatientId} // (NOVO)
-                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 text-sm font-medium cursor-pointer transition-colors"
+                  onClick={openDashQuickAddModal} 
+                  disabled={!dashQuickPatientId} 
+                  className="w-full flex items-center justify-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 text-sm font-medium cursor-pointer transition-colors"
                 >
-                  <span className="inline-block mr-1">+</span> Adicionar
+                  <span className="w-4 h-4">{icons.plus}</span> Adicionar
                   Registro
                 </button>
               </div>
             </div>
+
+            {/* --- Seção de Atalhos Rápidos (com 'navigate') --- */}
+            <div className="pt-6 border-t">
+              <h3 className="text-xl font-semibold text-gray-700 mb-4">
+                Atalhos Rápidos
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                
+                {/* Atalho 1: Gerenciar Pacientes (CORRIGIDO: usa navigate) */}
+                <button
+                  onClick={() => navigate('/patients')} // <-- Sincronizado
+                  className="p-5 bg-white rounded-lg shadow-lg hover:shadow-xl hover:bg-gray-50 transition-all duration-300 flex items-center gap-4 text-left"
+                >
+                  <span className="p-3 bg-blue-100 text-blue-600 rounded-full">
+                    {icons.users || <span></span>}
+                  </span>
+                  <div>
+                    <p className="text-base font-semibold text-gray-900">Gerenciar Pacientes</p>
+                    <p className="text-sm text-gray-500">Ver lista e editar pacientes</p>
+                  </div>
+                </button>
+
+                {/* Atalho 2: Histórico Geral (CORRIGIDO: usa navigate) */}
+                <button
+                  onClick={() => navigate('/history')} // <-- Sincronizado
+                  className="p-5 bg-white rounded-lg shadow-lg hover:shadow-xl hover:bg-gray-50 transition-all duration-300 flex items-center gap-4 text-left"
+                >
+                  <span className="p-3 bg-purple-100 text-purple-600 rounded-full">
+                    {icons.history || <span></span>}
+                  </span>
+                  <div>
+                    <p className="text-base font-semibold text-gray-900">Histórico Geral</p>
+                    <p className="text-sm text-gray-500">Ver todos os registros</p>
+                  </div>
+                </button>
+
+                {/* Atalho 3: Registro Rápido (ALTERADO) */}
+                <button
+                  onClick={() => navigate('/history')} // <-- Leva para o histórico (onde está o form rápido)
+                  className="p-5 bg-white rounded-lg shadow-lg hover:shadow-xl hover:bg-gray-50 transition-all duration-300 flex items-center gap-4 text-left"
+                >
+                  <span className="p-3 bg-indigo-100 text-indigo-600 rounded-full"> 
+                    {icons.clipboard || <span></span>} 
+                  </span>
+                  <div>
+                    <p className="text-base font-semibold text-gray-900">Registro Rápido</p> 
+                    <p className="text-sm text-gray-500">Adicionar um novo registro</p>
+                  </div>
+                </button>
+
+              </div>
+            </div>
+            
           </div>
+          // --- (FIM) SEÇÃO DO DASHBOARD REDESENHADA ---
         );
-      // VISÃO: PACIENTES (Estilizado)
       case 'patients':
         return (
-          // --- Altura aumentada ---
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-8rem)] animate-fade-in">
             {/* Coluna da Esquerda (Lista) */}
             <div className="lg:col-span-1 bg-white rounded-lg shadow-md p-4 flex flex-col min-h-0">
@@ -699,10 +814,7 @@ export default function ProfessionalDashboardPage({
                 </div>
               </div>
               <button
-                onClick={() => {
-                  setEditingPatient(null);
-                  setIsPatientModalOpen(true);
-                }}
+                onClick={() => handleEditPatient(null)} // Novo Paciente (null)
                 className="w-full flex items-center justify-center gap-2 mb-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm cursor-pointer transition-colors"
               >
                 <span className="w-4 h-4">{icons.plus}</span> Novo Paciente
@@ -721,10 +833,7 @@ export default function ProfessionalDashboardPage({
                       Parece que você ainda não cadastrou nenhum paciente.
                     </p>
                     <button
-                      onClick={() => {
-                        setEditingPatient(null);
-                        setIsPatientModalOpen(true);
-                      }}
+                      onClick={() => handleEditPatient(null)} // Novo Paciente
                       className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium cursor-pointer transition-colors"
                     >
                       Cadastrar primeiro paciente
@@ -749,9 +858,9 @@ export default function ProfessionalDashboardPage({
                 ) : (
                   filteredPatients.map((patient) => (
                     <div
-                      key={patient.id}
+                      key={patient._id || patient.id}
                       className={`p-3 rounded-lg cursor-pointer mb-2 border transition-colors ${
-                        selectedPatient?.id === patient.id
+                        (selectedPatient?._id || selectedPatient?.id) === (patient._id || patient.id)
                           ? 'bg-blue-100 border-blue-400'
                           : 'hover:bg-blue-50 border-gray-200'
                       }`}
@@ -765,7 +874,7 @@ export default function ProfessionalDashboardPage({
                     >
                       <div className="flex justify-between items-center">
                         <p
-                          className={`text-sm truncate ${selectedPatient?.id === patient.id ? 'font-semibold text-blue-900' : 'font-medium text-gray-800'}`}
+                          className={`text-sm truncate ${selectedPatient?._id === patient._id ? 'font-semibold text-blue-900' : 'font-medium text-gray-800'}`}
                         >
                           {patient.name}
                         </p>
@@ -795,7 +904,7 @@ export default function ProfessionalDashboardPage({
                 <>
                   <div className="flex justify-between items-start mb-4 pb-4 border-b border-gray-200">
                     <div>
-                      <h2 className="text-xl md:text-2xl font-bold text-gray-800">
+                      <h2 className="text-xl md::text-2xl font-bold text-gray-800">
                         {selectedPatient?.name || 'Nome Indisponível'}
                       </h2>
                       <div className="mt-2 space-y-1 text-sm text-gray-600">
@@ -831,10 +940,7 @@ export default function ProfessionalDashboardPage({
                     </div>
                     <div className="flex gap-2 flex-shrink-0">
                       <button
-                        onClick={() => {
-                          setEditingPatient(selectedPatient);
-                          setIsPatientModalOpen(true);
-                        }}
+                        onClick={() => handleEditPatient(selectedPatient)} 
                         className="p-2 text-gray-600 hover:text-blue-600 hover:bg-gray-100 rounded-md cursor-pointer transition-colors"
                         title="Editar Paciente"
                       >
@@ -844,11 +950,10 @@ export default function ProfessionalDashboardPage({
                         onClick={() =>
                           setConfirmation({
                             isOpen: true,
-                            // --- ALTERAÇÃO AQUI: Nova mensagem de alerta ---
                             message: `Tem certeza? Excluir ${selectedPatient?.name} é uma ação PERMANENTE e não pode ser desfeita.`,
-                            // --- FIM DA ALTERAÇÃO ---
                             onConfirm: () =>
-                              handleDeletePatient(selectedPatient.id),
+                              handleDeletePatient(selectedPatient._id || selectedPatient.id),
+                            data: (selectedPatient._id || selectedPatient.id) // Passando o ID aqui
                           })
                         }
                         className="p-2 text-gray-600 hover:text-red-600 hover:bg-gray-100 rounded-md cursor-pointer transition-colors"
@@ -902,7 +1007,7 @@ export default function ProfessionalDashboardPage({
       // VISÃO: HISTÓRICO (Estilizado)
       case 'historico':
         return (
-          // --- Altura aumentada ---
+          // ... (Seu código da aba Histórico)
           <div className="bg-white rounded-lg shadow-md p-4 md:p-6 animate-fade-in flex flex-col h-[calc(100vh-8rem)]">
             <h2 className="text-xl md:text-2xl font-bold mb-4 text-gray-800">
               Histórico Geral de Entradas
@@ -966,10 +1071,10 @@ export default function ProfessionalDashboardPage({
                         {quickFilteredPatients.length > 0 ? (
                           quickFilteredPatients.map((p) => (
                             <div
-                              key={p.id}
+                              key={p._id || p.id} // Usa _id ou id
                               className="p-2 text-sm text-gray-800 hover:bg-blue-50 cursor-pointer transition-colors"
                               onClick={() => {
-                                setQuickAddPatientId(String(p.id));
+                                setQuickAddPatientId(String(p._id || p.id));
                                 setSelectedPatientName(p.name);
                                 setIsQuickSelectOpen(false);
                                 setQuickSearchTerm('');
@@ -1042,16 +1147,16 @@ export default function ProfessionalDashboardPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {/* Mapeia 'currentRecords' (itens da página atual) */}
                   {currentRecords.map((record) => (
                     <tr
-                      key={record.id}
+                      key={record._id || record.id}
                       className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
                     >
                       <td className="py-3 px-3 font-medium">
                         <button
                           onClick={() =>
-                            handleViewPatientHistory(record.patientId)
+                            // (CORREÇÃO) Navega para a página de pacientes
+                            navigate('/patients')
                           }
                           className="text-blue-600 hover:underline text-left cursor-pointer transition-colors"
                         >
@@ -1087,26 +1192,25 @@ export default function ProfessionalDashboardPage({
                               >
                                 Atender
                               </button>
-                              <button
-                                onClick={() =>
-                                  setConfirmation({
-                                    isOpen: true,
-                                    message: 'Cancelar registro?',
-                                    onConfirm: () =>
-                                      handleCancelRecordStatus(record.id),
-                                  })
-                                }
-                                className="px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 font-medium cursor-pointer transition-colors"
-                              >
-                                Cancelar
-                              </button>
+                              
+                              {/* --- (INÍCIO DA CORREÇÃO 4) --- */}
+                              {/* Botão "Cancelar" agora só aparece se a role NÃO for profissional */}
+                              {(user?.role !== 'profissional' && user?.role !== 'Profissional') && (
+                                <button
+                                  onClick={() => setCancelingRecord(record)}
+                                  className="px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 font-medium cursor-pointer transition-colors"
+                                >
+                                  Cancelar
+                                </button>
+                              )}
+                              {/* --- (FIM DA CORREÇÃO 4) --- */}
                             </>
                           )}
                           <button
                             onClick={() => {
                               const patientForRecord = Array.isArray(patients)
                                 ? patients.find(
-                                    (p) => p.id === record.patientId
+                                    (p) => (p._id || p.id) === record.patientId
                                   )
                                 : null;
                               if (patientForRecord) {
@@ -1125,7 +1229,8 @@ export default function ProfessionalDashboardPage({
                               setConfirmation({
                                 isOpen: true,
                                 message: 'Excluir registro?',
-                                onConfirm: () => handleDeleteRecord(record.id),
+                                onConfirm: () => handleDeleteRecord(record._id || record.id),
+                                data: (record._id || record.id) // Passando o ID
                               })
                             }
                             className="p-1 text-gray-500 hover:text-red-600 cursor-pointer transition-colors"
@@ -1192,9 +1297,7 @@ export default function ProfessionalDashboardPage({
           </div>
         );
 
-      // ===================================================================
-      // (NOVO) VISÃO: ENTREGAS (Com Tabela Detalhada)
-      // ===================================================================
+      // VISÃO: ENTREGAS
       case 'deliveries':
         return (
           <div className="bg-white rounded-lg shadow-md p-4 md:p-6 animate-fade-in flex flex-col h-[calc(100vh-8rem)]">
@@ -1235,23 +1338,23 @@ export default function ProfessionalDashboardPage({
                   <tbody>
                     {recentDeliveries.map((record) => (
                       <tr
-                        key={record.id}
+                        key={record._id || record.id}
                         className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
                       >
-                        {/* Data da Entrega */}
+                        {/* Data da Entrega (Corrigido para tratar UTC) */}
                         <td className="py-3 px-3 font-medium text-gray-800">
-                          {/* Adiciona T00:00:00 para evitar problemas de fuso ao formatar só a data */}
                           {new Date(record.deliveryDate + 'T00:00:00').toLocaleDateString('pt-BR', {
                             day: '2-digit',
                             month: '2-digit',
                             year: 'numeric',
+                            timeZone: 'UTC', // Garante que a data seja lida como UTC
                           })}
                         </td>
 
-                        {/* Paciente (Linkável) */}
+                        {/* Paciente (Linkável) (CORRIGIDO: usa navigate) */}
                         <td className="py-3 px-3">
                           <button
-                            onClick={() => handleViewPatientHistory(record.patientId)}
+                            onClick={() => navigate('/patients')} // <-- MUDEI AQUI
                             className="text-blue-600 hover:underline font-medium text-left cursor-pointer transition-colors"
                           >
                             {getPatientNameById(record.patientId)}
@@ -1290,9 +1393,6 @@ export default function ProfessionalDashboardPage({
             )}
           </div>
         );
-      // ===================================================================
-      // FIM DA MODIFICAÇÃO
-      // ===================================================================
 
       default:
         return (
@@ -1305,24 +1405,29 @@ export default function ProfessionalDashboardPage({
 
   return (
     <>
+      {/* Esta página agora renderiza APENAS o conteúdo da view.
+          A navegação (a barra da esquerda) é 100% controlada
+          pelo MainLayout.jsx, que é o seu "menu fixo".
+      */}
       {renderCurrentView()}
 
       {/* --- Modais --- */}
       {isPatientModalOpen && (
         <PatientForm
-          patient={editingPatient}
+          patient={editingPatient} 
           onSave={handleSavePatient}
           onClose={() => {
             setIsPatientModalOpen(false);
             setEditingPatient(null);
           }}
           checkDuplicate={checkDuplicatePatient}
+          addToast={addToast} 
         />
       )}
-      {isRecordModalOpen && selectedPatient?.id && (
+      {isRecordModalOpen && selectedPatient && ( 
         <RecordForm
           patient={selectedPatient}
-          professionalId={user?.id}
+          professionalId={user?._id || user?.id} // Usa _id/id do usuário logado
           record={editingRecord}
           onSave={handleSaveRecord}
           onClose={() => {
@@ -1331,13 +1436,16 @@ export default function ProfessionalDashboardPage({
           }}
           medicationsList={Array.isArray(medications) ? medications : []}
           onNewMedication={handleAddNewMedication}
+          addToast={addToast} 
         />
       )}
       {confirmation.isOpen && (
         <ConfirmModal
           message={confirmation.message}
           onConfirm={() => {
-            confirmation.onConfirm(confirmation.data);
+            // Passa confirmation.data para o onConfirm, que é o ID, 
+            // e fecha o modal.
+            confirmation.onConfirm(confirmation.data); 
             closeConfirmation();
           }}
           onClose={closeConfirmation}
@@ -1349,8 +1457,22 @@ export default function ProfessionalDashboardPage({
           onConfirm={handleUpdateRecordStatus}
           onClose={() => setAttendingRecord(null)}
           getPatientName={getPatientNameById}
+          medications={medications}
+          getMedicationName={getMedicationName} 
         />
       )}
+
+      {/* --- (INÍCIO DA CORREÇÃO 5) --- */}
+      {/* Renderiza o novo modal de cancelamento quando o estado 'cancelingRecord' for setado */}
+      {cancelingRecord && (
+        <CancelRecordModal
+          record={cancelingRecord}
+          onClose={() => setCancelingRecord(null)}
+          onConfirm={handleCancelRecordStatus}
+          getPatientNameById={getPatientNameById} // Passa o helper de nome
+        />
+      )}
+      {/* --- (FIM DA CORREÇÃO 5) --- */}
     </>
   );
 }

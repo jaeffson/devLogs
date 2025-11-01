@@ -1,5 +1,4 @@
 // src/layouts/MainLayout.jsx
-// (NOVO) Adicione 'useCallback' aos seus imports do React
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -188,12 +187,15 @@ export default function MainLayout({
     return names[role] || role;
   };
 
-  // (Definição dos menus)
+  // (Definição dos menus - LÓGICA MANTIDA)
   const menuItems = useMemo(() => {
+    // console.log("A FUNÇÃO DO USUÁRIO É:", user?.role); // Descomente para debugar
+    
     const professionalMenu = [
       { path: '/dashboard', label: 'Dashboard', icon: icons.dashboard },
       { path: '/deliveries', label: 'Entregas Recentes', icon: icons.clipboard },
-      { path: '/history', label: 'Histórico de Entradas', icon: icons.history },
+      // --- (CORREÇÃO 1) Renomeado para consistência ---
+      { path: '/history', label: 'Histórico Geral', icon: icons.history },
       { path: '/patients', label: 'Gerenciar Pacientes', icon: icons.users },
     ];
     
@@ -209,7 +211,8 @@ export default function MainLayout({
     const adminMenu = [
       { path: '/dashboard', label: 'Dashboard', icon: icons.dashboard },
       { path: '/deliveries', label: 'Entregas Recentes', icon: icons.clipboard },
-      { path: '/history', label: 'Histórico de Entradas', icon: icons.history },
+      // --- (CORREÇÃO 1) Renomeado para consistência ---
+      { path: '/history', label: 'Histórico Geral', icon: icons.history },
       { path: '/patients', label: 'Gerenciar Pacientes', icon: icons.users },
       { path: '/medications', label: 'Gerenciar Medicações', icon: icons.pill },
       { path: '/reports', label: 'Relatórios Admin', icon: icons.reports },
@@ -221,10 +224,13 @@ export default function MainLayout({
         return adminMenu;
       case 'secretario':
         return secretaryMenu;
-      case 'profissional':
+      // --- (CORREÇÃO 2) Adicionado 'Profissional' maiúsculo ---
+      // Este era o bug que fazia seu menu sumir
+      case 'professional':
+      case 'Profissional': 
         return professionalMenu;
       default:
-        return [];
+        return []; 
     }
   }, [user?.role]);
 
@@ -268,9 +274,9 @@ export default function MainLayout({
         ></div>
       )}
 
-      {/* --- SIDEBAR (Sem mudanças) --- */}
+      {/* --- (INÍCIO) SIDEBAR MODIFICADA --- */}
       <aside
-        className={`fixed inset-y-0 left-0 bg-white shadow-xl flex-shrink-0 flex flex-col z-30
+        className={`fixed inset-y-0 left-0 bg-slate-900 shadow-2xl flex-shrink-0 flex flex-col z-30
                   transition-all duration-300 ease-in-out
                   ${isSidebarCollapsed ? 'md:w-20' : 'md:w-64'}
                   transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} 
@@ -278,26 +284,26 @@ export default function MainLayout({
         aria-label="Menu Principal"
       >
         {/* Header da Sidebar */}
-        <div className="p-4 border-b flex justify-between items-center h-16">
+        <div className="p-4 border-b border-slate-700 flex justify-between items-center h-16">
           <div
             className={`overflow-hidden transition-all ${isSidebarCollapsed ? 'md:w-0' : 'md:w-auto'}`}
           >
-            <h1 className="text-2xl font-bold text-indigo-700 whitespace-nowrap">
+            <h1 className="text-2xl font-bold text-white whitespace-nowrap">
               Medlogs
             </h1>
-            <p className="text-sm text-gray-500 hidden md:block whitespace-nowrap">
+            <p className="text-sm text-slate-400 hidden md:block whitespace-nowrap">
               Painel de {getRoleName(user?.role)}
             </p>
           </div>
           <button
-            className="md:hidden text-gray-500 hover:text-gray-900 p-1"
+            className="md:hidden text-slate-400 hover:text-white p-1"
             onClick={() => setIsSidebarOpen(false)}
             aria-label="Fechar menu"
           >
             <span className="w-6 h-6">{icons.close}</span>
           </button>
           <button
-            className="hidden md:block text-gray-500 hover:text-indigo-600 p-1 transition-colors"
+            className="hidden md:block text-slate-400 hover:text-white p-1 transition-colors"
             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
             aria-label={
               isSidebarCollapsed ? 'Expandir menu' : 'Retrair menu'
@@ -308,6 +314,7 @@ export default function MainLayout({
             </span>
           </button>
         </div>
+        
         {/* Navegação */}
         <nav className="flex-grow p-4 overflow-y-auto">
           {menuItems.map((item) => {
@@ -320,18 +327,16 @@ export default function MainLayout({
                 to={item.path}
                 onClick={() => setIsSidebarOpen(false)}
                 title={isSidebarCollapsed ? item.label : undefined}
-                className={`relative w-full text-left p-3 rounded-lg text-sm font-medium transition-all duration-150 mb-2 flex items-center gap-4
-                          ${isSidebarCollapsed ? 'md:justify-center' : ''}
+                className={`relative w-full text-left p-3 rounded-lg text-sm font-medium transition-all duration-200 mb-2 flex items-center gap-4
+                          ${isSidebarCollapsed ? 'md:justify-center' : 'hover:translate-x-1'}
                           ${
                             isActive
-                              ? 'bg-indigo-50 text-indigo-700 font-semibold'
-                              : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                              ? 'bg-indigo-600 text-white font-semibold shadow-lg'
+                              : 'text-slate-300 hover:bg-slate-700 hover:text-white'
                           }`}
                 aria-current={isActive ? 'page' : undefined}
               >
-                {isActive && (
-                  <span className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 bg-indigo-600 rounded-r-full"></span>
-                )}
+                {/* A barra lateral ativa foi removida, o 'bg-indigo-600' faz esse papel */}
                 <span className="w-5 h-5 flex-shrink-0 text-lg">
                   {item.icon}
                 </span>
@@ -344,8 +349,12 @@ export default function MainLayout({
             );
           })}
         </nav>
-        <div className="p-4 border-t"></div>
+        
+        {/* Rodapé da Sidebar (apenas para consistência visual) */}
+        <div className="p-4 border-t border-slate-700"></div>
       </aside>
+      {/* --- (FIM) SIDEBAR MODIFICADA --- */}
+
 
       {/* --- CONTEÚDO PRINCIPAL E HEADER (Sem mudanças) --- */}
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -414,15 +423,13 @@ export default function MainLayout({
                   </label>
                   <select
                     value={filterYear}
-                    // --- (MODIFICADO) Corrigido `e.targe.value` para `e.target.value` ---
                     onChange={(e) => setFilterYear(parseInt(e.target.value))}
                     className="p-1 border rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     aria-label="Selecionar Ano para Filtro"
                   >
-                    {/* (MODIFICADO) Ano de 2025 adicionado e lista dinâmica */}
                     {[...Array(5)].map((_, i) => {
-                      const year = new Date().getFullYear() + 1 - i; // Começa de 2025 (assumindo 2024 como ano atual)
-                       if (year === 2025) { // Garantir que 2025 esteja lá
+                      const year = new Date().getFullYear() + 1 - i; 
+                       if (year === 2025) { 
                          return <option key={year} value={year}>{year}</option>;
                        }
                       return (
@@ -431,7 +438,6 @@ export default function MainLayout({
                         </option>
                       );
                     }).filter((_,i) => i < 5)} 
-                     {/* Garante 5 anos, ex: 2025, 2024, 2023, 2022, 2021 */}
                   </select>
                 </div>
               </div>

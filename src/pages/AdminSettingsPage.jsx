@@ -1,18 +1,21 @@
 // src/pages/AdminSettingsPage.jsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import axios from 'axios'; // <-- NOVO: Importar Axios
 
 // --- Imports de Componentes ---
 import UserForm from '../components/forms/UserForm';
-// --- MUDANÇA: Usando o novo modal de exclusão ---
 import { DestructiveConfirmModal } from '../components/common/DestructiveConfirmModal';
-
+import { ConfirmModal } from '../components/common/Modal'; // Para Status Toggle
 import { StatusBadge } from '../components/common/StatusBadge';
 import  {AnnualBudgetChart}  from '../components/common/AnnualBudgetChart';
 import { icons } from '../utils/icons';
 
+// URL base da API (deve ser a mesma definida no App.jsx)
+const API_BASE_URL = 'http://localhost:5000/api'; 
+
 // --- Componente da Página ---
 export default function AdminSettingsPage({
-    user, users = [], setUsers,
+    user, users = [], setUsers, // setUsers agora é refetchUsers
     annualBudget, handleUpdateBudget,
     activityLog = [],
     records = [],
@@ -29,6 +32,29 @@ export default function AdminSettingsPage({
 
     const [newBudgetValue, setNewBudgetValue] = useState(String(annualBudget || '0'));
 
+    // --- SINCRONIZAÇÃO DE USUÁRIOS E SINCRONIZAÇÃO GERAL ---
+    // NOVO: Função para sincronizar o estado global de usuários (chamada pelo CRUD)
+    const refetchUsers = useCallback(async () => {
+        // ASSUNÇÃO: A rota /users deve ser implementada no seu backend Node.js
+        try {
+            const response = await axios.get(`${API_BASE_URL}/users`);
+            setUsers(response.data); 
+        } catch (error) {
+            console.error('Erro ao buscar usuários:', error);
+            addToast('Falha ao carregar usuários.', 'error');
+        }
+    }, [setUsers, addToast]);
+
+    // O useEffect do App.jsx já cuida da primeira carga, mas se setUsers for chamado,
+    // ele deve ser a função de refetch acima.
+
+    // Sincroniza o estado interno (newBudgetValue) quando a prop annualBudget mudar
+    useEffect(() => {
+        const value = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2 }).format(annualBudget || 0);
+        setNewBudgetValue(String(value));
+    }, [annualBudget]);
+
+
     // --- CÁLCULO DO GASTO TOTAL ---
     const totalSpentForYear = useMemo(() => {
         const currentYear = new Date().getFullYear();
@@ -37,7 +63,7 @@ export default function AdminSettingsPage({
             .reduce((sum, item) => sum + (Number(item.totalValue) || 0), 0);
     }, [records]);
 
-    // --- Funções ---
+    // --- Funções UI/Modais ---
     const closeStatusConfirmation = () => setStatusConfirmation({ isOpen: false, message: '', data: null, onConfirm: null });
 
     const handleOpenUserModal = (userToEdit = null) => {
@@ -50,67 +76,75 @@ export default function AdminSettingsPage({
         setEditingUser(null);
     };
 
-    // Lógica de salvar (já estava ótima, com verificação de email)
-    const handleSaveUser = (userData) => {
-        // (O addToast já é chamado de dentro do formulário agora,
-        // mas manteremos a lógica de verificação de duplicidade aqui,
-        // pois a página é quem tem acesso à lista completa 'users')
+    // --- FUNÇÕES CRUD DE USUÁRIOS (REESCRITAS PARA API) ---
 
+    // 1. SALVAR USUÁRIO (CREATE/UPDATE)
+    const handleSaveUser = async (userData) => {
         const cleanedUserData = { ...userData, name: userData.name.trim(), email: userData.email.trim().toLowerCase() };
-        const emailExists = users.some(u => u.id !== cleanedUserData.id && u.email === cleanedUserData.email);
+        const userId = cleanedUserData._id || cleanedUserData.id;
+        
+        try {
+            let response;
+            if(userId) {
+                // ROTA PUT para atualização
+                response = await axios.put(`${API_BASE_URL}/users/${userId}`, cleanedUserData);
+                addToast('Usuário atualizado com sucesso!', 'success');
+                addLog?.(user?.name, `atualizou dados do usuário ${cleanedUserData.name}`);
+            } else {
+                // ROTA POST para criação
+                response = await axios.post(`${API_BASE_URL}/users`, cleanedUserData);
+                addToast('Usuário criado com sucesso!', 'success');
+                addLog?.(user?.name, `criou usuário: ${cleanedUserData.name}`);
+            }
 
-        if (emailExists) {
-            // Se o formulário não passou addToast, isso é um fallback.
-            // O ideal é passar addToast para o UserForm.
-            addToast?.('Este e-mail já está em uso.', 'error');
-            return; // Impede o salvamento
-        }
+            // Recarrega o estado global de usuários
+            refetchUsers(); 
 
-        if(cleanedUserData.id) {
-            setUsers(prevUsers => prevUsers.map(u => u.id === cleanedUserData.id ? { ...u, ...cleanedUserData } : u));
-            addLog?.(user?.name, `atualizou usuário ${cleanedUserData.name}`);
-        } else {
-            const newUser = { ...cleanedUserData, id: Date.now(), status: 'active' };
-            setUsers(prevUsers => [...prevUsers, newUser]);
-            addLog?.(user?.name, `criou usuário: ${newUser.name}`);
+        } catch (error) {
+            console.error('[API Error] Salvar Usuário:', error);
+            const msg = error.response?.data?.message || 'Erro ao salvar usuário.';
+            addToast(msg, 'error');
+        } finally {
+            handleCloseUserModal();
         }
-        // addToast(message, 'success'); // Isso agora é feito no UserForm
-        handleCloseUserModal();
     };
 
-    // Lógica para Ativar/Desativar (simples, usa ConfirmModal)
+    // 2. TOGGLE STATUS (PATCH)
     const handleToggleUserStatusClick = (userToToggle) => {
         const isActivating = userToToggle.status !== 'active';
-        // Note: O ConfirmModal simples não foi enviado, então estou assumindo que ele existe
-        // e é diferente do DestructiveConfirmModal.
         setStatusConfirmation({
             isOpen: true,
             message: `Deseja ${isActivating ? 'ATIVAR' : 'DESATIVAR'} "${userToToggle.name}"?`,
-            data: userToToggle.id,
+            data: userToToggle._id || userToToggle.id,
             onConfirm: handleToggleUserStatusConfirm
         });
     };
 
-    const handleToggleUserStatusConfirm = (userId) => {
-        let toggledUser = null;
-        setUsers(prevUsers => prevUsers.map(u => {
-            if (u.id === userId) {
-                const newStatus = (u.status !== 'active') ? 'active' : 'inactive';
-                toggledUser = { ...u, status: newStatus };
-                return toggledUser;
-            }
-            return u;
-        }));
-        const actionText = toggledUser?.status === 'active' ? 'ativado' : 'desativado';
-        addToast(`Usuário ${actionText}!`, 'success');
-        addLog?.(user?.name, `${actionText} usuário ${toggledUser?.name}`);
-        closeStatusConfirmation(); // Fecha o modal de status
+    const handleToggleUserStatusConfirm = async (userId) => {
+        const userToToggle = users.find(u => (u._id || u.id) === userId);
+        const newStatus = (userToToggle.status !== 'active') ? 'active' : 'inactive';
+        
+        try {
+            // ROTA PATCH de status
+            await axios.patch(`${API_BASE_URL}/users/${userId}/status`, { status: newStatus });
+            
+            addToast(`Usuário ${newStatus === 'active' ? 'ativado' : 'desativado'}!`, 'success');
+            addLog?.(user?.name, `${newStatus === 'active' ? 'ativou' : 'desativou'} usuário ${userToToggle?.name}`);
+            
+            refetchUsers(); // Recarrega para atualizar a lista
+            
+        } catch (error) {
+            console.error('[API Error] Toggle Status:', error);
+            addToast('Falha ao atualizar status.', 'error');
+        } finally {
+            closeStatusConfirmation(); 
+        }
     };
 
 
-    // --- MUDANÇA: Lógica de Exclusão (usa o novo Modal Destrutivo) ---
+    // 3. EXCLUIR USUÁRIO (DELETE)
     const handleDeleteUserClick = (userToDelete) => {
-        if (userToDelete.id === user.id) {
+        if ((userToDelete._id || userToDelete.id) === user._id || user.id) {
             addToast('Você não pode excluir sua própria conta.', 'error');
             return;
         }
@@ -120,21 +154,33 @@ export default function AdminSettingsPage({
         });
     };
 
-    const handleDeleteUserConfirm = () => {
-        const userId = deleteConfirmation.userToDelete.id;
-        const userToDelete = users.find(u => u.id === userId);
-        
-        setUsers(prevUsers => prevUsers.filter(u => u.id !== userId));
-        addToast(`Usuário excluído.`, 'success');
-        addLog?.(user?.name, `EXCLUIU usuário ${userToDelete?.name}`);
-        
-        setDeleteConfirmation({ isOpen: false, userToDelete: null }); // Fecha o modal
+    const handleDeleteUserConfirm = async () => {
+        const userToDelete = deleteConfirmation.userToDelete;
+        const userId = userToDelete._id || userToDelete.id;
+
+        try {
+            // ROTA DELETE
+            await axios.delete(`${API_BASE_URL}/users/${userId}`);
+
+            addToast(`Usuário excluído.`, 'success');
+            addLog?.(user?.name, `EXCLUIU usuário ${userToDelete?.name}`);
+            
+            refetchUsers(); // Recarrega para remover da lista
+            
+        } catch (error) {
+            console.error('[API Error] Excluir Usuário:', error);
+            addToast('Falha ao excluir usuário.', 'error');
+        } finally {
+            setDeleteConfirmation({ isOpen: false, userToDelete: null }); 
+        }
     };
-    // --- FIM DA MUDANÇA ---
+    // --- FIM DAS FUNÇÕES CRUD DE USUÁRIOS ---
 
 
     const handleBudgetSave = () => {
-        const value = parseFloat(newBudgetValue.replace(',', '.'));
+        const cleanedValue = newBudgetValue.replace(/\./g, '').replace(',', '.');
+        const value = parseFloat(cleanedValue);
+
         if (!isNaN(value) && value >= 0) {
             handleUpdateBudget(value); // Esta função já chama addToast
         } else {
@@ -156,7 +202,7 @@ export default function AdminSettingsPage({
                     <div className="animate-fade-in">
                         <div className="flex justify-between items-center mb-4">
                             <h3 className="text-xl font-semibold text-gray-700">Gerenciar Usuários</h3>
-                            <button onClick={() => handleOpenUserModal()} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">
+                            <button onClick={() => handleOpenUserModal()} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors cursor-pointer">
                                 <span className="w-4 h-4">{icons.plus}</span> Novo Usuário
                             </button>
                         </div>
@@ -173,23 +219,23 @@ export default function AdminSettingsPage({
                                 </thead>
                                 <tbody>
                                     {users.map(u => (
-                                        <tr key={u.id} className="border-b hover:bg-gray-50">
+                                        // Usando _id ou id para garantir a chave
+                                        <tr key={u._id || u.id} className="border-b hover:bg-gray-50 transition-colors"> 
                                             <td className="py-2 px-3 font-medium text-gray-800">{u.name}</td>
                                             <td className="py-2 px-3 text-gray-600">{u.email}</td>
                                             <td className="py-2 px-3 text-gray-600 capitalize">{u.role}</td>
                                             <td className="py-2 px-3"><StatusBadge status={u.status} /></td>
                                             <td className="py-2 px-3">
                                                 <div className="flex items-center gap-3">
-                                                    <button onClick={() => handleOpenUserModal(u)} className="p-1 text-blue-600 hover:text-blue-800" title="Editar Usuário"><span className="w-4 h-4 block">{icons.edit}</span></button>
+                                                    <button onClick={() => handleOpenUserModal(u)} className="p-1 text-blue-600 hover:text-blue-800 transition-colors cursor-pointer" title="Editar Usuário"><span className="w-4 h-4 block">{icons.edit}</span></button>
                                                     
-                                                    {/* --- MUDANÇA: Substituindo SVGs por ícones --- */}
-                                                    <button onClick={() => handleToggleUserStatusClick(u)} className={`p-1 ${u.status === 'active' ? 'text-yellow-600 hover:text-yellow-800' : 'text-green-600 hover:text-green-800'}`} title={u.status === 'active' ? 'Desativar' : 'Ativar'}>
+                                                    <button onClick={() => handleToggleUserStatusClick(u)} className={`p-1 ${u.status === 'active' ? 'text-yellow-600 hover:text-yellow-800' : 'text-green-600 hover:text-green-800'} transition-colors cursor-pointer`} title={u.status === 'active' ? 'Desativar' : 'Ativar'}>
                                                         <span className="w-4 h-4 block">
                                                           {u.status === 'active' ? icons.ban : icons.check}
                                                         </span>
                                                     </button>
                                                     
-                                                    <button onClick={() => handleDeleteUserClick(u)} className="p-1 text-red-600 hover:text-red-800 disabled:opacity-50" title="Excluir" disabled={u.id === user.id}><span className="w-4 h-4 block">{icons.trash}</span></button>
+                                                    <button onClick={() => handleDeleteUserClick(u)} className="p-1 text-red-600 hover:text-red-800 disabled:opacity-50 transition-colors cursor-pointer" title="Excluir" disabled={(u._id || u.id) === (user._id || user.id)}><span className="w-4 h-4 block">{icons.trash}</span></button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -201,7 +247,6 @@ export default function AdminSettingsPage({
                     </div>
                 );
             case 'budget':
-                // ... (Nenhuma mudança aqui)
                 return (
                     <div className="animate-fade-in max-w-lg mx-auto">
                         <h3 className="text-xl font-semibold text-gray-700 mb-4">Orçamento Anual</h3>
@@ -213,12 +258,12 @@ export default function AdminSettingsPage({
                                 <label className="block text-gray-700 font-medium mb-1" htmlFor="annual-budget-input">Definir Orçamento (R$)</label>
                                 <input id="annual-budget-input" type="text" value={newBudgetValue} onChange={(e) => setNewBudgetValue(e.target.value)} className="w-full p-2 border rounded border-gray-300" placeholder="Ex: 5000.00"/>
                             </div>
-                            <button onClick={handleBudgetSave} className="px-5 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium">Salvar Orçamento</button>
+                            <button onClick={handleBudgetSave} className="px-5 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium transition-colors cursor-pointer">Salvar Orçamento</button>
                         </div>
                     </div>
                 );
             case 'log':
-                // ... (Nenhuma mudança aqui)
+                // Nota: ActivityLog ainda é local e precisa de rotas de API futuras
                 return (
                     <div className="animate-fade-in">
                         <h3 className="text-xl font-semibold text-gray-700 mb-4">Log de Atividades</h3>
@@ -246,28 +291,27 @@ export default function AdminSettingsPage({
             <h2 className="text-2xl md:text-3xl font-bold text-gray-800 border-b pb-3">Configurações Gerais</h2>
             <div className="border-b border-gray-200">
               <nav className="-mb-px flex space-x-6 md:space-x-8" aria-label="Tabs">
-                  <button onClick={() => setActiveSubTab('users')} className={`${activeSubTab === 'users' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'} whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm`}>Usuários ({users.length})</button>
-                  <button onClick={() => setActiveSubTab('budget')} className={`${activeSubTab === 'budget' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'} whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm`}>Orçamento</button>
-                  <button onClick={() => setActiveSubTab('log')} className={`${activeSubTab === 'log' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'} whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm`}>Log de Atividades</button>
+                  <button onClick={() => setActiveSubTab('users')} className={`${activeSubTab === 'users' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'} whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors cursor-pointer`}>Usuários ({users.length})</button>
+                  <button onClick={() => setActiveSubTab('budget')} className={`${activeSubTab === 'budget' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'} whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors cursor-pointer`}>Orçamento</button>
+                  <button onClick={() => setActiveSubTab('log')} className={`${activeSubTab === 'log' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'} whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors cursor-pointer`}>Log de Atividades</button>
               </nav>
             </div>
             <div className="mt-4">
                 {renderSubTabView()}
             </div>
             
-            {/* --- MUDANÇA: Passando 'addToast' para o UserForm --- */}
             {isUserModalOpen && (
                 <UserForm 
                   user={editingUser} 
                   onSave={handleSaveUser} 
                   onClose={handleCloseUserModal} 
-                  addToast={addToast} // Passando o toast
+                  addToast={addToast} 
                 />
             )}
             
             {/* Modal de Status (Simples) */}
             {statusConfirmation.isOpen && (
-                <ConfirmModal // Assumindo que você tenha esse componente
+                <ConfirmModal 
                   message={statusConfirmation.message} 
                   onConfirm={() => statusConfirmation.onConfirm(statusConfirmation.data)} 
                   onClose={closeStatusConfirmation} 
@@ -275,8 +319,8 @@ export default function AdminSettingsPage({
                 />
             )}
 
-            {/* --- MUDANÇA: Novo Modal de Exclusão --- */}
-            {deleteConfirmation.isOpen && (
+            {/* Modal de Exclusão Destrutiva */}
+            {deleteConfirmation.isOpen && deleteConfirmation.userToDelete && (
                 <DestructiveConfirmModal
                     message={`Excluir permanentemente "${deleteConfirmation.userToDelete.name}"? Esta ação não pode ser desfeita.`}
                     confirmText="EXCLUIR"
