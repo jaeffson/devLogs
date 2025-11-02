@@ -1,5 +1,5 @@
 // src/pages/MedicationsPage.jsx 
-// (VERSÃO CORRIGIDA: Profissional pode Adicionar e Editar, mas não Excluir)
+// (ATUALIZADO: Paleta de cores 'blue' trocada para 'emerald')
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react'; 
 import axios from 'axios'; 
@@ -26,11 +26,9 @@ export default function MedicationsPage({
     const [searchTerm, setSearchTerm] = useState('');
     const [isLoading, setIsLoading] = useState(false); 
 
-    // --- (NOVO) Helper de Permissão ---
-    // (Movido para cima para ser usado em mais lugares)
-    const isProfessional = user?.role === 'professional' || user?.role === 'Professional';
+    // --- Helper de Permissão ---
     const isAdmin = user?.role === 'admin';
-    // O usuário pode ver ações (Editar/Adicionar) se for admin OU profissional
+    const isProfessional = user?.role === 'professional' || user?.role === 'Profissional';
     const canCreateOrEdit = isAdmin || isProfessional;
 
 
@@ -62,13 +60,10 @@ export default function MedicationsPage({
 
     // --- Funções UI ---
     const handleOpenModal = (medication = null) => {
-        // --- (CORREÇÃO 1) ---
-        // Se for "Nova" (medication=null), verifica se o usuário pode criar
         if (!medication && !canCreateOrEdit) {
             addToast('Você não tem permissão para criar novas medicações.', 'error');
             return;
         }
-        // (OK) Modal de edição abre para admin ou profissional
         setEditingMedication(medication);
         setIsModalOpen(true);
     };
@@ -79,7 +74,6 @@ export default function MedicationsPage({
     };
 
     // --- Lógica de salvamento (API) ---
-    // (Nenhuma mudança necessária aqui, a permissão é verificada no handleOpenModal)
     const handleSaveMedication = async (medData) => {
         const cleanedName = medData.name.trim();
         
@@ -97,12 +91,10 @@ export default function MedicationsPage({
             const medId = medData._id || medData.id;
             
             if(medId) {
-                // (PERMISSÃO OK) Atualização (PUT) - Profissional e Admin podem fazer
                 response = await axios.put(`${API_BASE_URL}/medications/${medId}`, { name: cleanedName });
                 addToast('Medicação atualizada com sucesso!', 'success');
                 addLog?.(user?.name, `atualizou medicação ${cleanedName} (ID: ${medId})`);
             } else {
-                // (PERMISSÃO OK) Criação (POST) - Profissional e Admin podem fazer
                 response = await axios.post(`${API_BASE_URL}/medications`, { name: cleanedName });
                 addToast('Medicação cadastrada com sucesso!', 'success');
                 addLog?.(user?.name, `cadastrou nova medicação: ${cleanedName}`);
@@ -121,8 +113,7 @@ export default function MedicationsPage({
 
     // --- Lógica de exclusão (API) ---
     const handleDeleteClick = (medication) => {
-        // (SEM MUDANÇA) Apenas admin pode excluir
-        if (user?.role !== 'admin') {
+        if (!isAdmin) {
             addToast('Apenas administradores podem excluir medicações.', 'error');
             return;
         }
@@ -177,29 +168,31 @@ export default function MedicationsPage({
                     Gerenciar Medicações
                 </h2>
                 
-                {/* --- (CORREÇÃO 2) --- */}
-                {/* O botão "Nova Medicação" agora aparece se for 'admin' OU 'profissional' */}
+                {/* Botão "Nova Medicação" (Atualizado para Emerald) */}
                 {canCreateOrEdit && (
+                  // --- (INÍCIO DA MUDANÇA) ---
                   <button
                       onClick={() => handleOpenModal()}
-                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium w-full md:w-auto transition-colors cursor-pointer"
+                      className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium w-full md:w-auto transition-colors cursor-pointer" // Trocado de 'blue' para 'emerald'
                       disabled={isLoading}
                   >
+                  {/* --- (FIM DA MUDANÇA) --- */}
                       <span className="w-4 h-4">{icons.plus}</span> Nova Medicação
                   </button>
                 )}
-                {/* --- (FIM DA CORREÇÃO 2) --- */}
                 
             </div>
 
-            {/* Campo de Busca */}
+            {/* Campo de Busca (Atualizado para Emerald) */}
             <div className="mb-4 relative">
                 <input
                     type="text"
                     placeholder="Buscar medicação..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full md:w-1/2 lg:w-1/3 p-2 border border-gray-300 rounded-lg pl-10 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    // --- (INÍCIO DA MUDANÇA) ---
+                    className="w-full md:w-1/2 lg:w-1/3 p-2 border border-gray-300 rounded-lg pl-10 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500" // Trocado de 'blue' para 'emerald'
+                    // --- (FIM DA MUDANÇA) ---
                     aria-label="Buscar medicação"
                 />
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
@@ -220,17 +213,17 @@ export default function MedicationsPage({
                     <h3 className="font-semibold text-lg text-gray-700 mb-1">Nenhuma Medicação Cadastrada</h3>
                     <p className="text-sm mb-4">Comece cadastrando a primeira medicação no sistema.</p>
                     
-                    {/* --- (CORREÇÃO 3) --- */}
-                    {/* O botão "Cadastrar Medicação" (na tela vazia) só aparece se for 'admin' OU 'profissional' */}
+                    {/* Botão "Cadastrar Medicação" (Atualizado para Emerald) */}
                     {canCreateOrEdit && (
+                      // --- (INÍCIO DA MUDANÇA) ---
                       <button 
                           onClick={() => handleOpenModal()} 
-                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium mx-auto cursor-pointer transition-colors"
+                          className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium mx-auto cursor-pointer transition-colors" // Trocado de 'blue' para 'emerald'
                       >
+                      {/* --- (FIM DA MUDANÇA) --- */}
                           <span className="w-4 h-4">{icons.plus}</span> Cadastrar Medicação
                       </button>
                     )}
-                    {/* --- (FIM DA CORREÇÃO 3) --- */}
                 </div>
             ) : (
                 // Tabela de resultados
@@ -242,7 +235,6 @@ export default function MedicationsPage({
                                 <th className="text-left py-3 px-4 font-semibold text-gray-700 uppercase tracking-wider">Nome da Medicação</th>
                                 <th className="w-36 text-left py-3 px-4 font-semibold text-gray-700 uppercase tracking-wider">Data Cadastro</th>
                                 
-                                {/* A coluna "Ações" agora aparece se for 'admin' OU 'profissional' */}
                                 {canCreateOrEdit && (
                                   <th className="w-28 text-left py-3 px-4 font-semibold text-gray-700 uppercase tracking-wider">Ações</th>
                                 )}
@@ -257,21 +249,22 @@ export default function MedicationsPage({
                                     <td className="py-3 px-4 font-medium text-gray-800 break-words">{med.name}</td>
                                     <td className="py-3 px-4 text-gray-600 whitespace-nowrap">{formatDate(med.createdAt)}</td> 
                                     
-                                    {/* Célula de Ações */}
+                                    {/* Célula de Ações (Atualizado para Emerald) */}
                                     {canCreateOrEdit && (
                                       <td className="py-3 px-4 whitespace-nowrap">
                                           <div className="flex items-center gap-4">
                                               
-                                              {/* Botão Editar (Visível para Admin E Profissional) */}
                                               <button
                                                   onClick={() => handleOpenModal(med)}
-                                                  className="p-1 text-blue-600 hover:text-blue-800 transition-colors duration-150 cursor-pointer"
+                                                  // --- (INÍCIO DA MUDANÇA) ---
+                                                  className="p-1 text-emerald-600 hover:text-emerald-800 transition-colors duration-150 cursor-pointer" // Trocado de 'blue' para 'emerald'
+                                                  // --- (FIM DA MUDANÇA) ---
                                                   title="Editar Medicação"
                                               >
                                                   <span className="w-5 h-5 block">{icons.edit}</span>
                                               </button>
                                               
-                                              {/* Botão Excluir (Visível APENAS para Admin) */}
+                                              {/* Botão Excluir (Mantido 'red') */}
                                               {isAdmin && (
                                                 <button
                                                     onClick={() => handleDeleteClick(med)}
