@@ -1,4 +1,6 @@
 // src/layouts/MainLayout.jsx
+// (CORRIGIDO: Auto-collapse persistente. A sidebar fechará 10s após CADA vez que for aberta)
+
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -114,6 +116,8 @@ export default function MainLayout({
   const location = useLocation();
   const [filterYear, setFilterYear] = useState(new Date().getFullYear());
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  
+  // O estado inicial da sidebar é 'aberta' (false)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   const formattedDate = useFormattedDate();
@@ -122,6 +126,12 @@ export default function MainLayout({
 
   const profileRef = useRef(null);
   const navigate = useNavigate();
+
+  // --- (INÍCIO DA MUDANÇA 1) ---
+  // Ref para guardar o timer de auto-collapse
+  const autoCollapseTimerRef = useRef(null);
+  // --- (FIM DA MUDANÇA 1) ---
+
 
   // ==============================================================
   // --- (INÍCIO) LÓGICA DO TIMER DE INATIVIDADE ---
@@ -170,6 +180,41 @@ export default function MainLayout({
   // --- (FIM) LÓGICA DO TIMER DE INATIVIDADE ---
   // ==============================================================
 
+  // --- (INÍCIO DA MUDANÇA 2) ---
+  // useEffect para o auto-collapse PERSISTENTE da sidebar
+  useEffect(() => {
+    
+    // Se o menu está ABERTO (isSidebarCollapsed é false)
+    if (!isSidebarCollapsed) {
+      // Limpa qualquer timer antigo (segurança)
+      if (autoCollapseTimerRef.current) {
+        clearTimeout(autoCollapseTimerRef.current);
+      }
+      
+      // Inicia um novo timer de 10 segundos
+      autoCollapseTimerRef.current = setTimeout(() => {
+        // Fecha a sidebar
+        setIsSidebarCollapsed(true);
+      }, 10000); // 10 segundos
+    }
+    // Se o menu está FECHADO (isSidebarCollapsed é true)
+    else {
+      // Limpa o timer, pois o menu já está fechado
+      if (autoCollapseTimerRef.current) {
+        clearTimeout(autoCollapseTimerRef.current);
+        autoCollapseTimerRef.current = null;
+      }
+    }
+
+    // Função de limpeza (executa se o usuário sair/deslogar)
+    return () => {
+      if (autoCollapseTimerRef.current) {
+        clearTimeout(autoCollapseTimerRef.current);
+      }
+    };
+  }, [isSidebarCollapsed]); // <-- Dependência: Roda toda vez que o menu abre ou fecha
+  // --- (FIM DA MUDANÇA 2) ---
+
 
   const totalSpentForYear = useMemo(
     () =>
@@ -189,29 +234,24 @@ export default function MainLayout({
 
   // (Definição dos menus - LÓGICA MANTIDA)
   const menuItems = useMemo(() => {
-    // console.log("A FUNÇÃO DO USUÁRIO É:", user?.role); // Descomente para debugar
-    
     const professionalMenu = [
       { path: '/dashboard', label: 'Dashboard', icon: icons.dashboard },
       { path: '/deliveries', label: 'Entregas Recentes', icon: icons.clipboard },
-      // --- (CORREÇÃO 1) Renomeado para consistência ---
       { path: '/history', label: 'Histórico Geral', icon: icons.history },
       { path: '/patients', label: 'Gerenciar Pacientes', icon: icons.users },
+      { path: '/medications', label: 'Medicações', icon: icons.pill },
     ];
     
-   
     const secretaryMenu = [
       { path: '/dashboard', label: 'Dashboard', icon: icons.dashboard },
-     // { path: '/deliveries', label: 'Entregas Recentes', icon: icons.clipboard },//
       { path: '/patient-history', label: 'Histórico por Paciente', icon: icons.history },
-       { path: '/reports-general', label: 'Relatórios Admin',icon: icons.clipboard},
+      { path: '/reports-general', label: 'Relatórios Admin',icon: icons.clipboard},
       { path: '/settings', label: 'Configurações', icon: icons.settings },
     ];
     
     const adminMenu = [
       { path: '/dashboard', label: 'Dashboard', icon: icons.dashboard },
       { path: '/deliveries', label: 'Entregas Recentes', icon: icons.clipboard },
-      // --- (CORREÇÃO 1) Renomeado para consistência ---
       { path: '/history', label: 'Histórico Geral', icon: icons.history },
       { path: '/patients', label: 'Gerenciar Pacientes', icon: icons.users },
       { path: '/medications', label: 'Gerenciar Medicações', icon: icons.pill },
@@ -224,8 +264,6 @@ export default function MainLayout({
         return adminMenu;
       case 'secretario':
         return secretaryMenu;
-      // --- (CORREÇÃO 2) Adicionado 'Profissional' maiúsculo ---
-      // Este era o bug que fazia seu menu sumir
       case 'professional':
       case 'Profissional': 
         return professionalMenu;
@@ -263,6 +301,15 @@ export default function MainLayout({
     navigate('/login');
   };
 
+  // --- (INÍCIO DA MUDANÇA 3) ---
+  // Função para o botão de recolher
+  const handleToggleSidebarCollapse = () => {
+    // O useEffect [isSidebarCollapsed] vai cuidar de limpar/iniciar o timer
+    setIsSidebarCollapsed(!isSidebarCollapsed);
+  };
+  // --- (FIM DA MUDANÇA 3) ---
+
+
   return (
     <div className="relative min-h-screen md:h-screen md:flex md:overflow-hidden bg-gray-100">
       {/* Overlay */}
@@ -274,7 +321,7 @@ export default function MainLayout({
         ></div>
       )}
 
-      {/* --- (INÍCIO) SIDEBAR MODIFICADA --- */}
+      {/* --- SIDEBAR --- */}
       <aside
         className={`fixed inset-y-0 left-0 bg-slate-900 shadow-2xl flex-shrink-0 flex flex-col z-30
                   transition-all duration-300 ease-in-out
@@ -302,9 +349,11 @@ export default function MainLayout({
           >
             <span className="w-6 h-6">{icons.close}</span>
           </button>
+
+          {/* Botão de recolher agora usa a nova função */}
           <button
             className="hidden md:block text-slate-400 hover:text-white p-1 transition-colors"
-            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            onClick={handleToggleSidebarCollapse} 
             aria-label={
               isSidebarCollapsed ? 'Expandir menu' : 'Retrair menu'
             }
@@ -313,6 +362,7 @@ export default function MainLayout({
               {isSidebarCollapsed ? icons.chevronRight : icons.chevronLeft}
             </span>
           </button>
+
         </div>
         
         {/* Navegação */}
@@ -336,7 +386,6 @@ export default function MainLayout({
                           }`}
                 aria-current={isActive ? 'page' : undefined}
               >
-                {/* A barra lateral ativa foi removida, o 'bg-indigo-600' faz esse papel */}
                 <span className="w-5 h-5 flex-shrink-0 text-lg">
                   {item.icon}
                 </span>
@@ -353,7 +402,7 @@ export default function MainLayout({
         {/* Rodapé da Sidebar (apenas para consistência visual) */}
         <div className="p-4 border-t border-slate-700"></div>
       </aside>
-      {/* --- (FIM) SIDEBAR MODIFICADA --- */}
+      {/* --- (FIM) SIDEBAR --- */}
 
 
       {/* --- CONTEÚDO PRINCIPAL E HEADER (Sem mudanças) --- */}
@@ -490,7 +539,8 @@ export default function MainLayout({
                     </Link>
                   )}
                   {(user?.role === 'admin' ||
-                    user?.role === 'profissional') && (
+                    user?.role === 'profissional' ||
+                    user?.role === 'Profissional') && ( // Assegura que ambos os roles funcionem
                     <Link
                       to="/medications"
                       onClick={() => setIsProfileOpen(false)}

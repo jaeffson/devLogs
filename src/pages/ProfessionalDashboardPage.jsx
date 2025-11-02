@@ -1,5 +1,5 @@
 // src/pages/ProfessionalDashboardPage.jsx
-// (Botões "Excluir Paciente" e "Excluir Registro" agora ocultos para a role 'profissional')
+// (CORRIGIDO: Adicionado 'cursor-pointer' aos botões de Atalhos Rápidos)
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -11,10 +11,12 @@ import PatientForm from '../components/forms/PatientForm';
 import RecordForm from '../components/forms/RecordForm';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { AttendRecordModal } from '../components/common/AttendRecordModal';
-// Importando o seu novo modal de cancelamento
 import { CancelRecordModal } from '../components/common/CancelRecordModal';
 import { PatientRecordsTable } from '../components/common/PatientRecordsTable';
 import MedicationForm from '../components/forms/MedicationForm';
+// --- (NOVA IMPORTAÇÃO) ---
+import MedicationsPage from './MedicationsPage'; // Importa a página de medicações
+// ---
 import { icons } from '../utils/icons';
 import { getMedicationName } from '../utils/helpers';
 import { useDebounce } from '../hooks/useDebounce';
@@ -22,6 +24,9 @@ import { useDebounce } from '../hooks/useDebounce';
 // --- URL BASE DA API ---
 const API_BASE_URL = 'http://localhost:5000/api'; 
 // -----------------------
+
+// --- (NOVO) Constante de 30 dias ---
+const MS_IN_30_DAYS = 30 * 24 * 60 * 60 * 1000;
 
 // --- Componente da Página Principal ---
 export default function ProfessionalDashboardPage({
@@ -57,6 +62,9 @@ export default function ProfessionalDashboardPage({
 
   // Novo estado para controlar o modal de cancelamento
   const [cancelingRecord, setCancelingRecord] = useState(null);
+
+  // --- (NOVO) Estado do Alerta de Vencidos ---
+  const [isOverdueAlertVisible, setIsOverdueAlertVisible] = useState(true);
 
   // --- Estados do 'Select com Busca' (Histórico) ---
   const [quickAddPatientId, setQuickAddPatientId] = useState('');
@@ -248,15 +256,36 @@ export default function ProfessionalDashboardPage({
     [patients, debouncedDashQuickSearch]
   );
 
+  // --- (NOVO) Memo para calcular registros pendentes vencidos ---
+  // (Lógica robusta copiada do DashboardView da Secretária)
+  const overduePendingRecords = useMemo(() => {
+    if (!Array.isArray(records)) return [];
+    const now = new Date().getTime();
+
+    return records.filter(r => {
+      if (r.status !== 'Pendente' || !r.entryDate) return false;
+      
+      try {
+        const entryTime = new Date(r.entryDate).getTime();
+        // Verifica se a diferença em milissegundos é maior que 30 dias
+        return (now - entryTime) > MS_IN_30_DAYS;
+      } catch (e) {
+        return false;
+      }
+    }); // Retorna o array de registros vencidos
+  }, [records]);
+  // --- (FIM) ---
+
   const filteredRecords = useMemo(() => {
     const sorted = records.sort(
       (a, b) => new Date(b.entryDate) - new Date(a.entryDate)
     );
+    // (CORREÇÃO) O filtro agora usa o 'statusFilter' do estado
     if (statusFilter === 'Todos') {
       return sorted;
     }
     return sorted.filter((r) => r.status === statusFilter);
-  }, [records, statusFilter]);
+  }, [records, statusFilter]); // Adicionado 'statusFilter' como dependência
 
   // --- Memos (Paginação) ---
   const totalPages = useMemo(() => {
@@ -333,7 +362,7 @@ export default function ProfessionalDashboardPage({
             // Criação (POST)
             response = await axios.post(`${API_BASE_URL}/patients`, payload);
             addToast('Paciente cadastrado com sucesso!', 'success');
-            addLog?.(user?.name, `cadastrou novo paciente ${patientName}`);
+            addLog?.(user?.name, `cadastrou novo paciente ${patientName}`); // Corrigido NatientName -> patientName
         }
         
         await syncGlobalState(setPatients, 'pacientes');
@@ -373,7 +402,7 @@ export default function ProfessionalDashboardPage({
     }
   };
   
-  // 3. SALVAR REGISTRO (CREATE/UPDATE)
+  // 3. SALVAR REGISTRO (CREATE/UPDATE) - [VERSÃO CORRIGIDA PARA "ID INVÁLIDO"]
   const handleSaveRecord = async (recordData) => {
     try {
         let response;
@@ -385,10 +414,35 @@ export default function ProfessionalDashboardPage({
             throw new Error("ID do profissional não encontrado.");
         }
 
+        // --- (INÍCIO DA CORREÇÃO) ---
+        // O RecordForm provavelmente envia: [{ _id: '123', name: 'Dipirona', quantity: '1' }]
+        // O Backend espera:               [{ medicationId: '123', quantity: '1' }]
+        // Esta função "mapeia" os dados para o formato correto antes de enviar à API.
+        
+        const cleanedMedications = (recordData.medications || []).map(med => {
+            // Pega o ID, não importa como ele venha (med._id, med.id, ou med.medicationId)
+            const id = med._id || med.id || med.medicationId;
+
+            // Se o ID for um objeto (ex: { _id: '123' }), pega o valor de dentro
+            const finalMedicationId = (typeof id === 'object' && id !== null) ? (id._id || id.id) : id;
+
+            if (!finalMedicationId) {
+                console.warn('Item de medicação inválido descartado (sem ID):', med);
+                return null;
+            }
+
+            return {
+                medicationId: String(finalMedicationId), // Garante que é uma string
+                quantity: med.quantity || 'N/A' // Garante que a quantidade exista
+            };
+        }).filter(med => med !== null); // Remove itens nulos que falharam na validação
+        // --- (FIM DA CORREÇÃO) ---
+
+
         const payload = {
             patientId: recordData.patientId, 
             professionalId: professionalIdentifier, // ID do usuário logado
-            medications: recordData.medications, // Array de subdocumentos
+            medications: cleanedMedications, // <-- AQUI USAMOS O ARRAY CORRIGIDO
             referenceDate: recordData.referenceDate,
             observation: recordData.observation,
             totalValue: recordData.totalValue,
@@ -410,7 +464,8 @@ export default function ProfessionalDashboardPage({
         await syncGlobalState(setRecords, 'registros');
 
     } catch (error) {
-        console.error('[API Error] Salvar Registro:', error); 
+        // Agora o log de erro será mais detalhado se algo ainda falhar
+        console.error('[API Error] Salvar Registro:', error.response?.data || error.message); 
         const msg = error.response?.data?.message || 'Erro ao salvar registro. Verifique os dados.';
         addToast(msg, 'error');
         
@@ -492,8 +547,7 @@ export default function ProfessionalDashboardPage({
     }
   };
 
-  // --- (INÍCIO DA CORREÇÃO 3) ---
-  // A função agora aceita 'cancelReason' e o passa para a API
+  // 7. ATUALIZAR STATUS (CANCELAMENTO)
   const handleCancelRecordStatus = async (recordId, cancelReason) => {
     try {
         await axios.patch(`${API_BASE_URL}/records/${recordId}/status`, { 
@@ -512,9 +566,8 @@ export default function ProfessionalDashboardPage({
         console.error('[API Error] Cancelar Status:', error);
         addToast('Falha ao cancelar status. Tente novamente.', 'error');
     }
-    // (O 'finally' foi removido daqui e será tratado pelo modal)
   };
-  // --- (FIM DA CORREÇÃO 3) ---
+
 
   // --- Funções UI (Mantidas) ---
   const handleViewPatientHistory = (patientId) => {
@@ -566,6 +619,12 @@ export default function ProfessionalDashboardPage({
       addToast('Selecione um paciente.', 'error');
     }
   };
+  
+  // --- (NOVO) Função para navegar com filtro ---
+  const handleNavigateWithFilter = (status) => {
+    setStatusFilter(status); // 1. Define o filtro
+    navigate('/history');    // 2. Navega para a página de histórico
+  };
 
 
   // --- Renderização Condicional (CORRIGIDA) ---
@@ -580,6 +639,59 @@ export default function ProfessionalDashboardPage({
             <h2 className="text-2xl md:text-3xl font-bold text-gray-800">
               Dashboard Profissional
             </h2>
+            
+            {/* --- (INÍCIO) Alerta de Registros Vencidos (Re-adicionado) --- */}
+            {overduePendingRecords.length > 0 && isOverdueAlertVisible && (
+              <div
+                className="bg-white border-l-8 border-red-600 p-4 rounded-lg shadow-lg flex items-start gap-3"
+                role="alert"
+              >
+                {/* Ícone com toque visual (SVG) */}
+                <div className="flex-shrink-0 text-red-500 mt-1">
+                  <span className="w-6 h-6">
+                    {icons.exclamation || (
+                      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                      </svg>
+                    )}
+                  </span>
+                </div>
+
+                {/* Conteúdo do Texto */}
+                <div className="flex-grow">
+                  <p className="font-bold text-gray-800">Atenção!</p>
+                  <p className="text-sm text-gray-700">
+                    Existem {overduePendingRecords.length}{' '}
+                    {overduePendingRecords.length === 1
+                      ? 'registro pendente'
+                      : 'registros pendentes'}{' '}
+                    há mais de 30 dias.
+                  </p>
+                  <button
+                    onClick={() => handleNavigateWithFilter('Pendente')} // <-- (NOVO) Usa a função com filtro
+                    className="text-sm text-indigo-600 hover:text-indigo-800 hover:underline font-medium mt-1 cursor-pointer transition-colors"
+                  >
+                    Ver registros pendentes
+                  </button>
+                </div>
+
+                {/* Botão de Fechar (SVG) */}
+                <button
+                  onClick={() => setIsOverdueAlertVisible(false)}
+                  className="p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 rounded-full cursor-pointer transition-colors"
+                  title="Dispensar"
+                >
+                  <span className="w-5 h-5">
+                    {icons.close || (
+                      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    )}
+                  </span>
+                </button>
+              </div>
+            )}
+            {/* --- (FIM) Fim do Alerta --- */}
             
             {/* Grid de Cards com Novo Visual e 'navigate' */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6">
@@ -745,10 +857,11 @@ export default function ProfessionalDashboardPage({
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 
-                {/* Atalho 1: Gerenciar Pacientes (CORRIGIDO: usa navigate) */}
+                {/* --- (INÍCIO DA CORREÇÃO) --- */}
+                {/* Atalho 1: Gerenciar Pacientes (Adicionado cursor-pointer) */}
                 <button
                   onClick={() => navigate('/patients')} // <-- Sincronizado
-                  className="p-5 bg-white rounded-lg shadow-lg hover:shadow-xl hover:bg-gray-50 transition-all duration-300 flex items-center gap-4 text-left"
+                  className="p-5 bg-white rounded-lg shadow-lg hover:shadow-xl hover:bg-gray-50 transition-all duration-300 flex items-center gap-4 text-left cursor-pointer"
                 >
                   <span className="p-3 bg-blue-100 text-blue-600 rounded-full">
                     {icons.users || <span></span>}
@@ -759,10 +872,10 @@ export default function ProfessionalDashboardPage({
                   </div>
                 </button>
 
-                {/* Atalho 2: Histórico Geral (CORRIGIDO: usa navigate) */}
+                {/* Atalho 2: Histórico Geral (Adicionado cursor-pointer) */}
                 <button
                   onClick={() => navigate('/history')} // <-- Sincronizado
-                  className="p-5 bg-white rounded-lg shadow-lg hover:shadow-xl hover:bg-gray-50 transition-all duration-300 flex items-center gap-4 text-left"
+                  className="p-5 bg-white rounded-lg shadow-lg hover:shadow-xl hover:bg-gray-50 transition-all duration-300 flex items-center gap-4 text-left cursor-pointer"
                 >
                   <span className="p-3 bg-purple-100 text-purple-600 rounded-full">
                     {icons.history || <span></span>}
@@ -773,10 +886,10 @@ export default function ProfessionalDashboardPage({
                   </div>
                 </button>
 
-                {/* Atalho 3: Registro Rápido (ALTERADO) */}
+                {/* Atalho 3: Registro Rápido (Adicionado cursor-pointer) */}
                 <button
                   onClick={() => navigate('/history')} // <-- Leva para o histórico (onde está o form rápido)
-                  className="p-5 bg-white rounded-lg shadow-lg hover:shadow-xl hover:bg-gray-50 transition-all duration-300 flex items-center gap-4 text-left"
+                  className="p-5 bg-white rounded-lg shadow-lg hover:shadow-xl hover:bg-gray-50 transition-all duration-300 flex items-center gap-4 text-left cursor-pointer"
                 >
                   <span className="p-3 bg-indigo-100 text-indigo-600 rounded-full"> 
                     {icons.clipboard || <span></span>} 
@@ -786,7 +899,7 @@ export default function ProfessionalDashboardPage({
                     <p className="text-sm text-gray-500">Adicionar um novo registro</p>
                   </div>
                 </button>
-
+                {/* --- (FIM DA CORREÇÃO) --- */}
               </div>
             </div>
             
@@ -947,8 +1060,7 @@ export default function ProfessionalDashboardPage({
                         <span className="w-4 h-4 block">{icons.edit}</span>
                       </button>
                       
-                      {/* --- (INÍCIO DA CORREÇÃO 5) --- */}
-                      {/* Botão Excluir Paciente agora só aparece se a role NÃO for profissional */}
+                      {/* --- Botão Excluir Paciente (Oculto para Profissional) --- */}
                       {(user?.role !== 'profissional' && user?.role !== 'Profissional') && (
                         <button
                           onClick={() =>
@@ -966,7 +1078,6 @@ export default function ProfessionalDashboardPage({
                           <span className="w-4 h-4 block">{icons.trash}</span>
                         </button>
                       )}
-                      {/* --- (FIM DA CORREÇÃO 5) --- */}
                       
                     </div>
                   </div>
@@ -1200,8 +1311,7 @@ export default function ProfessionalDashboardPage({
                                 Atender
                               </button>
                               
-                              {/* --- (INÍCIO DA CORREÇÃO 4) --- */}
-                              {/* Botão "Cancelar" agora só aparece se a role NÃO for profissional */}
+                              {/* --- Botão "Cancelar" (Oculto para Profissional) --- */}
                               {(user?.role !== 'profissional' && user?.role !== 'Profissional') && (
                                 <button
                                   onClick={() => setCancelingRecord(record)}
@@ -1210,7 +1320,6 @@ export default function ProfessionalDashboardPage({
                                   Cancelar
                                 </button>
                               )}
-                              {/* --- (FIM DA CORREÇÃO 4) --- */}
                             </>
                           )}
                           <button
@@ -1232,9 +1341,8 @@ export default function ProfessionalDashboardPage({
                             <span className="w-4 h-4 block">{icons.edit}</span>
                           </button>
                           
-                          {/* --- (INÍCIO DA CORREÇÃO 6) --- */}
-                          {/* Botão "Excluir Registro" agora só aparece se a role NÃO for profissional */}
-                          {(user?.role !== 'profissional' && user?.role !== 'Profissional') && (
+                          {/* --- Botão "Excluir Registro" (Oculto para Profissional) --- */}
+                          {(user?.role !== 'professional' && user?.role !== 'Professional') && (
                             <button
                               onClick={() =>
                                 setConfirmation({
@@ -1250,7 +1358,6 @@ export default function ProfessionalDashboardPage({
                               <span className="w-4 h-4 block">{icons.trash}</span>
                             </button>
                           )}
-                          {/* --- (FIM DA CORREÇÃO 6) --- */}
                           
                         </div>
                       </td>
@@ -1407,6 +1514,20 @@ export default function ProfessionalDashboardPage({
             )}
           </div>
         );
+        
+      // --- (INÍCIO DA NOVA SEÇÃO) ---
+      // VISÃO: MEDICAÇÕES (Renderiza a página de medicações)
+      case 'medications':
+        return (
+          <MedicationsPage
+              user={user}
+              medications={medications}
+              setMedications={setMedications} // Passa a função de refetch (ex: refetchMedications)
+              addToast={addToast}
+              addLog={addLog}
+          />
+        );
+      // --- (FIM DA NOVA SEÇÃO) ---
 
       default:
         return (
@@ -1476,8 +1597,7 @@ export default function ProfessionalDashboardPage({
         />
       )}
 
-      {/* --- (INÍCIO DA CORREÇÃO 5) --- */}
-      {/* Renderiza o novo modal de cancelamento quando o estado 'cancelingRecord' for setado */}
+      {/* --- Renderiza o novo modal de cancelamento --- */}
       {cancelingRecord && (
         <CancelRecordModal
           record={cancelingRecord}
@@ -1486,7 +1606,6 @@ export default function ProfessionalDashboardPage({
           getPatientNameById={getPatientNameById} // Passa o helper de nome
         />
       )}
-      {/* --- (FIM DA CORREÇÃO 5) --- */}
     </>
   );
 }

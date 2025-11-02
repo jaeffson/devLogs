@@ -38,15 +38,16 @@ export default function App() {
   const [patients, setPatients] = useState([]);
   const [records, setRecords] = useState([]);
   const [medications, setMedications] = useState([]);
-  const [users, setUsers] = useState([]);
-
-  const [annualBudget, setAnnualBudget] = useState(5000.0);
-  const [activityLog, setActivityLog] = useState([]);
+  const [users, setUsers] = useState([]); 
+  
+  const [annualBudget, setAnnualBudget] = useState(5000.0); 
+  
+  const [activityLog, setActivityLog] = useState([]); // <-- Este estado agora será preenchido pela API
 
   const navigate = useNavigate();
 
-  // --- FUNÇÕES HELPER E TOAST ---
-  const addToast = (message, type = 'success') => {
+  // --- FUNÇÕES HELPER E TOAST (CORRIGIDAS COM useCallback) ---
+  const addToast = useCallback((message, type = 'success') => {
     if (type === 'success') {
       toast.success(message);
     } else if (type === 'error') {
@@ -54,38 +55,54 @@ export default function App() {
     } else {
       toast(message);
     }
-  };
+  }, []); // <-- Dependência vazia, esta função nunca muda
 
-  const addLog = (userName, action) => {
-    const newLog = {
-      id: Date.now(),
-      timestamp: new Date().toISOString(),
+  const addLog = useCallback(async (userName, action) => {
+    const logData = {
       user: userName || 'Sistema',
       action,
     };
-    setActivityLog((prev) => [newLog, ...prev].slice(0, 100));
-  };
+
+    // --- (INÍCIO DA CORREÇÃO) ---
+    // O objeto temporário (tempLog) agora usa 'timestamp'
+    // em vez de 'createdAt', para bater com o 'normalizeData'.
+    const tempLog = { ...logData, id: Date.now(), timestamp: new Date().toISOString() };
+    // --- (FIM DA CORREÇÃO) ---
+
+    setActivityLog((prev) => [tempLog, ...prev].slice(0, 100));
+
+    // 2. Salva no backend (Fire-and-Forget)
+    try {
+      await axios.post(`${API_BASE_URL}/logs`, logData);
+    } catch (error) {
+      console.error("Erro ao salvar log:", error);
+      // Não mostramos um toast para falha de log, pois não é crítico para o usuário.
+    }
+  }, []); // <-- Dependência vazia, esta função nunca muda
+
 
   // Função que transforma _id do Mongoose em id para o React
-  const normalizeData = (dataArray) => {
+  const normalizeData = useCallback((dataArray) => {
     if (!Array.isArray(dataArray)) return [];
     return dataArray.map((item) => ({
       ...item,
-      id: item._id || item.id,
+      id: item._id || item.id, // Usa o _id do Mongoose
+      // Converte 'createdAt' (do MongoDB) para 'timestamp' (que o frontend usa)
+      timestamp: item.createdAt || item.timestamp, 
     }));
-  };
+  }, []); // <-- Dependência vazia, esta função nunca muda
 
   // --- FUNÇÕES DE RECARGA DE DADOS DA API (MEMORIZADAS) ---
-
+  // (Toasts de erro removidos daqui para evitar duplicatas)
   const refetchPatients = useCallback(async () => {
     try {
       const response = await axios.get(`${API_BASE_URL}/patients`);
       setPatients(normalizeData(response.data));
     } catch (error) {
       console.error('Falha ao recarregar pacientes:', error);
-      addToast('Erro ao carregar pacientes.', 'error');
+      throw error; 
     }
-  }, [addToast]);
+  }, [normalizeData]); // <-- Depende de normalizeData
 
   const refetchRecords = useCallback(async () => {
     try {
@@ -93,9 +110,9 @@ export default function App() {
       setRecords(normalizeData(response.data));
     } catch (error) {
       console.error('Falha ao recarregar registros:', error);
-      addToast('Erro ao carregar registros.', 'error');
+      throw error;
     }
-  }, [addToast]);
+  }, [normalizeData]);
 
   const refetchMedications = useCallback(async () => {
     try {
@@ -103,9 +120,41 @@ export default function App() {
       setMedications(normalizeData(response.data));
     } catch (error) {
       console.error('Falha ao recarregar medicações:', error);
-      addToast('Erro ao carregar medicações.', 'error');
+      throw error;
     }
-  }, [addToast]);
+  }, [normalizeData]);
+
+  const refetchUsers = useCallback(async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/users`);
+      setUsers(normalizeData(response.data));
+    } catch (error) {
+      console.error('Falha ao recarregar usuários:', error);
+      throw error;
+    }
+  }, [normalizeData]);
+
+  const refetchBudget = useCallback(async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/settings/budget`);
+      if (response.data && response.data.annualBudget != null) {
+        setAnnualBudget(parseFloat(response.data.annualBudget));
+      }
+    } catch (error) {
+      console.error('Falha ao carregar orçamento:', error);
+      throw error;
+    }
+  }, []); 
+
+  const refetchLogs = useCallback(async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/logs`);
+      setActivityLog(normalizeData(response.data)); 
+    } catch (error) {
+      console.error('Falha ao carregar logs:', error);
+      throw error;
+    }
+  }, [normalizeData]);
 
   // FUNÇÃO CENTRAL DE CARREGAMENTO INICIAL (MEMORIZADA)
   const fetchInitialData = useCallback(async () => {
@@ -115,25 +164,36 @@ export default function App() {
         refetchPatients(),
         refetchRecords(),
         refetchMedications(),
+        refetchUsers(),
+        refetchBudget(), 
+        refetchLogs(),
       ]);
 
       addToast('Dados carregados do servidor!', 'info');
     } catch (error) {
-      // Este catch captura erros de Promise.all, embora o log esteja nas refetchs
       console.error('Falha Crítica no Promise.all:', error);
       addToast('Erro ao iniciar dados. Verifique o console.', 'error');
     } finally {
       setIsInitializing(false); // Garante que o preloader saia
     }
-  }, [refetchPatients, refetchRecords, refetchMedications, addToast]);
+  }, [
+      refetchPatients, 
+      refetchRecords, 
+      refetchMedications, 
+      refetchUsers, 
+      refetchBudget,
+      refetchLogs,
+      addToast
+    ]); 
 
   // --- Lógica de Login/Logout/Config ---
-  const handleUpdateBudget = (newBudgetValue) => {
-    // Corrigido o nome da variável
+  
+  // (Função 'handleUpdateBudget' corrigida e com useCallback)
+  const handleUpdateBudget = useCallback((newBudgetValue) => {
     const numericBudget = parseFloat(newBudgetValue);
     if (!isNaN(numericBudget) && numericBudget >= 0) {
       setAnnualBudget(numericBudget);
-      addToast('Orçamento atualizado com sucesso!', 'success');
+      // (O Toast de sucesso é mostrado pelo AdminSettingsPage)
       addLog(
         user?.name,
         `atualizou o orçamento para R$ ${new Intl.NumberFormat('pt-BR', {
@@ -144,16 +204,16 @@ export default function App() {
     } else {
       addToast('Valor de orçamento inválido recebido.', 'error');
     }
-  };
+  }, [user, addLog, addToast]); // <-- Depende de user, addLog, addToast
 
-  const handleLogin = (userData) => {
+  const handleLogin = useCallback((userData) => {
     localStorage.setItem('user', JSON.stringify(userData));
     setUser(userData);
     addLog(userData.name, 'fez login.');
     navigate('/dashboard', { replace: true });
-  };
+  }, [navigate, addLog]); // <-- Depende de navigate, addLog
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     setIsLoggingOut(true);
     addLog(user?.name, 'fez logout.');
     setTimeout(() => {
@@ -162,7 +222,7 @@ export default function App() {
       setIsLoggingOut(false);
       navigate('/login', { replace: true });
     }, 500);
-  };
+  }, [user, navigate, addLog]); // <-- Depende de user, navigate, addLog
 
   // --- EFEITOS E CHECAGEM DE INICIALIZAÇÃO (CORRIGIDO O LOOP) ---
   useEffect(() => {
@@ -181,16 +241,12 @@ export default function App() {
       const bannerTimer = setTimeout(() => setShowCookieBanner(true), 1500);
       return () => clearTimeout(bannerTimer);
     }
-  }, [user, isInitializing, fetchInitialData]); // Adicionado fetchInitialData às dependências
+  }, [user, isInitializing, fetchInitialData]);
 
-  // --- [INÍCIO DA CORREÇÃO] ---
-  // A função 'handleAcceptCookies' que estava faltando foi adicionada aqui.
-  // Ela completa a lógica que você já tinha no useEffect.
-  const handleAcceptCookies = () => {
+  const handleAcceptCookies = useCallback(() => {
     localStorage.setItem('cookieConsent', 'true');
     setShowCookieBanner(false);
-  };
-  // --- [FIM DA CORREÇÃO] ---
+  }, []); // <-- Envolvido em useCallback
 
   if (isInitializing || isLoggingOut) {
     return <FullScreenPreloader />;
@@ -206,12 +262,12 @@ export default function App() {
     medications,
     setMedications: refetchMedications,
     users,
-    setUsers,
+    setUsers: refetchUsers,
     addToast,
-    addLog,
+    addLog, // <-- A função 'addLog' agora é estável
     annualBudget,
-    handleUpdateBudget,
-    activityLog,
+    handleUpdateBudget, // <-- A função 'handleUpdateBudget' agora é estável
+    activityLog, // <-- Este estado agora vem da API
     getMedicationName,
   };
 
@@ -224,10 +280,10 @@ export default function App() {
             !user ? (
               <LoginPage
                 onLogin={handleLogin}
-                setUsers={setUsers}
+                setUsers={setUsers} 
                 addToast={addToast}
                 addLog={addLog}
-                MOCK_USERS={users} // Passando MOCK_USERS se necessário para o login
+                MOCK_USERS={users} 
               />
             ) : (
               <Navigate to="/dashboard" replace />
@@ -257,13 +313,12 @@ export default function App() {
               user?.role === 'secretario' ? (
                 <SecretaryDashboardPage {...commonPageProps} />
               ) : (
-                
                 <ProfessionalDashboardPage {...commonPageProps} />
               )
             }
           />
 
-          {(user?.role === 'professional' || user?.role === 'admin') && (
+          {(user?.role === 'professional' || user?.role === 'admin' || user?.role === 'Professional') && (
             <>
               <Route
                 path="patients"
@@ -274,7 +329,6 @@ export default function App() {
                   />
                 }
               />
-          
               <Route
                 path="history" 
                 element={
@@ -284,7 +338,6 @@ export default function App() {
                   />
                 }
               />
-              {/* --- (FIM DA CORREÇÃO) --- */}
               <Route
                 path="deliveries"
                 element={
@@ -294,14 +347,10 @@ export default function App() {
                   />
                 }
               />
-
-              {/* --- ALTERAÇÃO AQUI --- */}
-              {/* Movi a rota 'medications' de 'admin' para este bloco */}
               <Route
                 path="medications"
                 element={<MedicationsPage {...commonPageProps} />}
               />
-              {/* --- FIM DA ALTERAÇÃO --- */}
             </>
           )}
 
@@ -343,9 +392,6 @@ export default function App() {
 
           {user?.role === 'admin' && (
             <>
-              {/* --- ALTERAÇÃO AQUI --- */}
-              {/* A rota 'medications' foi removida daqui */}
-              {/* --- FIM DA ALTERAÇÃO --- */}
               <Route
                 path="settings"
                 element={<AdminSettingsPage {...commonPageProps} />}
@@ -383,7 +429,7 @@ export default function App() {
               experiência em nosso site.
             </p>
             <button
-              onClick={handleAcceptCookies} // Agora esta função existe e o erro foi corrigido
+              onClick={handleAcceptCookies} 
               className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-5 rounded-lg text-sm flex-shrink-0"
             >
               Entendi e Aceitar

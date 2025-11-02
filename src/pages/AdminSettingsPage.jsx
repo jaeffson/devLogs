@@ -1,6 +1,6 @@
 // src/pages/AdminSettingsPage.jsx
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import axios from 'axios'; // <-- NOVO: Importar Axios
+import axios from 'axios'; // <-- Importar Axios
 
 // --- Imports de Componentes ---
 import UserForm from '../components/forms/UserForm';
@@ -16,7 +16,7 @@ const API_BASE_URL = 'http://localhost:5000/api';
 // --- Componente da Página ---
 export default function AdminSettingsPage({
     user, users = [], setUsers, // setUsers agora é refetchUsers
-    annualBudget, handleUpdateBudget,
+    annualBudget, handleUpdateBudget, // handleUpdateBudget é a função do App.jsx que ATUALIZA O ESTADO
     activityLog = [],
     records = [],
     addToast, addLog
@@ -32,25 +32,12 @@ export default function AdminSettingsPage({
 
     const [newBudgetValue, setNewBudgetValue] = useState(String(annualBudget || '0'));
 
-    // --- SINCRONIZAÇÃO DE USUÁRIOS E SINCRONIZAÇÃO GERAL ---
-    // NOVO: Função para sincronizar o estado global de usuários (chamada pelo CRUD)
-    const refetchUsers = useCallback(async () => {
-        // ASSUNÇÃO: A rota /users deve ser implementada no seu backend Node.js
-        try {
-            const response = await axios.get(`${API_BASE_URL}/users`);
-            setUsers(response.data); 
-        } catch (error) {
-            console.error('Erro ao buscar usuários:', error);
-            addToast('Falha ao carregar usuários.', 'error');
-        }
-    }, [setUsers, addToast]);
-
-    // O useEffect do App.jsx já cuida da primeira carga, mas se setUsers for chamado,
-    // ele deve ser a função de refetch acima.
+    // A função 'refetchUsers' local foi REMOVIDA.
 
     // Sincroniza o estado interno (newBudgetValue) quando a prop annualBudget mudar
     useEffect(() => {
-        const value = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2 }).format(annualBudget || 0);
+        // Formata o valor recebido da API (ex: 5000.0) para o padrão brasileiro (ex: 5.000,00)
+        const value = (annualBudget || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
         setNewBudgetValue(String(value));
     }, [annualBudget]);
 
@@ -97,8 +84,8 @@ export default function AdminSettingsPage({
                 addLog?.(user?.name, `criou usuário: ${cleanedUserData.name}`);
             }
 
-            // Recarrega o estado global de usuários
-            refetchUsers(); 
+            // Recarrega o estado global de usuários chamando a prop do App.jsx
+            setUsers(); 
 
         } catch (error) {
             console.error('[API Error] Salvar Usuário:', error);
@@ -131,7 +118,7 @@ export default function AdminSettingsPage({
             addToast(`Usuário ${newStatus === 'active' ? 'ativado' : 'desativado'}!`, 'success');
             addLog?.(user?.name, `${newStatus === 'active' ? 'ativou' : 'desativou'} usuário ${userToToggle?.name}`);
             
-            refetchUsers(); // Recarrega para atualizar a lista
+            setUsers(); // Recarrega para atualizar a lista
             
         } catch (error) {
             console.error('[API Error] Toggle Status:', error);
@@ -165,7 +152,7 @@ export default function AdminSettingsPage({
             addToast(`Usuário excluído.`, 'success');
             addLog?.(user?.name, `EXCLUIU usuário ${userToDelete?.name}`);
             
-            refetchUsers(); // Recarrega para remover da lista
+            setUsers(); // Recarrega para remover da lista
             
         } catch (error) {
             console.error('[API Error] Excluir Usuário:', error);
@@ -177,17 +164,38 @@ export default function AdminSettingsPage({
     // --- FIM DAS FUNÇÕES CRUD DE USUÁRIOS ---
 
 
-    const handleBudgetSave = () => {
+    // --- (INÍCIO DA CORREÇÃO) ---
+    // Esta função agora chama a API diretamente (POST) e,
+    // em caso de sucesso, chama a 'handleUpdateBudget' do App.jsx
+    // (que apenas atualiza o estado).
+    const handleBudgetSave = async () => {
+        // 1. Limpa a string (Ex: "5.000,00" -> "5000.00")
         const cleanedValue = newBudgetValue.replace(/\./g, '').replace(',', '.');
         const value = parseFloat(cleanedValue);
 
-        if (!isNaN(value) && value >= 0) {
-            handleUpdateBudget(value); // Esta função já chama addToast
-        } else {
+        if (isNaN(value) || value < 0) {
             addToast('Valor de orçamento inválido.', 'error');
-            setNewBudgetValue(String(annualBudget));
+            // Reseta o input para o valor antigo (que veio da prop)
+            setNewBudgetValue(annualBudget.toLocaleString('pt-BR', { minimumFractionDigits: 2 }));
+            return;
+        }
+
+        try {
+            // 2. Envia o valor numérico limpo para a API
+            await axios.post(`${API_BASE_URL}/settings/budget`, {
+                budget: value 
+            });
+
+            // 3. (Sucesso) Chama a função do App.jsx para atualizar o estado global
+            handleUpdateBudget(value); // Esta função (do App.jsx) já mostra o toast de sucesso
+
+        } catch (error) {
+            // 4. (Erro) Mostra o erro da API
+            console.error('[API Error] Salvar Orçamento:', error);
+            addToast('Falha ao salvar orçamento no servidor.', 'error');
         }
     };
+    // --- (FIM DA CORREÇÃO) ---
 
     const sortedActivityLog = useMemo(() =>
         [...activityLog].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)),
@@ -242,7 +250,8 @@ export default function AdminSettingsPage({
                                     ))}
                                 </tbody>
                             </table>
-                            {users.length === 0 && <p className="text-center text-gray-500 py-6">Nenhum usuário.</p>}
+                            {/* A tabela agora mostra esta mensagem se 'users' estiver vazio */}
+                            {users.length === 0 && <p className="text-center text-gray-500 py-6">Nenhum usuário encontrado.</p>}
                         </div>
                     </div>
                 );
@@ -256,7 +265,8 @@ export default function AdminSettingsPage({
                             </div>
                             <div>
                                 <label className="block text-gray-700 font-medium mb-1" htmlFor="annual-budget-input">Definir Orçamento (R$)</label>
-                                <input id="annual-budget-input" type="text" value={newBudgetValue} onChange={(e) => setNewBudgetValue(e.target.value)} className="w-full p-2 border rounded border-gray-300" placeholder="Ex: 5000.00"/>
+                                {/* (CORREÇÃO) O input agora aceita vírgula e ponto da formatação pt-BR */}
+                                <input id="annual-budget-input" type="text" value={newBudgetValue} onChange={(e) => setNewBudgetValue(e.target.value)} className="w-full p-2 border rounded border-gray-300" placeholder="Ex: 5.000,00"/>
                             </div>
                             <button onClick={handleBudgetSave} className="px-5 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium transition-colors cursor-pointer">Salvar Orçamento</button>
                         </div>
@@ -293,7 +303,7 @@ export default function AdminSettingsPage({
               <nav className="-mb-px flex space-x-6 md:space-x-8" aria-label="Tabs">
                   <button onClick={() => setActiveSubTab('users')} className={`${activeSubTab === 'users' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'} whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors cursor-pointer`}>Usuários ({users.length})</button>
                   <button onClick={() => setActiveSubTab('budget')} className={`${activeSubTab === 'budget' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'} whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors cursor-pointer`}>Orçamento</button>
-                  <button onClick={() => setActiveSubTab('log')} className={`${activeSubTab === 'log' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'} whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors cursor-pointer`}>Log de Atividades</button>
+                  <button onClick={() => setActiveSubTab('log')} className={`${activeSubTab === 'log' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'} whitespace-nowBwrap py-3 px-1 border-b-2 font-medium text-sm transition-colors cursor-pointer`}>Log de Atividades</button>
               </nav>
             </div>
             <div className="mt-4">
