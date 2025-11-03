@@ -1,5 +1,7 @@
 // src/pages/AdminReportsPage.jsx
-import React, { useState, useMemo, useEffect } from 'react'; // --- MUDANÇA --- (importei useEffect)
+// (CORRIGIDO: Removido seletor de ano duplicado. Usa a prop 'filterYear' global.)
+
+import React, { useState, useMemo, useEffect } from 'react'; 
 
 // --- Imports de Componentes (Opcional: Gráficos) ---
 import { BarChart } from '../components/common/BarChart';
@@ -20,36 +22,31 @@ export default function AdminReportsPage({
   medications = [],
   users = [],
   annualBudget,
+  // --- (INÍCIO DA MUDANÇA 1) ---
+  // Recebe o filterYear global do App.jsx
+  filterYear, 
+  // --- (FIM DA MUDANÇA 1) ---
 }) {
   // --- Estados Internos ---
-  const [filterYear, setFilterYear] = useState(new Date().getFullYear());
+  // --- (REMOVIDO) ---
+  // const [filterYear, setFilterYear] = useState(new Date().getFullYear());
 
-  // --- MUDANÇA: Nosso novo estado de loading ---
   const [isLoading, setIsLoading] = useState(true);
 
-  // --- MUDANÇA: Simula o carregamento dos dados ---
-  // Vamos simular uma "busca na API" sempre que o ano mudar.
+  // Simula o carregamento dos dados
   useEffect(() => {
-    setIsLoading(true); // Começa a carregar
+    setIsLoading(true); 
 
-    // Simula o tempo de espera (1 segundo)
     const timer = setTimeout(() => {
-      setIsLoading(false); // Termina de carregar
+      setIsLoading(false); 
     }, 1000);
 
-    // Limpa o timer se o usuário mudar de ano de novo
     return () => clearTimeout(timer);
-  }, [filterYear]); // Dispara toda vez que o 'filterYear' mudar
-
-  // --- Memos para Calcular Estatísticas ---
-  // (Todo o seu código 'useMemo' continua exatamente igual aqui... )
-  // ...
-  // ... (recordsThisYear, generalStats, statusChartData, etc)
-  // ...
+  }, [filterYear]); // Dispara toda vez que o 'filterYear' (da prop) mudar
 
   // --- Memos para Calcular Estatísticas ---
 
-  // Filtra registros pelo ano selecionado
+  // Filtra registros pelo ano selecionado (agora usa a prop filterYear)
   const recordsThisYear = useMemo(
     () =>
       records.filter((r) => new Date(r.entryDate).getFullYear() === filterYear),
@@ -126,7 +123,7 @@ export default function AdminReportsPage({
 
     return months.map((monthLabel, index) => ({
       label: monthLabel,
-      value: costByMonth[index], // Valor aqui é o custo, não contagem
+      value: costByMonth[index], 
     }));
   }, [recordsThisYear]);
 
@@ -136,17 +133,16 @@ export default function AdminReportsPage({
     recordsThisYear.forEach((record) => {
       record.medications.forEach((medItem) => {
         const medId = medItem.medicationId;
-        usageCount[medId] = (usageCount[medId] || 0) + 1; // Conta quantas vezes aparece em registros
+        usageCount[medId] = (usageCount[medId] || 0) + 1; 
       });
     });
-    // Mapeia para um array ordenado por contagem
     return Object.entries(usageCount)
       .map(([medId, count]) => ({
         id: medId,
         name: getMedicationName(medId, medications),
         count: count,
       }))
-      .sort((a, b) => b.count - a.count); // Mais usadas primeiro
+      .sort((a, b) => b.count - a.count); 
   }, [recordsThisYear, medications]);
 
   // --- Renderização ---
@@ -157,62 +153,33 @@ export default function AdminReportsPage({
         <h2 className="text-2xl md:text-3xl font-bold text-gray-800">
           Relatórios Administrativos
         </h2>
-        {/* Seletor de Ano */}
-        <div className="flex items-center gap-2 mt-2 md:mt-0">
-          <label
-            htmlFor="report-year-selector"
-            className="text-sm font-medium text-gray-700"
-          >
-            Ano:
-          </label>
-          <select
-            id="report-year-selector"
-            value={filterYear}
-            onChange={(e) => setFilterYear(parseInt(e.target.value))}
-            className="p-1 border rounded-lg text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-          >
-            {[...Array(5)].map((_, i) => {
-              const year = new Date().getFullYear() - i;
-              return (
-                <option key={year} value={year}>
-                  {year}
-                </option>
-              );
-            })}
-          </select>
-        </div>
+        {/* --- (INÍCIO DA MUDANÇA 2) --- */}
+        {/* O seletor de ano local foi REMOVIDO daqui. */}
+        {/* O seletor global no MainLayout (header) agora controla esta página. */}
+        {/* --- (FIM DA MUDANÇA 2) --- */}
       </div>
 
-      {/* --- MUDANÇA: Lógica de Loading --- */}
       {isLoading ? (
         // --- SE ESTIVER CARREGANDO, MOSTRA SKELETONS ---
         <div className="space-y-6">
-          {/* Esqueleto da "Visão Geral" */}
           <section className="bg-white p-4 md:p-6 rounded-lg shadow">
-            <div className="h-6 w-1/3 rounded bg-gray-200 animate-pulse mb-4"></div>{' '}
-            {/* Título falso */}
+            <div className="h-6 w-1/3 rounded bg-gray-200 animate-pulse mb-4"></div>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 text-center">
-              {/* Mostra 9 cards de esqueleto para preencher o grid */}
               {[...Array(9)].map((_, i) => (
                 <SkeletonCard key={i} />
               ))}
             </div>
           </section>
-
-          {/* Esqueleto dos Gráficos */}
           <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <SkeletonBlock />
             <SkeletonBlock />
           </section>
-
-          {/* Esqueleto da Tabela */}
           <section className="bg-white p-4 md:p-6 rounded-lg shadow">
             <SkeletonBlock />
           </section>
         </div>
       ) : (
         // --- SE JÁ CARREGOU, MOSTRA O CONTEÚDO REAL ---
-        // (Aqui vai todo o seu JSX original, sem nenhuma mudança)
         <>
           {/* Seção de Estatísticas Gerais */}
           <section className="bg-white p-4 md:p-6 rounded-lg shadow">
@@ -268,11 +235,11 @@ export default function AdminReportsPage({
                   {generalStats.uniquePatientsAttended}
                 </div>
               </div>
-              <div className="bg-indigo-50 p-3 rounded col-span-2 lg:col-span-1">
-                <div className="text-sm text-indigo-800 font-semibold">
+              <div className="bg-emerald-50 p-3 rounded col-span-2 lg:col-span-1">
+                <div className="text-sm text-emerald-800 font-semibold">
                   Custo Total (Registros)
                 </div>
-                <div className="text-xl font-bold text-indigo-900">
+                <div className="text-xl font-bold text-emerald-900">
                   R$ {generalStats.totalCost.toFixed(2).replace('.', ',')}
                 </div>
               </div>

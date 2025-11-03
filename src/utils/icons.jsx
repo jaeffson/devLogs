@@ -1,3 +1,6 @@
+// src/utils/icons.jsx
+// (ADICIONADO O ÍCONE 'spinner')
+
 import React from 'react';
 
 // Importando os ícones do Heroicons 2
@@ -24,10 +27,12 @@ import {
   HiOutlineBuildingOffice2,
   HiOutlineUserCircle,
   HiOutlineUser,
-
-  // --- ADICIONE ESTAS DUAS LINHAS ---
   HiOutlineCheck,
-  HiOutlineNoSymbol 
+  HiOutlineNoSymbol,
+  HiOutlineInformationCircle,
+
+  // --- (ADICIONE ESTA LINHA) ---
+  HiOutlineArrowPath 
 
 } from 'react-icons/hi2';
 
@@ -55,8 +60,8 @@ export const icons = {
   organization: <HiOutlineBuildingOffice2 />,
   userCircle: <HiOutlineUserCircle />,
   user: <HiOutlineUser />,
-
-  // --- Ícones adicionados para Ativar/Desativar ---
-  check: <HiOutlineCheck />,    // <-- Linha 56 provavelmente
+  check: <HiOutlineCheck />,    
   ban: <HiOutlineNoSymbol />,
+  info: <HiOutlineInformationCircle />,
+  spinner: <HiOutlineArrowPath />, 
 };

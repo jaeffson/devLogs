@@ -1,4 +1,6 @@
-// src/pages/LoginPage.jsx (VERSÃO FINAL LIMPA SEM MOCK DE CONTINGÊNCIA)
+// src/pages/LoginPage.jsx
+// (ATUALIZADO: Logo removida e revertida para o ícone SVG original)
+// (MANTIDO: Correção do erro 400 (Bad Request) com campo 'role' e validação de senha)
 
 import React, { useState } from 'react';
 import axios from 'axios'; 
@@ -16,6 +18,14 @@ const MailIcon = (
 const LockIcon = (
   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
 );
+// Ícone para o campo de Função
+const RoleIcon = (
+  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+);
+
+
+// --- (INÍCIO DA MUDANÇA: Logo revertida) ---
+// Ícone original SVG (sem o logo.png)
 const BrandIcon = (
    <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-blue-200">
      <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"></path>
@@ -26,38 +36,66 @@ const BrandIcon = (
      <path d="M18.36 5.64l1.42-1.42"></path>
    </svg>
 );
+// --- (FIM DA MUDANÇA) ---
+
 
 export default function LoginPage({ onLogin, addToast, addLog }) {
   const [isLoginView, setIsLoginView] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState(''); 
+  
+  // (MANTIDO: Correção do erro 400)
+  const [role, setRole] = useState('professional'); 
+  
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // --- LÓGICA DE AUTENTICAÇÃO REESCRITA (LIMPA DE MOCKS) ---
   const handleAuth = async (e) => { 
     e.preventDefault();
     if (isLoading) return;
     setError('');
+
+    // (MANTIDO: Validação de frontend)
+    const emailValue = email.trim().toLowerCase();
+    const nameValue = name.trim();
+    
+    if (!emailValue) {
+        setError('O campo E-mail é obrigatório.');
+        return;
+    }
+    
+    if (!isLoginView) { 
+        if (!nameValue) {
+            setError('O campo Nome Completo é obrigatório.');
+            return;
+        }
+        if (password.length < 6) {
+            setError('A senha deve ter pelo menos 6 caracteres.');
+            return;
+        }
+    }
+    // (FIM DA VALIDAÇÃO)
+
     setIsLoading(true);
     
-    // Objeto de credenciais
-    const credentials = { email: email.trim().toLowerCase(), password, name: name.trim() };
+    // (MANTIDO: Envio da 'role' para o backend)
+    const credentials = { 
+      email: emailValue, 
+      password, 
+      name: nameValue,
+      role: role 
+    };
 
     try {
         if (isLoginView) {
-            // --- TENTATIVA DE LOGIN (API) ---
             const response = await axios.post(`${API_BASE_URL}/auth/login`, {
                 email: credentials.email,
                 password: credentials.password
             });
             
-            // Sucesso na API
             const user = response.data;
 
-            // Lógica do Backend já deve retornar 403 se o status for pending/inactive.
-            // Aqui, apenas validamos se o backend não esqueceu de verificar o status.
             if (user.status === 'pending') {
                  setError('Sua conta está pendente de aprovação.'); 
             } else if (user.status === 'inactive') {
@@ -68,38 +106,28 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
             }
 
         } else {
-            // --- TENTATIVA DE CADASTRO (API) ---
-            if (!credentials.name) {
-                setError('Nome é obrigatório para cadastro.'); 
-                setIsLoading(false); 
-                return;
-            }
-            
-            // Rota de Cadastro
+            // Rota de Registro
             await axios.post(`${API_BASE_URL}/auth/register`, credentials);
             
             addToast('Cadastro realizado! Aguarde aprovação.', 'success');
             addLog?.('Novo Usuário', `${credentials.name} (${credentials.email}) realizou cadastro e aguarda aprovação.`);
             
-            setIsLoginView(true); // Volta para login
-            setName(''); setEmail(''); setPassword(''); // Limpa campos
+            setIsLoginView(true); 
+            setName(''); setEmail(''); setPassword(''); setRole('professional'); 
         }
     } catch (apiError) {
-        // Erros de API (400, 401, 409, etc.)
         console.error('API Error:', apiError.response || apiError);
-
-        // O backend deve retornar uma mensagem clara no apiError.response.data.message
-        const msg = apiError.response?.data?.message || 'Falha na conexão ou credenciais inválidas.';
-        setError(msg);
         
+        const serverMessage = apiError.response?.data?.message;
+        const specificError = Array.isArray(serverMessage) ? serverMessage[0] : serverMessage;
+        const msg = specificError || 'Sistema ou credenciais inválidas.';
+        
+        setError(msg);
     } finally {
         setIsLoading(false);
     }
-    // --- LÓGICA DE MOCK DE CONTINGÊNCIA REMOVIDA AQUI ---
   };
-  // --- FIM LÓGICA DE AUTENTICAÇÃO REESCRITA ---
 
-  // Função para alternar a view e limpar erros/campos
   const toggleView = () => {
     setIsLoginView(!isLoginView);
     setError('');
@@ -111,11 +139,15 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
 
         {/* --- Coluna Esquerda (Branding) --- */}
         <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-600 to-blue-800 p-12 flex-col justify-center items-center text-white">
+          
+          {/* --- (INÍCIO DA MUDANÇA: Logo revertida) --- */}
           <div className="mb-6">
-            {BrandIcon}
+            {BrandIcon} {/* <-- Ícone SVG original */}
           </div>
           <h1 className="text-3xl font-bold mb-3 text-center">MedLogs</h1>
           <p className="text-center text-blue-100">Gestão Inteligente de Pacientes e Medicações.</p>
+          {/* --- (FIM DA MUDANÇA) --- */}
+
         </div>
 
         {/* --- Coluna Direita (Formulário) --- */}
@@ -175,9 +207,9 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
             </div>
 
             {/* Campo de Senha */}
-            <div className="mb-6">
+            <div className="mb-4"> 
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-                Senha
+                Senha (mín. 6 caracteres)
               </label>
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">
@@ -195,7 +227,6 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
                   disabled={isLoading}
                 />
               </div>
-              {/* Link "Esqueci senha" (Aparece só no Login) */}
               {isLoginView && (
                 <div className="text-right mt-1">
                   <a href="#" className="text-xs text-blue-600 hover:underline">
@@ -204,6 +235,33 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
                 </div>
               )}
             </div>
+
+            {/* (MANTIDO: Campo de 'Role' para correção do erro 400) */}
+            {!isLoginView && (
+              <div className="mb-6 animate-fade-in"> 
+                <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-1">
+                  Qual sua função?
+                </label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">
+                    {RoleIcon}
+                  </span>
+                  <select
+                    id="role"
+                    value={role}
+                    onChange={(e) => setRole(e.target.value)}
+                    required
+                    className="w-full p-2 pl-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                    disabled={isLoading}
+                  >
+                    <option value="professional">Profissional (Saúde)</option>
+                    <option value="secretario">Secretário(a)</option>
+                  </select>
+                </div>
+              </div>
+            )}
+            {/* (FIM DA CORREÇÃO) */}
+
 
             {/* Mensagem de Erro */}
             {error && (
@@ -214,7 +272,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
             <button
               type="submit"
               disabled={isLoading}
-              className={`w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-md transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center justify-center h-10 ${ 
+              className={`w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-md transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center justify-center h-10 cursor-pointer ${ 
                 isLoading ? 'opacity-50 cursor-not-allowed' : ''
               }`}
             >
@@ -234,7 +292,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
                   type="button"
                   onClick={toggleView} 
                   disabled={isLoading}
-                  className="text-sm font-medium text-blue-600 hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="text-sm font-medium text-blue-600 hover:underline disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 >
                   {isLoginView ? 'Não tem uma conta? Cadastre-se' : 'Já tem uma conta? Faça login'}
                 </button>
@@ -242,7 +300,6 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
 
           </form>
 
-            {/* Rodapé com versão e direitos (como no seu original) */}
            <div className="mt-8 text-center text-xs text-gray-400">
              <p>Versão 1.0.7</p>
              <p>Todos os direitos reservados @2025</p>
@@ -253,3 +310,4 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
     </div>
   );
 }
+

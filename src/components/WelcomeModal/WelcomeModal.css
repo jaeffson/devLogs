@@ -1,0 +1,82 @@
+/* O fundo escuro que cobre a tela inteira */
+.modal-overlay {
+  position: fixed; /* Fica fixo na tela */
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6); /* Preto com 60% de transparência */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  /* CORREÇÃO: 
+    Aumentado de 1000 para 10010 para garantir que ele 
+    fique NA FRENTE do banner de cookies (que é 9990).
+  */
+  z-index: 10010; 
+}
+
+/* A caixa branca do modal */
+.modal-content {
+  background-color: #fff;
+  padding: 24px 30px;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 500px; /* Largura máxima */
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  animation: fadeIn 0.3s ease-out; /* Animação de entrada */
+  
+  /* Garante que o conteúdo também tenha um z-index alto */
+  position: relative;
+  z-index: 10011; 
+}
+
+.modal-content h2 {
+  margin-top: 0;
+  color: #333;
+}
+
+.modal-subtitle {
+  font-size: 1.1em;
+  color: #555;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 15px;
+}
+
+.modal-body ul {
+  list-style-type: disc; /* Estilo de bolinha */
+  padding-left: 20px;
+  color: #444;
+  line-height: 1.6;
+}
+
+.modal-close-btn {
+  background-color: #007bff; /* Azul (cor primária) - Mude se desejar */
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 5px;
+  font-size: 1em;
+  font-weight: bold;
+  cursor: pointer;
+  float: right; /* Alinha o botão à direita */
+  margin-top: 15px;
+  transition: background-color 0.2s;
+}
+
+.modal-close-btn:hover {
+  background-color: #0056b3;
+}
+
+/* Animação simples de fade-in */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

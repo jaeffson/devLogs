@@ -1,8 +1,12 @@
+// src/components/forms/RecordForm.jsx
+// (ATUALIZADO: Ícones adicionados e botões padronizados com a cor AZUL)
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Modal } from '../common/Modal';
 import MedicationForm from './MedicationForm';
+import { icons } from '../../utils/icons'; // <-- 1. Importar ícones
 
-const quantityOptions = ['1 cx', '3 cxs', '1 tubo', '2 tubos', '1 cx com 60 comp'];
+const quantityOptions = ['1cx','1cx(60cp)','2cxs','3cxs','4cxs','5xs','6cxs','7cxs','1tb'];
 
 export default function RecordForm({
   patient,
@@ -26,31 +30,25 @@ export default function RecordForm({
   const [medSearchTerm, setMedSearchTerm] = useState('');
   const medSelectRef = useRef(null);
 
-  // 🚨 CORREÇÃO DA DATA: Função para obter a data de hoje no formato YYYY-MM-DD
+  // --- (Funções de data e useEffects... sem mudança) ---
   const getTodayIsoDate = () => {
     return new Date().toISOString().slice(0, 10);
   };
   
-  // 🚨 CORREÇÃO DA DATA: Função definida no escopo
   const formattedDate = (dateString) => {
     if (!dateString) return 'Data inválida';
-    // O construtor Date precisa de um formato correto, mas se já for 'YYYY-MM-DD', formatamos diretamente
-    const parts = dateString.slice(0, 10).split('-');
+    const isoDatePart = dateString.slice(0, 10);
+    const parts = isoDatePart.split('-');
     if (parts.length === 3) {
-        // Assume YYYY-MM-DD
         return `${parts[2]}/${parts[1]}/${parts[0]}`;
     }
     return 'Data Inválida';
   };
 
-
-  // --- EFEITO PARA CARREGAR DADOS ---
   useEffect(() => {
-    // 🚨 CORREÇÃO DA DATA: Usa a função getTodayIsoDate para inicializar
     const today = getTodayIsoDate();
 
     if (record) {
-      // Se houver registro, usa a data dele, garantindo o formato 'YYYY-MM-DD'
       setReferenceDate(record.referenceDate ? new Date(record.referenceDate).toISOString().slice(0, 10) : today);
       setObservation(record.observation || '');
       const existingMeds =
@@ -66,7 +64,6 @@ export default function RecordForm({
           : [{ medicationId: '', quantity: quantityOptions[0], value: '', tempId: Date.now() }]
       );
     } else {
-      // Novo registro: usa a data de hoje
       setReferenceDate(today);
       setObservation('');
       setMedications([{ medicationId: '', quantity: quantityOptions[0], value: '', tempId: Date.now() }]);
@@ -74,7 +71,6 @@ export default function RecordForm({
     setErrors({});
   }, [record]);
 
-  // --- EFEITO PARA FECHAR O DROPDOWN AO CLICAR FORA ---
   useEffect(() => {
     function handleClickOutside(event) {
       if (medSelectRef.current && !medSelectRef.current.contains(event.target)) {
@@ -86,8 +82,6 @@ export default function RecordForm({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [setMedSearchTerm, setOpenMedSelectIndex]); 
 
-
-  // --- LÓGICA DE FILTRAGEM DE MEDICAÇÕES ---
   const filteredMedicationsList = useMemo(() => {
     if (openMedSelectIndex === null) {
         return [];
@@ -136,7 +130,8 @@ export default function RecordForm({
     const newMed =
       typeof onNewMedication === 'function' ? onNewMedication(newMedData) : null;
     if (newMed && addingMedicationIndex !== null) {
-      handleMedicationChange(addingMedicationIndex, 'medicationId', newMed.id); 
+      // 🚨 CORREÇÃO: Pega o ID da nova medicação (pode ser .id ou ._id)
+      handleMedicationChange(addingMedicationIndex, 'medicationId', newMed.id || newMed._id); 
     }
     setIsMedicationModalOpen(false);
     setAddingMedicationIndex(null);
@@ -177,6 +172,8 @@ export default function RecordForm({
       .filter((m) => m.medicationId && m.quantity)
       .map((m) => ({
         ...m,
+        // Garante que o ID da medicação é apenas o ID
+        medicationId: m.medicationId, 
         value: Number(m.value) || 0,
         recordMedId: m.recordMedId, 
       }));
@@ -184,10 +181,10 @@ export default function RecordForm({
     const totalValue = validMedications.reduce((sum, med) => sum + med.value, 0);
 
     const recordData = {
-      id: record?.id, 
+      // 🚨 CORREÇÃO: Usa o _id se existir (para edição)
+      _id: record?._id || record?.id, 
       patientId: patient._id || patient.id, 
       professionalId,
-      // 🚨 CORREÇÃO DA DATA: Envia a string YYYY-MM-DD
       referenceDate,
       observation: observation.trim(),
       status: record?.status || 'Pendente',
@@ -198,26 +195,36 @@ export default function RecordForm({
     };
 
     onSave(recordData);
-    addToast?.(record ? 'Registro atualizado!' : 'Registro salvo!', 'success');
+    // 🚨 REMOVIDO: O Toast de sucesso agora é mostrado no ProfessionalDashboardPage
+    // addToast?.(record ? 'Registro atualizado!' : 'Registro salvo!', 'success');
     onClose();
   };
+  // --- Fim das funções de lógica ---
+
 
   return (
     <>
-      <Modal onClose={onClose} modalClasses="max-w-6xl px-10">
+      {/* --- (INÍCIO DA MUDANÇA 1) --- */}
+      {/* Modal agora usa o tamanho max-w-3xl para dar mais espaço */}
+      <Modal onClose={onClose} modalClasses="max-w-3xl">
         <div className="flex flex-col h-[90vh]">
           {/* Cabeçalho */}
-          <div className="flex-shrink-0">
-            <h2 className="text-2xl font-bold mb-4">
+          <div className="flex-shrink-0 flex items-center gap-3">
+             {/* Ícone adicionado */}
+            <span className="w-8 h-8 text-blue-600 flex-shrink-0">
+                {icons.clipboard}
+            </span>
+            <h2 className="text-2xl font-bold">
               {record ? `Editar Registro` : 'Novo Registro para'}{' '}
               <span className="text-blue-700 font-semibold">
                 {patient?.name || 'Paciente'}
               </span>
             </h2>
           </div>
+          {/* --- (FIM DA MUDANÇA 1) --- */}
 
           {/* Conteúdo com rolagem */}
-          <div className="flex-grow overflow-y-auto pr-2">
+          <div className="flex-grow overflow-y-auto pr-2 my-4">
             <form onSubmit={handleSubmit} className="space-y-6" noValidate>
               {/* Data */}
               <div>
@@ -231,7 +238,6 @@ export default function RecordForm({
               <div className="border-t pt-4">
                 <h3 className="text-lg font-semibold mb-3 text-gray-800">Medicações</h3>
                 
-                {/* Mensagem de Erro Geral de Medicação */}
                 {errors['medications[0].medicationId'] && (
                      <p className="text-red-600 text-sm mb-3">
                          {errors['medications[0].medicationId']}
@@ -239,20 +245,22 @@ export default function RecordForm({
                 )}
 
                 <div
-                  className="overflow-y-auto max-h-[500px] space-y-3 bg-gray-50 p-4 rounded-lg border border-gray-200"
+                  className="overflow-y-auto max-h-[45vh] space-y-3 bg-gray-50 p-4 rounded-lg border border-gray-200"
                   ref={medSelectRef}
                 >
                   {medications.map((med, index) => {
                     const selectedMedName =
-                      medicationsList.find((m) => m.id === med.medicationId)?.name || ''; 
+                      medicationsList.find((m) => (m.id || m._id) === med.medicationId)?.name || ''; 
                     
                     return (
                       <div
                         key={med.tempId} 
+                        
                         className="grid grid-cols-12 gap-3 items-start bg-white p-3 rounded-lg shadow-sm border border-gray-200"
+                    
                       >
                         {/* Medicação (COMBOBOX) */}
-                        <div className="col-span-12 md:col-span-5">
+                        <div className="col-span-12 md:col-span-6"> {/* <-- Ajustado para 6 */}
                           <label className="text-xs text-gray-600 mb-1 block">Medicação</label>
                           <div className="relative">
                             <input
@@ -277,7 +285,6 @@ export default function RecordForm({
                                 onMouseDown={(e) => e.preventDefault()} 
                               >
                                 <div className="overflow-y-auto">
-                                  {/* 1. Lista de resultados */}
                                   {filteredMedicationsList.map((m) => {
                                     const finalId = m.id || m._id; 
                                     
@@ -295,14 +302,12 @@ export default function RecordForm({
                                     </div>
                                   )})}
                                   
-                                  {/* 2. Mensagem de 'Nenhum resultado' ou 'Digite' */}
                                   {filteredMedicationsList.length === 0 && (
                                     <p className="p-2 text-sm text-gray-500 text-center">
                                       {medSearchTerm ? `Nenhum resultado para "${medSearchTerm}".` : "Digite para buscar..."}
                                     </p>
                                   )}
                                   
-                                  {/* 3. Botão de Cadastrar Novo */}
                                   <div
                                     className="p-2 text-sm text-blue-600 font-medium hover:bg-blue-50 cursor-pointer border-t border-gray-200 mt-1"
                                     onClick={() => {
@@ -320,7 +325,7 @@ export default function RecordForm({
                         </div>
 
                         {/* Quantidade */}
-                        <div className="col-span-4 md:col-span-3">
+                        <div className="col-span-4 md:col-span-3"> {/* <-- Ajustado para 3 */}
                           <label className="text-xs text-gray-600 mb-1 block">Quantidade</label>
                           <input
                             type="text"
@@ -339,7 +344,7 @@ export default function RecordForm({
                         </div>
 
                         {/* Valor */}
-                        <div className="col-span-4 md:col-span-2">
+                        <div className="col-span-4 md:col-span-2"> {/* <-- Ajustado para 2 */}
                           <label className="text-xs text-gray-600 mb-1 block">Valor (R$)</label>
                           <input
                             type="number"
@@ -353,18 +358,20 @@ export default function RecordForm({
                           />
                         </div>
 
-                        {/* Remover */}
-                        <div className="col-span-4 md:col-span-2">
-                          <label className="text-xs text-gray-600 mb-1 block">&nbsp;</label>
+                        {/* --- (INÍCIO DA MUDANÇA 3) --- */}
+                        {/* Botão Remover (agora ícone) */}
+                        <div className="col-span-4 md:col-span-1 flex items-end"> {/* <-- Ajustado para 1 */}
                           <button
                             type="button"
                             onClick={() => removeMedicationField(index)}
-                            className="px-3 h-10 text-sm bg-red-100 text-red-700 rounded-md font-medium hover:bg-red-200 active:bg-red-300 cursor-pointer w-full md:w-auto"
+                            className="h-10 w-full flex items-center justify-center text-red-600 rounded-md font-medium hover:bg-red-100 active:bg-red-200 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                             disabled={medications.length <= 1}
+                            title="Remover medicação"
                           >
-                            Remover
+                            <span className="w-5 h-5">{icons.trash}</span>
                           </button>
                         </div>
+                        {/* --- (FIM DA MUDANÇA 3) --- */}
                       </div>
                     );
                   })}
@@ -375,7 +382,7 @@ export default function RecordForm({
                   onClick={addMedicationField}
                   className="mt-3 flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-100 text-blue-700 rounded-md font-semibold hover:bg-blue-200 active:bg-blue-300 cursor-pointer"
                 >
-                  <span>+</span>
+                  <span className="w-4 h-4">{icons.plus}</span>
                   <span>Adicionar medicação</span>
                 </button>
               </div>
@@ -394,21 +401,25 @@ export default function RecordForm({
           </div>
 
           {/* Rodapé fixo */}
-          <div className="flex-shrink-0 flex justify-end gap-4 bg-gray-50 -mx-8 px-8 py-4 rounded-b-lg border-t mt-4">
+          {/* --- (INÍCIO DA MUDANÇA 4) --- */}
+          {/* Botões do rodapé padronizados */}
+          <div className="flex-shrink-0 flex justify-end gap-4 bg-gray-50 -mx-10 px-8 py-4 rounded-b-lg border-t mt-4">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 active:bg-gray-100 font-medium cursor-pointer"
+              className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 active:bg-gray-100 font-medium cursor-pointer transition-colors"
             >
               Cancelar
             </button>
             <button
               onClick={handleSubmit}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 active:bg-blue-800 font-medium cursor-pointer"
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 active:bg-blue-800 font-medium cursor-pointer flex items-center gap-2"
             >
+              <span className="w-5 h-5">{icons.check}</span>
               Salvar Registro
             </button>
           </div>
+          {/* --- (FIM DA MUDANÇA 4) --- */}
         </div>
       </Modal>
 

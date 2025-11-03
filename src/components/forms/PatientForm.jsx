@@ -1,4 +1,6 @@
 // src/components/forms/PatientForm.jsx
+// (ATUALIZADO: Adicionado 'cursor-pointer' e cores/foco padronizados nos botões)
+
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../common/Modal'; // Importa Modal da pasta common
 
@@ -55,13 +57,13 @@ export default function PatientForm({
         if (patient) {
             setFormData({
                name: patient.name || '',
-               // Se o ID do MongoDB for usado, é '_id', senão é 'id'
                cpf: patient.cpf || '', 
                susCard: patient.susCard || '',
                observations: patient.observations || '',
                generalNotes: patient.generalNotes || '',
                status: patient.status || 'Ativo',
-               id: patient.id // Assumindo que você usa 'id' para editar
+               // 🚨 CORREÇÃO: Captura o _id do MongoDB
+               id: patient._id || patient.id 
             });
         } else {
             setFormData({
@@ -90,7 +92,6 @@ export default function PatientForm({
         if (!formData.name || !formData.name.trim()) {
             newErrors.name = 'O nome completo é obrigatório.';
         }
-        // As validações aqui verificam se o campo tem algum valor, mesmo que formatado.
         const hasCPF = formData.cpf && String(formData.cpf).replace(/\D/g, '').trim();
         const hasSUS = formData.susCard && String(formData.susCard).replace(/\D/g, '').trim();
         if (!hasCPF && !hasSUS) {
@@ -130,27 +131,25 @@ export default function PatientForm({
         }
         // --- FIM DA VALIDAÇÃO ---
 
-        // 🚨 CORREÇÃO CRÍTICA: Normalização de dados para o MongoDB
         const dataToSave = {
             ...formData,
-            // 1. Limpa a formatação
             cpf: cleanCPF(formData.cpf),
             susCard: cleanSus(formData.susCard)
         };
         
-        // 2. Garante que campos opcionais vazios sejam NULL, não ""
-        // O MongoDB/Mongoose precisa de NULL para ignorar o índice 'sparse'
         dataToSave.cpf = dataToSave.cpf || null; 
         dataToSave.susCard = dataToSave.susCard || null;
 
+        // 🚨 MUDANÇA: Passa o _id (se for edição)
+        if (patient?._id) {
+            dataToSave._id = patient._id;
+        }
+
         onSave(dataToSave);
         
-        if (addToast) {
-            addToast(
-                patient ? 'Paciente atualizado com sucesso!' : 'Paciente cadastrado com sucesso!',
-                'success'
-            );
-        }
+        // 🚨 REMOVIDO: O Toast de sucesso agora é mostrado pelo ProfessionalDashboardPage
+        // if (addToast) { ... }
+        
         onClose();
     };
 
@@ -254,10 +253,23 @@ export default function PatientForm({
                 )}
 
                 {/* Botões de Ação */}
+                {/* --- (INÍCIO DA MUDANÇA) --- */}
                 <div className="flex justify-end gap-4 pt-4 border-t mt-6">
-                    <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 text-gray-700 font-medium">Cancelar</button>
-                    <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium">Salvar Paciente</button>
+                    <button 
+                        type="button" 
+                        onClick={onClose} 
+                        className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 active:bg-gray-100 font-medium cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                    >
+                        Cancelar
+                    </button>
+                    <button 
+                        type="submit" 
+                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 active:bg-blue-800 font-medium cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    >
+                        Salvar Paciente
+                    </button>
                 </div>
+                {/* --- (FIM DA MUDANÇA) --- */}
             </form>
         </Modal>
     );

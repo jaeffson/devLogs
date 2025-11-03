@@ -1,5 +1,5 @@
 // src/layouts/MainLayout.jsx
-// (CORRIGIDO: Combinada a lógica de 10s persistente + hover-to-open)
+// (ATUALIZADO: Paleta de cores 'emerald' revertida para 'indigo')
 
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -111,12 +111,12 @@ export default function MainLayout({
   handleLogout,
   annualBudget,
   records,
+  filterYear, // Recebendo props
+  setFilterYear, // Recebendo props
 }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const location = useLocation();
-  const [filterYear, setFilterYear] = useState(new Date().getFullYear());
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   const formattedDate = useFormattedDate();
@@ -126,15 +126,11 @@ export default function MainLayout({
   const profileRef = useRef(null);
   const navigate = useNavigate();
 
-  // --- (INÍCIO DA MUDANÇA 1) ---
-  // Ref para o timer principal (10s)
   const autoCollapseTimerRef = useRef(null);
-  // Ref para o timer de mouse leave (500ms)
-  const mouseLeaveTimerRef = useRef(null);
-  // --- (FIM DA MUDANÇA 1) ---
-
-  // Timer de Inatividade (Logout)
   const idleTimerRef = useRef(null);
+  const mouseLeaveTimerRef = useRef(null); 
+
+  // --- LÓGICA DE TIMER DE INATIVIDADE (Sem mudança) ---
   const logoutOnIdle = useCallback(() => {
     handleLogout();
     navigate('/login');
@@ -169,11 +165,10 @@ export default function MainLayout({
       });
     };
   }, [resetIdleTimer]);
-  // --- FIM Timer de Inatividade ---
+  // --- FIM TIMER DE INATIVIDADE ---
 
 
-  // --- (INÍCIO DA MUDANÇA 2) ---
-  // Limpa TODOS os timers de fechar
+  // --- LÓGICA DE HOVER/AUTO-CLOSE DA SIDEBAR (Sem mudança) ---
   const clearAllCloseTimers = () => {
     if (autoCollapseTimerRef.current) {
       clearTimeout(autoCollapseTimerRef.current);
@@ -185,35 +180,34 @@ export default function MainLayout({
     }
   };
 
-  // useEffect principal (o que você enviou)
-  // Roda quando o menu é ABERTO (manualmente ou por hover)
   useEffect(() => {
-    
-    // Se o menu está ABERTO (!isSidebarCollapsed)
+    autoCollapseTimerRef.current = setTimeout(() => {
+      setIsSidebarCollapsed(true);
+    }, 10000); 
+    return () => clearAllCloseTimers(); 
+  }, []); 
+
+  useEffect(() => {
     if (!isSidebarCollapsed) {
-      // Inicia o timer principal de 10 segundos
       autoCollapseTimerRef.current = setTimeout(() => {
         setIsSidebarCollapsed(true);
-      }, 10000); // 10 segundos
+      }, 10000); 
     }
-    // Se o menu está FECHADO, limpa o timer de 10s
     else {
       if (autoCollapseTimerRef.current) {
         clearTimeout(autoCollapseTimerRef.current);
         autoCollapseTimerRef.current = null;
       }
     }
-
-    // Limpa o timer de 10s se o componente for desmontado
     return () => {
       if (autoCollapseTimerRef.current) {
         clearTimeout(autoCollapseTimerRef.current);
       }
     };
-  }, [isSidebarCollapsed]); // Roda toda vez que o menu abre ou fecha
-  // --- (FIM DA MUDANÇA 2) ---
+  }, [isSidebarCollapsed]); 
 
 
+  // --- LÓGICA DE MENUS (Sem mudança) ---
   const totalSpentForYear = useMemo(
     () =>
       (records || [])
@@ -230,7 +224,6 @@ export default function MainLayout({
     return names[role] || role;
   };
 
-  // (Definição dos menus - LÓGICA MANTIDA)
   const menuItems = useMemo(() => {
     const professionalMenu = [
       { path: '/dashboard', label: 'Dashboard', icon: icons.dashboard },
@@ -269,8 +262,9 @@ export default function MainLayout({
         return []; 
     }
   }, [user?.role]);
+  // --- FIM LÓGICA DE MENUS ---
 
-  // (useEffect para fechar sidebar - sem mudanças)
+  // --- Efeitos de Fechar Sidebar/Dropdown (Sem mudança) ---
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth >= 768) {
@@ -281,7 +275,6 @@ export default function MainLayout({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // (useEffect para fechar dropdown - sem mudanças)
   useEffect(() => {
     function handleClickOutside(event) {
       if (profileRef.current && !profileRef.current.contains(event.target)) {
@@ -292,50 +285,41 @@ export default function MainLayout({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [profileRef]);
 
-  // (Função de logout - sem mudanças)
   const handleLogoutClick = () => {
     setIsProfileOpen(false);
     handleLogout();
     navigate('/login');
   };
+  // --- FIM Efeitos ---
 
-  // --- (INÍCIO DA MUDANÇA 3) ---
-  
-  // Funções de Hover (Entrar e Sair) para a Sidebar
+
+  // --- Funções de Hover (Entrar e Sair) para a Sidebar ---
   const handleSidebarMouseEnter = () => {
-    // 1. Cancela qualquer timer de "mouse leave" (500ms) pendente
     if (mouseLeaveTimerRef.current) {
       clearTimeout(mouseLeaveTimerRef.current);
       mouseLeaveTimerRef.current = null;
     }
-    // 2. Se a sidebar estiver fechada, abre
     if (isSidebarCollapsed) {
       setIsSidebarCollapsed(false);
     }
-    // Ao abrir, o useEffect([isSidebarCollapsed]) vai iniciar o timer de 10s
   };
 
   const handleSidebarMouseLeave = () => {
-    // 1. Cancela o timer principal de 10s (para não fechar na cara do usuário)
     if (autoCollapseTimerRef.current) {
       clearTimeout(autoCollapseTimerRef.current);
       autoCollapseTimerRef.current = null;
     }
-    // 2. Inicia um novo timer curto (500ms) para fechar
     mouseLeaveTimerRef.current = setTimeout(() => {
       setIsSidebarCollapsed(true);
-    }, 500); // 500ms (meio segundo)
+    }, 500); 
   };
 
   // Função de clique manual
   const handleToggleSidebarCollapse = () => {
-    // O usuário assumiu o controle, cancela TODOS os timers
     clearAllCloseTimers();
-    // Inverte o estado
     setIsSidebarCollapsed(!isSidebarCollapsed);
-    // O useEffect vai iniciar o timer de 10s se o menu for aberto
   };
-  // --- (FIM DA MUDANÇA 3) ---
+  // --- FIM Funções de Hover ---
 
 
   return (
@@ -349,8 +333,7 @@ export default function MainLayout({
         ></div>
       )}
 
-      {/* --- (INÍCIO DA MUDANÇA 4) --- */}
-      {/* --- SIDEBAR (Agora com onMouseEnter e onMouseLeave) --- */}
+      {/* --- SIDEBAR (com onMouseEnter e onMouseLeave) --- */}
       <aside
         className={`fixed inset-y-0 left-0 bg-slate-900 shadow-2xl flex-shrink-0 flex flex-col z-30
                   transition-all duration-300 ease-in-out
@@ -361,8 +344,7 @@ export default function MainLayout({
         onMouseEnter={handleSidebarMouseEnter}
         onMouseLeave={handleSidebarMouseLeave}
       >
-      {/* --- (FIM DA MUDANÇA 4) --- */}
-
+        
         {/* Header da Sidebar */}
         <div className="p-4 border-b border-slate-700 flex justify-between items-center h-16">
           <div
@@ -383,7 +365,7 @@ export default function MainLayout({
             <span className="w-6 h-6">{icons.close}</span>
           </button>
 
-          {/* Botão de recolher agora usa a nova função */}
+          {/* Botão de recolher */}
           <button
             className="hidden md:block text-slate-400 hover:text-white p-1 transition-colors"
             onClick={handleToggleSidebarCollapse} 
@@ -414,8 +396,10 @@ export default function MainLayout({
                           ${isSidebarCollapsed ? 'md:justify-center' : 'hover:translate-x-1'}
                           ${
                             isActive
-                              ? 'bg-indigo-600 text-white font-semibold shadow-lg' // Mantendo 'indigo' (como no seu código)
+                              // --- (INÍCIO DA MUDANÇA) ---
+                              ? 'bg-indigo-600 text-white font-semibold shadow-lg' // Revertido para 'indigo'
                               : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                            // --- (FIM DA MUDANÇA) ---
                           }`}
                 aria-current={isActive ? 'page' : undefined}
               >
@@ -432,13 +416,12 @@ export default function MainLayout({
           })}
         </nav>
         
-        {/* Rodapé da Sidebar (apenas para consistência visual) */}
         <div className="p-4 border-t border-slate-700"></div>
       </aside>
       {/* --- (FIM) SIDEBAR --- */}
 
 
-      {/* --- CONTEÚDO PRINCIPAL E HEADER (Sem mudanças) --- */}
+      {/* --- CONTEÚDO PRINCIPAL E HEADER --- */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <header className="bg-white shadow-sm p-4 flex justify-between items-center flex-shrink-0 z-10 h-16">
@@ -455,7 +438,9 @@ export default function MainLayout({
               <div className="flex items-center gap-1">
                 {weather && weather.IconComponent ? (
                   <span
-                    className="text-3xl text-indigo-500" // Mantendo 'indigo'
+                    // --- (INÍCIO DA MUDANÇA) ---
+                    className="text-3xl text-indigo-500" // Revertido para 'indigo'
+                    // --- (FIM DA MUDANÇA) ---
                     title={weather.description}
                   >
                     <weather.IconComponent />
@@ -504,22 +489,21 @@ export default function MainLayout({
                     Ano:
                   </label>
                   <select
-                    value={filterYear}
-                    onChange={(e) => setFilterYear(parseInt(e.target.value))}
-                    className="p-1 border rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500" // Mantendo 'indigo'
+                    value={filterYear} 
+                    onChange={(e) => setFilterYear(parseInt(e.target.value))} 
+                    // --- (INÍCIO DA MUDANÇA) ---
+                    className="p-1 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" // Revertido para 'indigo'
+                    // --- (FIM DA MUDANÇA) ---
                     aria-label="Selecionar Ano para Filtro"
                   >
-                    {[...Array(5)].map((_, i) => {
+                    {[...Array(2)].map((_, i) => {
                       const year = new Date().getFullYear() + 1 - i; 
-                       if (year === 2025) { 
-                         return <option key={year} value={year}>{year}</option>;
-                       }
                       return (
                         <option key={year} value={year}>
                           {year}
                         </option>
                       );
-                    }).filter((_,i) => i < 5)} 
+                    })}
                   </select>
                 </div>
               </div>
@@ -530,7 +514,9 @@ export default function MainLayout({
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
                 className="flex items-center gap-2 text-sm font-medium text-gray-700 rounded-full hover:bg-gray-100 p-1"
               >
-                <span className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xl"> {/* Mantendo 'indigo' */}
+                {/* --- (INÍCIO DA MUDANÇA) --- */}
+                <span className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xl"> {/* Revertido para 'indigo' */}
+                {/* --- (FIM DA MUDANÇA) --- */}
                   {icons.userCircle}
                 </span>
                 <span className="hidden md:block font-semibold">
@@ -573,7 +559,7 @@ export default function MainLayout({
                   )}
                   {(user?.role === 'admin' ||
                     user?.role === 'profissional' ||
-                    user?.role === 'Profissional') && ( // Assegura que ambos os roles funcionem
+                    user?.role === 'Profissional') && ( 
                     <Link
                       to="/medications"
                       onClick={() => setIsProfileOpen(false)}
