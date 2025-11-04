@@ -22,7 +22,7 @@ import { getMedicationName } from '../utils/helpers';
 import { useDebounce } from '../hooks/useDebounce';
 
 // --- URL BASE DA API ---
-const API_BASE_URL = 'https://backendmedlog-4.onrender.com'; 
+const API_BASE_URL = 'https://backendmedlog-4.onrender.com/api'; 
 // -----------------------
 
 // --- (NOVO) Constante de 30 dias ---

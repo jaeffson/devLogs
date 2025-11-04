@@ -10,7 +10,7 @@ import { DestructiveConfirmModal } from '../components/common/DestructiveConfirm
 import { icons } from '../utils/icons';
 
 // URL base da API (deve ser a mesma definida no App.jsx)
-const API_BASE_URL = 'https://backendmedlog-4.onrender.com'; 
+const API_BASE_URL = 'https://backendmedlog-4.onrender.com/api'; 
 
 export default function MedicationsPage({
     medications = [],

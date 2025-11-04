@@ -6,7 +6,7 @@ import React, { useState } from 'react';
 import axios from 'axios'; 
 
 // --- URL BASE DA API ---
-const API_BASE_URL = 'https://backendmedlog-4.onrender.com'; 
+const API_BASE_URL = 'https://backendmedlog-4.onrender.com/api'; 
 
 // Ícones (mantidos)
 const UserIcon = ( 

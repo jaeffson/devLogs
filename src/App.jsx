@@ -25,7 +25,7 @@ import { getMedicationName } from './utils/helpers'; // Funções de utilidade
 // Certifique-se que o caminho está correto
 import WelcomeModal from './components/WelcomeModal/WelcomeModal.jsx'; 
 
-const API_BASE_URL = 'https://backendmedlog-4.onrender.com';
+const API_BASE_URL = 'https://backendmedlog-4.onrender.com/api';
 // -----------------------
 
 export default function App() {
