@@ -1,6 +1,7 @@
 // src/pages/LoginPage.jsx
 // (ATUALIZADO: Logo removida e revertida para o ícone SVG original)
 // (MANTIDO: Correção do erro 400 (Bad Request) com campo 'role' e validação de senha)
+// (CORRIGIDO: Extração do objeto 'user' e 'token' na resposta de login)
 
 import React, { useState } from 'react';
 import axios from 'axios'; 
@@ -94,16 +95,32 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
                 password: credentials.password
             });
             
-            const user = response.data;
+            // --- INÍCIO DA CORREÇÃO ---
+            // O problema estava aqui. A resposta da API pode ser { user: {...}, token: "..." }
+            // ou { _id: "...", ..., token: "..." }. Este código lida com ambos.
 
+            // 1. Encontra o objeto 'user' (seja aninhado ou na raiz)
+            const user = response.data.user || response.data; 
+            
+            // 2. Encontra o 'token' (seja aninhado ou na raiz)
+            const token = response.data.token || user.token;
+
+            // 3. Remove o 'token' de dentro do objeto 'user' (se existir) para evitar duplicidade
+            if (user.token) {
+              delete user.token;
+            }
+
+            // 4. Faz as validações de status
             if (user.status === 'pending') {
                  setError('Sua conta está pendente de aprovação.'); 
             } else if (user.status === 'inactive') {
                  setError('Sua conta está desativada. Entre em contato.'); 
             } else {
-                 onLogin({ ...user, token: user.token || `fake-jwt-token-for-${user.id}` }); 
+                 // 5. Envia o objeto 'user' COMPLETO (com _id) e o 'token' para o App.jsx
+                 onLogin({ ...user, token: token || `fake-jwt-token-for-${user._id}` }); 
                  return;
             }
+            // --- FIM DA CORREÇÃO ---
 
         } else {
             // Rota de Registro
@@ -310,4 +327,3 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
     </div>
   );
 }
-
