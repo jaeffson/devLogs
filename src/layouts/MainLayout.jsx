@@ -1,6 +1,6 @@
 // src/layouts/MainLayout.jsx
 // (ATUALIZADO: Paleta de cores 'emerald' revertida para 'indigo')
-// (CORRIGIDO: Adicionado o case 'profissional' (pt-br) ao switch do menu)
+// (CORRIGIDO: Adicionado 'profissional' (pt-br) ao switch principal do menu)
 
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -251,8 +251,9 @@ export default function MainLayout({
       { path: '/settings', label: 'Configurações', icon: icons.settings },
     ];
 
-    // --- INÍCIO DA CORREÇÃO ---
-    // Adicionado 'profissional' (em português) à lista de cargos válidos.
+    // --- (INÍCIO DA CORREÇÃO) ---
+    // A lógica anterior esquecia de checar 'profissional' (em português).
+    // O código do dropdown de perfil (linha 472) checava, provando que é este o cargo.
     switch (user?.role) {
       case 'admin':
         return adminMenu;
@@ -263,9 +264,11 @@ export default function MainLayout({
       case 'Profissional': 
         return profissionalMenu;
       default:
+        // Se ainda falhar, logue o cargo para depuração
+        console.error("Cargo (Role) de usuário desconhecido:", user?.role); 
         return []; 
     }
-    // --- FIM DA CORREÇÃO ---
+    // --- (FIM DA CORREÇÃO) ---
   }, [user?.role]);
   // --- FIM LÓGICA DE MENUS ---
 
