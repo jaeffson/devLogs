@@ -559,7 +559,7 @@ export default function MainLayout({
                   )}
                   {(user?.role === 'admin' ||
                     user?.role === 'profissional' ||
-                    user?.role === 'Profissional') && ( 
+                    user?.role === 'Professional') && ( 
                     <Link
                       to="/medications"
                       onClick={() => setIsProfileOpen(false)}
