@@ -409,8 +409,8 @@ export default function ProfessionalDashboardPage({
         const recordId = recordData._id || recordData.id; 
         const patientName = getPatientNameById(recordData.patientId);
         
-        const professionalIdentifier = user?._id || user?.id;
-        if (!professionalIdentifier) {
+        const profissionalIdentifier = user?._id || user?.id;
+        if (!profissionalIdentifier) {
             throw new Error("ID do profissional não encontrado.");
         }
 
@@ -441,7 +441,7 @@ export default function ProfessionalDashboardPage({
 
         const payload = {
             patientId: recordData.patientId, 
-            professionalId: professionalIdentifier, // ID do usuário logado
+            profissionalId: profissionalIdentifier, // ID do usuário logado
             medications: cleanedMedications, // <-- AQUI USAMOS O ARRAY CORRIGIDO
             referenceDate: recordData.referenceDate,
             observation: recordData.observation,
@@ -1342,7 +1342,7 @@ export default function ProfessionalDashboardPage({
                           </button>
                           
                           {/* --- Botão "Excluir Registro" (Oculto para Profissional) --- */}
-                          {(user?.role !== 'professional' && user?.role !== 'Professional') && (
+                          {(user?.role !== 'profissional' && user?.role !== 'Profissional') && (
                             <button
                               onClick={() =>
                                 setConfirmation({
@@ -1562,7 +1562,7 @@ export default function ProfessionalDashboardPage({
       {isRecordModalOpen && selectedPatient && ( 
         <RecordForm
           patient={selectedPatient}
-          professionalId={user?._id || user?.id} // Usa _id/id do usuário logado
+          profissionalId={user?._id || user?.id} // Usa _id/id do usuário logado
           record={editingRecord}
           onSave={handleSaveRecord}
           onClose={() => {

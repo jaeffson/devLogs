@@ -28,8 +28,8 @@ export default function MedicationsPage({
 
     // --- Helper de Permissão ---
     const isAdmin = user?.role === 'admin';
-    const isProfessional = user?.role === 'professional' || user?.role === 'Profissional';
-    const canCreateOrEdit = isAdmin || isProfessional;
+    const isProfissional = user?.role === 'profissional' || user?.role === 'Profissional';
+    const canCreateOrEdit = isAdmin || isProfissional;
 
 
     // Função de busca

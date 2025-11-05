@@ -225,7 +225,7 @@ export default function MainLayout({
   };
 
   const menuItems = useMemo(() => {
-    const professionalMenu = [
+    const profissionalMenu = [
       { path: '/dashboard', label: 'Dashboard', icon: icons.dashboard },
       { path: '/deliveries', label: 'Entregas Recentes', icon: icons.clipboard },
       { path: '/history', label: 'Histórico Geral', icon: icons.history },
@@ -257,7 +257,7 @@ export default function MainLayout({
         return secretaryMenu;
       case 'professional':
       case 'Profissional': 
-        return professionalMenu;
+        return profissionalMenu;
       default:
         return []; 
     }

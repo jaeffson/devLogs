@@ -46,7 +46,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
   const [name, setName] = useState(''); 
   
   // (MANTIDO: Correção do erro 400)
-  const [role, setRole] = useState('professional'); 
+  const [role, setRole] = useState('profissional'); 
   
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -113,7 +113,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
             addLog?.('Novo Usuário', `${credentials.name} (${credentials.email}) realizou cadastro e aguarda aprovação.`);
             
             setIsLoginView(true); 
-            setName(''); setEmail(''); setPassword(''); setRole('professional'); 
+            setName(''); setEmail(''); setPassword(''); setRole('profissional'); 
         }
     } catch (apiError) {
         console.error('API Error:', apiError.response || apiError);
@@ -254,7 +254,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
                     className="w-full p-2 pl-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                     disabled={isLoading}
                   >
-                    <option value="professional">Profissional (Saúde)</option>
+                    <option value="profissional">Profissional (Saúde)</option>
                     <option value="secretario">Secretário(a)</option>
                   </select>
                 </div>

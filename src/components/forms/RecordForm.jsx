@@ -10,7 +10,7 @@ const quantityOptions = ['1cx','1cx(60cp)','2cxs','3cxs','4cxs','5xs','6cxs','7c
 
 export default function RecordForm({
   patient,
-  professionalId,
+  profissionalId,
   record,
   onSave,
   onClose,
@@ -184,7 +184,7 @@ export default function RecordForm({
       // 🚨 CORREÇÃO: Usa o _id se existir (para edição)
       _id: record?._id || record?.id, 
       patientId: patient._id || patient.id, 
-      professionalId,
+      profissionalId,
       referenceDate,
       observation: observation.trim(),
       status: record?.status || 'Pendente',
