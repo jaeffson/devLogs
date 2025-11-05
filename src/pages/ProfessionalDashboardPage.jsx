@@ -421,88 +421,48 @@ export default function ProfessionalDashboardPage({
 
   // 3. SALVAR REGISTRO (CREATE/UPDATE) - [VERSÃO CORRIGIDA PARA "ID INVÁLIDO"]
   const handleSaveRecord = async (recordData) => {
+   // Dentro da função handleSavePatient do seu arquivo de Admin:
+
     try {
-      let response;
-      const recordId = recordData._id || recordData.id;
-      const patientName = getPatientNameById(recordData.patientId);
+        let response;
+        const patientId = patientData._id || patientData.id; 
+        const patientName = patientData.name;
+        
+        // --- (INÍCIO DA CORREÇÃO) ---
+        // Se o CPF ou SUS for uma string vazia "", envie 'null'
+        // para evitar o erro de 'unique index' do MongoDB.
+        
+        const cleanedCPF = patientData.cpf ? String(patientData.cpf).trim() : null;
+        const cleanedSusCard = patientData.susCard ? String(patientData.susCard).trim() : null;
 
-      const profissionalIdentifier = user?._id || user?.id;
-      if (!profissionalIdentifier) {
-        // Este erro agora não deve mais acontecer após o fix do Login
-        addToast(
-          'Erro crítico: ID do profissional não encontrado. Faça login novamente.',
-          'error'
-        );
-        throw new Error('ID do profissional não encontrado.');
-      }
+        const payload = {
+            name: patientName,
+            cpf: cleanedCPF, // <-- Use o valor limpo (será 'null' se vazio)
+            susCard: cleanedSusCard, // <-- Use o valor limpo (será 'null' se vazio)
+            observations: patientData.observations,
+            generalNotes: patientData.generalNotes,
+            status: patientData.status,
+        };
+        // --- (FIM DA CORREÇÃO) ---
 
-      // --- (INÍCIO DA CORREÇÃO) ---
-      // O RecordForm provavelmente envia: [{ _id: '123', name: 'Dipirona', quantity: '1' }]
-      // O Backend espera:               [{ medicationId: '123', quantity: '1' }]
-      // Esta função "mapeia" os dados para o formato correto antes de enviar à API.
+        if (patientId && patientId !== 'new') {
+            // Atualização (PUT)
+            response = await axios.put(`${API_BASE_URL}/patients/${patientId}`, payload);
+            // ... resto ...
+        } else {
+            // Criação (POST)
+            response = await axios.post(`${API_BASE_URL}/patients`, payload);
+            // ... resto ...
+        }
+        
+        // ... resto da função ...
 
-      const cleanedMedications = (recordData.medications || [])
-        .map((med) => {
-          // Pega o ID, não importa como ele venha (med._id, med.id, ou med.medicationId)
-          const id = med._id || med.id || med.medicationId;
-
-          // Se o ID for um objeto (ex: { _id: '123' }), pega o valor de dentro
-          const finalMedicationId =
-            typeof id === 'object' && id !== null ? id._id || id.id : id;
-
-          if (!finalMedicationId) {
-            console.warn(
-              'Item de medicação inválido descartado (sem ID):',
-              med
-            );
-            return null;
-          }
-
-          return {
-            medicationId: String(finalMedicationId), // Garante que é uma string
-            quantity: med.quantity || 'N/A', // Garante que a quantidade exista
-          };
-        })
-        .filter((med) => med !== null); // Remove itens nulos que falharam na validação
-      // --- (FIM DA CORREÇÃO) ---
-
-      const payload = {
-        patientId: recordData.patientId,
-        profissionalId: profissionalIdentifier, // ID do usuário logado
-        medications: cleanedMedications, // <-- AQUI USAMOS O ARRAY CORRIGIDO
-        referenceDate: recordData.referenceDate,
-        observation: recordData.observation,
-        totalValue: recordData.totalValue,
-        status: recordData.status || 'Pendente',
-      };
-
-      if (recordId && recordId !== 'new') {
-        // Atualização (PUT)
-        response = await axios.put(
-          `${API_BASE_URL}/records/${recordId}`,
-          payload
-        );
-        addToast('Registro atualizado!', 'success');
-        addLog?.(user?.name, `atualizou registro para ${patientName}`);
-      } else {
-        // Criação (POST)
-        response = await axios.post(`${API_BASE_URL}/records`, payload);
-        addToast('Registro salvo!', 'success');
-        addLog?.(user?.name, `criou registro para ${patientName}`);
-      }
-
-      await syncGlobalState(setRecords, 'registros');
     } catch (error) {
-      // Agora o log de erro será mais detalhado se algo ainda falhar
-      console.error(
-        '[API Error] Salvar Registro:',
-        error.response?.data || error.message
-      );
-      const msg =
-        error.response?.data?.message ||
-        'Erro ao salvar registro. Verifique os dados.';
-      addToast(msg, 'error');
+        // ...
     } finally {
+        // ...
+    } 
+    {
       setIsRecordModalOpen(false);
       setEditingRecord(null);
 
