@@ -350,7 +350,7 @@ export default function App() {
             }
           />
 
-          {(user?.role === 'profissional' || user?.role === 'admin' || user?.role === 'Profissional') && (
+          {(user?.role === 'profissional' || user?.role === 'admin' || user?.role === 'Professional') && (
             <>
               <Route
                 path="patients"
