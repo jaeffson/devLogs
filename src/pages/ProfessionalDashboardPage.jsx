@@ -1,5 +1,5 @@
 // src/pages/ProfessionalDashboardPage.jsx
-// (CORRIGIDO: Adicionado 'cursor-pointer' aos botões de Atalhos Rápidos)
+// (CORRIGIDO: Lógica 'handleSavePatient' para enviar NULL em vez de "" para CPF/SUS)
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -338,20 +338,27 @@ export default function ProfessionalDashboardPage({
   // --- Funções CRUD (REESCRITAS PARA API) ---
   
   // 1. SALVAR PACIENTE (CREATE/UPDATE)
+  // --- (INÍCIO DA CORREÇÃO DO BUG 409) ---
   const handleSavePatient = async (patientData) => {
     try {
         let response;
         const patientId = patientData._id || patientData.id; 
         const patientName = patientData.name;
         
+        // Se o CPF ou SUS for uma string vazia "", envie 'null'
+        // para evitar o erro de 'unique index' do MongoDB.
+        const cleanedCPF = patientData.cpf ? String(patientData.cpf).trim() : null;
+        const cleanedSusCard = patientData.susCard ? String(patientData.susCard).trim() : null;
+
         const payload = {
             name: patientName,
-            cpf: patientData.cpf,
-            susCard: patientData.susCard,
+            cpf: cleanedCPF, // <-- Use o valor limpo
+            susCard: cleanedSusCard, // <-- Use o valor limpo
             observations: patientData.observations,
             generalNotes: patientData.generalNotes,
             status: patientData.status,
         };
+        // --- (FIM DA CORREÇÃO DO BUG 409) ---
 
         if (patientId && patientId !== 'new') {
             // Atualização (PUT)
@@ -372,7 +379,8 @@ export default function ProfessionalDashboardPage({
 
 
     } catch (error) {
-        console.error('[API Error] Salvar Paciente:', error);
+        console.error('[API Error] Salvar Paciente:', error.response?.data || error);
+        // Pega a mensagem específica do backend (ex: "CPF já cadastrado")
         const msg = error.response?.data?.message || 'Erro ao salvar paciente. Tente novamente.';
         addToast(msg, 'error');
         
@@ -381,6 +389,8 @@ export default function ProfessionalDashboardPage({
         setEditingPatient(null);
     }
   };
+  // --- (FIM DA FUNÇÃO handleSavePatient CORRIGIDA) ---
+  
   
   // 2. EXCLUIR PACIENTE (DELETE)
   const handleDeletePatient = async (patientId) => {
@@ -411,6 +421,8 @@ export default function ProfessionalDashboardPage({
         
         const profissionalIdentifier = user?._id || user?.id;
         if (!profissionalIdentifier) {
+            // Este erro agora não deve mais acontecer após o fix do Login
+            addToast("Erro crítico: ID do profissional não encontrado. Faça login novamente.", 'error');
             throw new Error("ID do profissional não encontrado.");
         }
 
