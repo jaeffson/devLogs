@@ -1,5 +1,6 @@
 // src/layouts/MainLayout.jsx
 // (ATUALIZADO: Paleta de cores 'emerald' revertida para 'indigo')
+// (CORRIGIDO: Adicionado o case 'profissional' (pt-br) ao switch do menu)
 
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -250,17 +251,21 @@ export default function MainLayout({
       { path: '/settings', label: 'Configurações', icon: icons.settings },
     ];
 
+    // --- INÍCIO DA CORREÇÃO ---
+    // Adicionado 'profissional' (em português) à lista de cargos válidos.
     switch (user?.role) {
       case 'admin':
         return adminMenu;
       case 'secretario':
         return secretaryMenu;
+      case 'profissional': // <-- ESTA LINHA FOI ADICIONADA
       case 'professional':
       case 'Profissional': 
         return profissionalMenu;
       default:
         return []; 
     }
+    // --- FIM DA CORREÇÃO ---
   }, [user?.role]);
   // --- FIM LÓGICA DE MENUS ---
 
@@ -559,7 +564,7 @@ export default function MainLayout({
                   )}
                   {(user?.role === 'admin' ||
                     user?.role === 'profissional' ||
-                    user?.role === 'Professional') && ( 
+                    user?.role === 'Profissional') && ( 
                     <Link
                       to="/medications"
                       onClick={() => setIsProfileOpen(false)}
