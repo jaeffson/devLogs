@@ -339,54 +339,44 @@ export default function ProfessionalDashboardPage({
   
   // 1. SALVAR PACIENTE (CREATE/UPDATE)
   // --- (INÍCIO DA CORREÇÃO DO BUG 409) ---
+ // Dentro de ProfessionalDashboardPage.jsx e da sua Página de Admin
+//
   const handleSavePatient = async (patientData) => {
     try {
         let response;
         const patientId = patientData._id || patientData.id; 
         const patientName = patientData.name;
         
-        // Se o CPF ou SUS for uma string vazia "", envie 'null'
-        // para evitar o erro de 'unique index' do MongoDB.
+        // --- (INÍCIO DA CORREÇÃO) ---
+        // Esta é a "dupla garantia". Mesmo que PatientForm já envie null,
+        // esta lógica garante que NUNCA enviaremos "" para a API.
+        
         const cleanedCPF = patientData.cpf ? String(patientData.cpf).trim() : null;
         const cleanedSusCard = patientData.susCard ? String(patientData.susCard).trim() : null;
 
         const payload = {
             name: patientName,
-            cpf: cleanedCPF, // <-- Use o valor limpo
-            susCard: cleanedSusCard, // <-- Use o valor limpo
+            cpf: cleanedCPF, // <-- Garante que é 'null' se vazio
+            susCard: cleanedSusCard, // <-- Garante que é 'null' se vazio
             observations: patientData.observations,
             generalNotes: patientData.generalNotes,
             status: patientData.status,
         };
-        // --- (FIM DA CORREÇÃO DO BUG 409) ---
+        // --- (FIM DA CORREÇÃO) ---
 
         if (patientId && patientId !== 'new') {
-            // Atualização (PUT)
             response = await axios.put(`${API_BASE_URL}/patients/${patientId}`, payload);
-            addToast('Paciente atualizado com sucesso!', 'success');
-            addLog?.(user?.name, `atualizou dados do paciente ${patientName}`);
+            //...
         } else {
-            // Criação (POST)
             response = await axios.post(`${API_BASE_URL}/patients`, payload);
-            addToast('Paciente cadastrado com sucesso!', 'success');
-            addLog?.(user?.name, `cadastrou novo paciente ${patientName}`); // Corrigido NatientName -> patientName
+            //...
         }
         
-        await syncGlobalState(setPatients, 'pacientes');
-        
-        const updatedPatient = response.data;
-        setSelectedPatient(updatedPatient);
-
-
+       //...
     } catch (error) {
-        console.error('[API Error] Salvar Paciente:', error.response?.data || error);
-        // Pega a mensagem específica do backend (ex: "CPF já cadastrado")
-        const msg = error.response?.data?.message || 'Erro ao salvar paciente. Tente novamente.';
-        addToast(msg, 'error');
-        
+       //...
     } finally {
-        setIsPatientModalOpen(false);
-        setEditingPatient(null);
+       //...
     }
   };
   // --- (FIM DA FUNÇÃO handleSavePatient CORRIGIDA) ---
