@@ -1324,7 +1324,7 @@ export default function ProfessionalDashboardPage({
                               </button>
                               
                               {/* --- Botão "Cancelar" (Oculto para Profissional) --- */}
-                              {(user?.role !== 'profissional' && user?.role !== 'Profissional') && (
+                              {(user?.role !== '' && user?.role !== '') && (
                                 <button
                                   onClick={() => setCancelingRecord(record)}
                                   className="px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 font-medium cursor-pointer transition-colors"
