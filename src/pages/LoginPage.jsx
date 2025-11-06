@@ -277,7 +277,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
             {/* Mensagem de Erro */}
             {error && (
               <p className="text-red-600 text-sm text-center mb-4 animate-shake">{error}</p>
-* )}
+)}
 
             {/* Botão Principal (Entrar ou Criar Conta) */}
             <button
