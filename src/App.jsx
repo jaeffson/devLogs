@@ -118,7 +118,7 @@ export default function App() {
 
   const refetchMedications = useCallback(async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/medications`);
+      const response = await axios.get(`${API_BASE_URL}/medications/all`);
       setMedications(normalizeData(response.data));
     } catch (error) {
       console.error('Falha ao recarregar medicações:', error);

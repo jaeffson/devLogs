@@ -1529,18 +1529,18 @@ export default function ProfessionalDashboardPage({
         
       // --- (INÍCIO DA NOVA SEÇÃO) ---
       // VISÃO: MEDICAÇÕES (Renderiza a página de medicações)
-      case 'medications':
+     case 'medications':
         return (
           <MedicationsPage
               user={user}
-              medications={medications}
-              setMedications={setMedications} // Passa a função de refetch (ex: refetchMedications)
+              // As props 'medications' e 'setMedications' foram removidas.
+              // A página de medicações agora cuida dos seus próprios dados
+              // (buscando da rota paginada '/api/medications'),
+              // enquanto o RecordForm usa a lista global (de '/api/medications/all').
               addToast={addToast}
               addLog={addLog}
           />
         );
-      // --- (FIM DA NOVA SEÇÃO) ---
-
       default:
         return (
           <div className="text-center p-10">
