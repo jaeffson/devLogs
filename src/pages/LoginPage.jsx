@@ -1,7 +1,8 @@
 // src/pages/LoginPage.jsx
-// (DESIGN ATUALIZADO: Tema "Light & Professional")
-// (LÓGICA MANTIDA: Todas as funções, estados e props foram 100% preservados)
-// (ESTILO: Foco em clareza, minimalismo e usabilidade corporativa)
+// (DESIGN FINAL: Layout profissional com a paleta de cor azul original)
+// (EFEITOS: Adicionado efeito "lift" nos botões e transições suaves nos inputs)
+// (UX: Garantido 'cursor-pointer' em todos os elementos interativos)
+// (LÓGICA MANTIDA: 100% da lógica original preservada)
 
 import React, { useState } from 'react';
 import axios from 'axios';
@@ -10,7 +11,6 @@ import axios from 'axios';
 const API_BASE_URL = 'https://backendmedlog-4.onrender.com/api';
 
 // --- ÍCONES (Mantidos) ---
-// (Cores ajustadas para o tema claro, ex: text-gray-400)
 const UserIcon = (
   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
 );
@@ -24,16 +24,16 @@ const RoleIcon = (
   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
 );
 
-// Ícone da Marca (Cor ajustada para o tema)
+// Ícone da Marca (Cor ajustada para o fundo azul)
 const BrandIcon = (
-  <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600"> {/* Cor primária */}
-    <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"></path>
-    <path d="M12 8v4l3 3"></path>
-    <path d="M16 2v4"></path>
-    <path d="M8 2v4"></path>
-    <path d="M4.22 19.78l1.42-1.42"></path>
-    <path d="M18.36 5.64l1.42-1.42"></path>
-  </svg>
+   <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-blue-200">
+     <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"></path>
+     <path d="M12 8v4l3 3"></path>
+     <path d="M16 2v4"></path>
+     <path d="M8 2v4"></path>
+     <path d="M4.22 19.78l1.42-1.42"></path>
+     <path d="M18.36 5.64l1.42-1.42"></path>
+   </svg>
 );
 
 
@@ -71,12 +71,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
     }
 
     setIsLoading(true);
-    const credentials = {
-      email: emailValue,
-      password,
-      name: nameValue,
-      role: role
-    };
+    const credentials = { email: emailValue, password, name: nameValue, role: role };
 
     try {
       if (isLoginView) {
@@ -85,7 +80,6 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
           password: credentials.password
         });
         
-        // (Lógica de extração mantida)
         const user = response.data.user || response.data;
         const token = response.data.token || user.token;
         if (user.token) delete user.token;
@@ -123,39 +117,23 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
   // --- FIM DA LÓGICA ---
 
 
-  // --- (INÍCIO DO NOVO DESIGN "PROFESSIONAL LIGHT") ---
+  // --- (INÍCIO DO NOVO DESIGN) ---
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-      {/* Layout de Cartão
-        - Mantém a sombra 'shadow-xl' e 'overflow-hidden'
-        - Mantém a quebra responsiva 'lg:flex'
-      */}
       <div className="bg-white rounded-lg shadow-xl overflow-hidden max-w-4xl w-full lg:flex animate-fade-in">
 
-        {/* Coluna Esquerda (Branding)
-          - Substituído o gradiente por um 'bg-gray-50' (cinza claro)
-          - Texto agora é escuro ('text-gray-800' e 'text-gray-600')
-          - Ícone da marca usa a cor primária ('text-blue-600')
-        */}
-        <div className="hidden lg:flex lg:w-1/2 bg-gray-50 p-12 flex-col justify-center items-center">
+        {/* Coluna Esquerda (Branding com Gradiente Azul) */}
+        <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-600 to-blue-800 p-12 flex-col justify-center items-center text-white">
           <div className="mb-6">
-            {BrandIcon} {/* Ícone SVG com a nova cor */}
+            {BrandIcon}
           </div>
-          <h1 className="text-3xl font-bold mb-3 text-gray-800 text-center">
-            MedLogs
-          </h1>
-          <p className="text-center text-gray-600">
-            Gestão Inteligente de Pacientes e Medicações.
-          </p>
+          <h1 className="text-3xl font-bold mb-3 text-center">MedLogs</h1>
+          <p className="text-center text-blue-100">Gestão Inteligente de Pacientes e Medicações.</p>
         </div>
 
-        {/* Coluna Direita (Formulário)
-          - Fundo 'bg-white'
-          - Títulos e textos em tons de cinza escuro
-        */}
+        {/* Coluna Direita (Formulário) */}
         <div className="w-full lg:w-1/2 p-8 md:p-12 flex flex-col justify-center">
 
-          {/* Logo/Título para telas pequenas (quando a coluna esquerda some) */}
           <div className="lg:hidden text-center mb-6">
              <h1 className="text-2xl font-bold text-gray-800">MedLogs</h1>
           </div>
@@ -166,126 +144,83 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
 
           <form onSubmit={handleAuth} noValidate>
             
-            {/* Campo Nome (Aparece só no Cadastro) */}
             {!isLoginView && (
               <div className="mb-4 animate-fade-in">
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-                  Nome Completo
-                </label>
+                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">Nome Completo</label>
                 <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">
-                    {UserIcon}
-                  </span>
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center">{UserIcon}</span>
                   <input
-                    type="text"
-                    id="name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    required
-                    autoComplete="name"
-                    className="w-full p-3 pl-10 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
-                    placeholder="Seu nome completo"
-                    disabled={isLoading}
+                    type="text" id="name" value={name} onChange={(e) => setName(e.target.value)} required autoComplete="name"
+                    className="w-full p-3 pl-10 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                    placeholder="Seu nome completo" disabled={isLoading}
                   />
                 </div>
               </div>
             )}
 
-            {/* Campo de Email */}
             <div className="mb-4">
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                E-mail
-              </label>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">E-mail</label>
               <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">
-                  {MailIcon}
-                </span>
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center">{MailIcon}</span>
                 <input
-                  type="email"
-                  id="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  autoComplete="email"
-                  className="w-full p-3 pl-10 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
-                  placeholder="seuemail@exemplo.com"
-                  disabled={isLoading}
+                  type="email" id="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email"
+                  className="w-full p-3 pl-10 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                  placeholder="seuemail@exemplo.com" disabled={isLoading}
                 />
               </div>
             </div>
 
-            {/* Campo de Senha */}
             <div className="mb-4">
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-                Senha
-              </label>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">Senha</label>
               <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">
-                  {LockIcon}
-                </span>
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center">{LockIcon}</span>
                 <input
-                  type="password"
-                  id="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
+                  type="password" id="password" value={password} onChange={(e) => setPassword(e.target.value)} required
                   autoComplete={isLoginView ? "current-password" : "new-password"}
-                  className="w-full p-3 pl-10 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
-                  placeholder="Sua senha"
-                  disabled={isLoading}
+                  className="w-full p-3 pl-10 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                  placeholder="Sua senha" disabled={isLoading}
                 />
               </div>
               {isLoginView && (
                 <div className="text-right mt-2">
-                  <a href="#" className="text-xs text-blue-600 hover:underline">
+                  <a href="#" className="text-xs text-blue-600 hover:underline cursor-pointer">
                     Esqueceu sua senha?
                   </a>
                 </div>
               )}
             </div>
 
-            {/* Campo de 'Role' (só no cadastro) */}
             {!isLoginView && (
               <div className="mb-6 animate-fade-in">
-                <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-2">
-                  Qual sua função?
-                </label>
+                <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-2">Qual sua função?</label>
                 <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">
-                    {RoleIcon}
-                  </span>
-                  {/* (Classe 'appearance-none' esconde a seta padrão) */}
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center">{RoleIcon}</span>
                   <select
-                    id="role"
-                    value={role}
-                    onChange={(e) => setRole(e.target.value)}
-                    required
-                    className="w-full p-3 pl-10 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 appearance-none bg-white"
+                    id="role" value={role} onChange={(e) => setRole(e.target.value)} required
+                    className="w-full p-3 pl-10 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 appearance-none bg-white cursor-pointer"
                     disabled={isLoading}
                   >
                     <option value="profissional">Profissional (Saúde)</option>
                     <option value="secretario">Secretário(a)</option>
                   </select>
-                  {/* (Seta customizada para o select) */}
                   <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none">
-                     <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                     <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Mensagem de Erro */}
             {error && (
               <p className="text-red-600 text-sm text-center mb-4 animate-shake">{error}</p>
-)}
+            )}
 
-            {/* Botão Principal (Entrar ou Criar Conta) */}
             <button
               type="submit"
               disabled={isLoading}
-              className={`w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center justify-center h-12 cursor-pointer ${
-                isLoading ? 'opacity-60 cursor-not-allowed' : ''
-              }`}
+              className={`w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center h-12
+                         transition-all duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
+                         transform hover:-translate-y-1
+                         ${isLoading ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
             >
               {isLoading ? (
                 <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -297,7 +232,6 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
               )}
             </button>
 
-            {/* Botão para Alternar Login/Cadastro */}
             <div className="text-center mt-6">
               <button
                 type="button"
@@ -310,15 +244,12 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
             </div>
           </form>
 
-          {/* Rodapé (Mantido) */}
           <div className="mt-8 text-center text-xs text-gray-400">
-            <p>Versão 1.1.1</p>
+            <p>Versão 1.0.7</p>
             <p>Todos os direitos reservados @2025</p>
           </div>
-
         </div>
       </div>
     </div>
   );
-  // --- (FIM DO NOVO DESIGN) ---
 }
