@@ -1,10 +1,9 @@
 // src/pages/LoginPage.jsx
-// (DESIGN AJUSTADO: Layout "Flutuante" mais compacto para evitar scroll)
-// (ESTILIZAÇÃO: Espaçamentos (padding e margin) reduzidos)
-// (LÓGICA MANTIDA: 100% da lógica original preservada)
+// (DESIGN ATUALIZADO: Usando sua nova imagem de logo)
 
 import React, { useState } from 'react';
 import axios from 'axios';
+import logo from '../assents/medlogs-logo.png'
 
 // --- URL BASE DA API (Mantida) ---
 const API_BASE_URL = 'https://backendmedlog-4.onrender.com/api';
@@ -22,18 +21,7 @@ const LockIcon = (
 const RoleIcon = (
   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
 );
-
-// Ícone da Marca (Reduzido para 56px)
-const BrandIcon = (
-   <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600">
-     <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"></path>
-     <path d="M12 8v4l3 3"></path>
-     <path d="M16 2v4"></path>
-     <path d="M8 2v4"></path>
-     <path d="M4.22 19.78l1.42-1.42"></path>
-     <path d="M18.36 5.64l1.42-1.42"></path>
-   </svg>
-);
+// (O BrandIcon SVG foi removido, pois usaremos a imagem)
 
 
 // --- LÓGICA DO COMPONENTE (100% MANTIDA) ---
@@ -116,18 +104,24 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
   // --- FIM DA LÓGICA ---
 
 
-  // --- (INÍCIO DO NOVO DESIGN "COMPACTO") ---
+  // --- (INÍCIO DO DESIGN COM A NOVA LOGO) ---
   return (
-    // Fundo da página com gradiente suave
     <div className="min-h-screen bg-gradient-to-br from-blue-100 to-white flex items-center justify-center p-4">
       
-      {/* Cartão Central */}
       <div className="bg-white rounded-xl shadow-2xl overflow-hidden max-w-md w-full animate-fade-in">
         
-        {/* Cabeçalho do Cartão (Padding reduzido para p-6 e mb-3) */}
         <div className="text-center p-6">
           <div className="inline-block mb-3">
-            {BrandIcon}
+            
+            {/* PASSO 2: Substitua o {BrandIcon} pela tag <img> */}
+            <img 
+              src={logo} 
+              alt="MedLogs Logo" 
+              width="64" // Você pode ajustar o tamanho
+              height="64" 
+              className="mx-auto" // Garante que a imagem fique centralizada
+            />
+            
           </div>
           <h1 className="text-3xl font-bold text-gray-800">MedLogs</h1>
           <p className="text-gray-500 mt-2">
@@ -140,7 +134,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
           <form onSubmit={handleAuth} noValidate>
             
             {!isLoginView && (
-              <div className="mb-3 animate-fade-in"> {/* Margem reduzida para mb-3 */}
+              <div className="mb-3 animate-fade-in">
                 <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">Nome Completo</label>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-0 pl-3 flex items-center">{UserIcon}</span>
@@ -153,7 +147,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
               </div>
             )}
 
-            <div className="mb-3"> {/* Margem reduzida para mb-3 */}
+            <div className="mb-3">
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">E-mail</label>
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 pl-3 flex items-center">{MailIcon}</span>
@@ -165,7 +159,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
               </div>
             </div>
 
-            <div className="mb-3"> {/* Margem reduzida para mb-3 */}
+            <div className="mb-3">
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">Senha</label>
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 pl-3 flex items-center">{LockIcon}</span>
@@ -186,7 +180,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
             </div>
 
             {!isLoginView && (
-              <div className="mb-4 animate-fade-in"> {/* Margem reduzida para mb-4 */}
+              <div className="mb-4 animate-fade-in">
                 <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-2">Qual sua função?</label>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-0 pl-3 flex items-center">{RoleIcon}</span>
@@ -209,7 +203,6 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
               <p className="text-red-600 text-sm text-center mb-3 animate-shake">{error}</p>
             )}
 
-            {/* Espaçamento do botão (mb-4) antes do botão */}
             <div className="mb-4"></div> 
 
             <button
@@ -230,7 +223,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
               )}
             </button>
 
-            <div className="text-center mt-5"> {/* Margem mt-5 */}
+            <div className="text-center mt-5">
               <button
                 type="button"
                 onClick={toggleView}
@@ -242,7 +235,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
             </div>
           </form>
           
-          <div className="mt-6 text-center text-xs text-gray-400"> {/* Margem mt-6 */}
+          <div className="mt-6 text-center text-xs text-gray-400">
             <p>Versão 1.0.7</p>
             <p>Todos os direitos reservados @2025</p>
           </div>
