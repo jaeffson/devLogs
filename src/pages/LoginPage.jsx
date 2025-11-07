@@ -117,8 +117,8 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
             <img 
               src={logo} 
               alt="MedLogs Logo" 
-              width="64" // Você pode ajustar o tamanho
-              height="64" 
+              width="100" // Você pode ajustar o tamanho
+              height="100" 
               className="mx-auto" // Garante que a imagem fique centralizada
             />
             
