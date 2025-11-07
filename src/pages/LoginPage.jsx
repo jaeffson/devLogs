@@ -1,7 +1,6 @@
 // src/pages/LoginPage.jsx
-// (DESIGN FINAL: Layout profissional com a paleta de cor azul original)
-// (EFEITOS: Adicionado efeito "lift" nos botões e transições suaves nos inputs)
-// (UX: Garantido 'cursor-pointer' em todos os elementos interativos)
+// (DESIGN ATUALIZADO: Layout de Cartão Único, Centralizado e "Flutuante")
+// (ESTILIZAÇÃO: Fundo da página com gradiente suave e cartão com sombra)
 // (LÓGICA MANTIDA: 100% da lógica original preservada)
 
 import React, { useState } from 'react';
@@ -24,9 +23,9 @@ const RoleIcon = (
   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
 );
 
-// Ícone da Marca (Cor ajustada para o fundo azul)
+// Ícone da Marca (Cor primária azul)
 const BrandIcon = (
-   <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-blue-200">
+   <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600">
      <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"></path>
      <path d="M12 8v4l3 3"></path>
      <path d="M16 2v4"></path>
@@ -117,31 +116,27 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
   // --- FIM DA LÓGICA ---
 
 
-  // --- (INÍCIO DO NOVO DESIGN) ---
+  // --- (INÍCIO DO NOVO DESIGN "CARTÃO FLUTUANTE") ---
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-xl overflow-hidden max-w-4xl w-full lg:flex animate-fade-in">
-
-        {/* Coluna Esquerda (Branding com Gradiente Azul) */}
-        <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-600 to-blue-800 p-12 flex-col justify-center items-center text-white">
-          <div className="mb-6">
+    // Fundo da página com gradiente suave
+    <div className="min-h-screen bg-gradient-to-br from-blue-100 to-white flex items-center justify-center p-4">
+      
+      {/* Cartão Central */}
+      <div className="bg-white rounded-xl shadow-2xl overflow-hidden max-w-md w-full animate-fade-in">
+        
+        {/* Cabeçalho do Cartão */}
+        <div className="text-center p-8">
+          <div className="inline-block mb-4">
             {BrandIcon}
           </div>
-          <h1 className="text-3xl font-bold mb-3 text-center">MedLogs</h1>
-          <p className="text-center text-blue-100">Gestão Inteligente de Pacientes e Medicações.</p>
+          <h1 className="text-3xl font-bold text-gray-800">MedLogs</h1>
+          <p className="text-gray-500 mt-2">
+             {isLoginView ? 'Bem-vindo de volta!' : 'Crie sua conta para começar'}
+          </p>
         </div>
 
-        {/* Coluna Direita (Formulário) */}
-        <div className="w-full lg:w-1/2 p-8 md:p-12 flex flex-col justify-center">
-
-          <div className="lg:hidden text-center mb-6">
-             <h1 className="text-2xl font-bold text-gray-800">MedLogs</h1>
-          </div>
-
-          <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">
-            {isLoginView ? 'Acessar Sistema' : 'Criar Nova Conta'}
-          </h2>
-
+        {/* Formulário (com preenchimento separado) */}
+        <div className="p-8 pt-0">
           <form onSubmit={handleAuth} noValidate>
             
             {!isLoginView && (
@@ -151,7 +146,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
                   <span className="absolute inset-y-0 left-0 pl-3 flex items-center">{UserIcon}</span>
                   <input
                     type="text" id="name" value={name} onChange={(e) => setName(e.target.value)} required autoComplete="name"
-                    className="w-full p-3 pl-10 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                    className="w-full p-3 pl-10 border border-gray-200 bg-gray-50 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
                     placeholder="Seu nome completo" disabled={isLoading}
                   />
                 </div>
@@ -164,7 +159,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
                 <span className="absolute inset-y-0 left-0 pl-3 flex items-center">{MailIcon}</span>
                 <input
                   type="email" id="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email"
-                  className="w-full p-3 pl-10 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                  className="w-full p-3 pl-10 border border-gray-200 bg-gray-50 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
                   placeholder="seuemail@exemplo.com" disabled={isLoading}
                 />
               </div>
@@ -177,7 +172,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
                 <input
                   type="password" id="password" value={password} onChange={(e) => setPassword(e.target.value)} required
                   autoComplete={isLoginView ? "current-password" : "new-password"}
-                  className="w-full p-3 pl-10 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                  className="w-full p-3 pl-10 border border-gray-200 bg-gray-50 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
                   placeholder="Sua senha" disabled={isLoading}
                 />
               </div>
@@ -197,7 +192,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
                   <span className="absolute inset-y-0 left-0 pl-3 flex items-center">{RoleIcon}</span>
                   <select
                     id="role" value={role} onChange={(e) => setRole(e.target.value)} required
-                    className="w-full p-3 pl-10 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 appearance-none bg-white cursor-pointer"
+                    className="w-full p-3 pl-10 border border-gray-200 bg-gray-50 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 appearance-none cursor-pointer"
                     disabled={isLoading}
                   >
                     <option value="profissional">Profissional (Saúde)</option>
@@ -214,6 +209,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
               <p className="text-red-600 text-sm text-center mb-4 animate-shake">{error}</p>
             )}
 
+            {/* Botão Principal com efeito "lift" */}
             <button
               type="submit"
               disabled={isLoading}
@@ -232,6 +228,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
               )}
             </button>
 
+            {/* Botão de Alternância */}
             <div className="text-center mt-6">
               <button
                 type="button"
@@ -243,13 +240,16 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
               </button>
             </div>
           </form>
-
+          
+          {/* Rodapé (movido para dentro do cartão) */}
           <div className="mt-8 text-center text-xs text-gray-400">
-            <p>Versão 1.0.7</p>
+            <p>Versão 1.1.1</p>
             <p>Todos os direitos reservados @2025</p>
           </div>
         </div>
+
       </div>
     </div>
   );
+  // --- (FIM DO NOVO DESIGN) ---
 }
