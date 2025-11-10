@@ -1,4 +1,6 @@
 // src/components/views/secretary/GeneralReportView.jsx
+// (ATUALIZADO: Adicionado botão "Ver Motivo" para status "Cancelado")
+
 import React, { useState, useMemo, useEffect } from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -6,9 +8,9 @@ import { StatusBadge } from '../../common/StatusBadge';
 import { icons } from '../../../utils/icons';
 import useDebounce from '../../../hooks/useDebounce';
 
-// (INÍCIO DA CORREÇÃO) Adicionada a constante de 30 dias
 const MS_IN_30_DAYS = 30 * 24 * 60 * 60 * 1000;
 
+// 1. RECEBER A NOVA PROP 'onViewReason'
 export function GeneralReportView({
   user,
   records = [],
@@ -17,14 +19,13 @@ export function GeneralReportView({
   getPatientNameById,
   getMedicationName,
   initialFilterStatus, 
-  onReportViewed, 
+  onReportViewed,
+  onViewReason, // <-- PROP ADICIONADA
 }) {
   
   // --- Estados (Movidos para cá) ---
   const [filterPeriod, setFilterPeriod] = useState('all');
-  
   const [filterStatus, setFilterStatus] = useState(initialFilterStatus || 'all');
-  
   const [reportSearchTerm, setReportSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(20);
@@ -33,7 +34,7 @@ export function GeneralReportView({
 
   // Efeito para sincronizar e limpar o 'initialFilterStatus' no controlador
   useEffect(() => {
-    if (initialFilterStatus) { // Mantém o filtro 'Vencido' ou 'Pendente'
+    if (initialFilterStatus) {
       setFilterStatus(initialFilterStatus);
       if (onReportViewed) onReportViewed(); 
     }
@@ -46,8 +47,6 @@ export function GeneralReportView({
   }, [filterPeriod, filterStatus, debouncedReportSearchTerm]);
 
   
-  // --- (INÍCIO DA CORREÇÃO) Opções do Dropdown de Status ---
-  // Adiciona a opção "Vencido" dinamicamente se for o filtro inicial
   const statusOptions = useMemo(() => {
     const options = [
       { value: 'all', label: 'Todos' },
@@ -55,15 +54,11 @@ export function GeneralReportView({
       { value: 'Pendente', label: 'Pendente' },
       { value: 'Cancelado', label: 'Cancelado' },
     ];
-    
-    // Se o filtro inicial (da URL) for "Vencido", e o estado atual for "Vencido",
-    // adiciona ele na lista para o usuário saber o que está selecionado.
     if (initialFilterStatus === 'Vencido' && filterStatus === 'Vencido') {
       options.push({ value: 'Vencido', label: 'Vencido (30d+)' });
     }
     return options;
   }, [initialFilterStatus, filterStatus]);
-  // --- (FIM DA CORREÇÃO) ---
 
   
   // --- Memos (Movidos para cá) ---
@@ -85,11 +80,9 @@ export function GeneralReportView({
       }
     }
 
-    // --- (INÍCIO DA CORREÇÃO) Lógica do Filtro de Status ---
     const now = new Date().getTime();
     if (filterStatus !== 'all') {
       if (filterStatus === 'Vencido') {
-        // Lógica especial para o filtro "Vencido"
         filtered = filtered.filter(r => {
           if (r.status !== 'Pendente' || !r.entryDate) return false;
           try {
@@ -100,11 +93,9 @@ export function GeneralReportView({
           }
         });
       } else {
-        // Lógica original mantida para "Pendente", "Atendido", "Cancelado"
         filtered = filtered.filter((r) => r.status === filterStatus);
       }
     }
-    // --- (FIM DA CORREÇÃO) ---
 
     const searchTermLower = debouncedReportSearchTerm.toLowerCase();
     if (searchTermLower) {
@@ -155,10 +146,7 @@ export function GeneralReportView({
     try {
       const doc = new jsPDF();
       const reportTitle = 'Relatório Geral de Entradas';
-      
-      // (CORREÇÃO) Melhora o label do filtro no PDF
       const statusLabel = statusOptions.find(o => o.value === filterStatus)?.label || 'Todos';
-
       const filtersText = `Filtros: Período (${
         filterPeriod === 'all' ? 'Todos' : `Últimos ${filterPeriod} dias`
       }), Status (${statusLabel}), Busca (${reportSearchTerm || 'Nenhuma'})`;
@@ -284,7 +272,6 @@ export function GeneralReportView({
             !Array.isArray(filteredRecordsForReport) ||
             filteredRecordsForReport.length === 0
           }
-          // Padronizado cursor-pointer e hover
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors w-full md:w-auto cursor-pointer"
           title="Abrir PDF em nova aba para imprimir ou salvar"
         >
@@ -368,8 +355,6 @@ export function GeneralReportView({
           >
             Status
           </label>
-          {/* --- (INÍCIO DA CORREÇÃO) --- */}
-          {/* O select agora usa as 'statusOptions' dinâmicas */}
           <select
             id="report-status-all"
             value={filterStatus}
@@ -384,7 +369,6 @@ export function GeneralReportView({
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
-          {/* --- (FIM DA CORREÇÃO) --- */}
         </div>
         <div className="text-sm text-gray-600 mt-2 md:mt-0">
           {filteredRecordsForReport.length} registro(s) encontrado(s).
@@ -451,7 +435,8 @@ export function GeneralReportView({
                 }
 
                 return (
-                  <tr key={record.id} className="hover:bg-gray-50 transition-colors">
+                  // (CORREÇÃO) Adicionada key única
+                  <tr key={record._id || record.id} className="hover:bg-gray-50 transition-colors">
                     <td
                       className={`py-3 px-4 font-medium text-gray-900 ${
                         isHighlighted ? 'bg-yellow-100' : ''
@@ -496,9 +481,23 @@ export function GeneralReportView({
                     <td className="py-3 px-4 text-gray-600">{`R$ ${(
                       Number(record.totalValue) || 0
                     ).toFixed(2)}`}</td>
+                    
+                    {/* --- 2. (INÍCIO DA MUDANÇA) --- */}
                     <td className="py-3 px-4">
                       <StatusBadge status={record.status} />
+                      {record.status === 'Cancelado' && (
+                        <button
+                          onClick={() => onViewReason(record)}
+                          className="mt-1 text-xs text-blue-600 hover:underline cursor-pointer flex items-center gap-1"
+                          title="Ver motivo do cancelamento"
+                        >
+                          <span className="w-4 h-4">{icons.info}</span>
+                          (Ver Motivo)
+                        </button>
+                      )}
                     </td>
+                    {/* --- (FIM DA MUDANÇA) --- */}
+
                   </tr>
                 );
               })}
@@ -532,7 +531,6 @@ export function GeneralReportView({
               <button
                 onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
                 disabled={currentPage === 1}
-                // Classes de interação padronizadas
                 className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
               >
                 Anterior
@@ -545,7 +543,6 @@ export function GeneralReportView({
                   setCurrentPage((p) => Math.min(p + 1, totalPages))
                 }
                 disabled={currentPage === totalPages || totalPages === 0}
-                // Classes de interação padronizadas
                 className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
               >
                 Próxima

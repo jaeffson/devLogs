@@ -1,5 +1,5 @@
 // src/pages/SecretaryDashboardPage.jsx
-// (CORREÇÃO: Reintroduzido 'handleNavigateWithFilter' para setar o estado E navegar)
+// (ATUALIZADO: Adicionado estado para o Modal de Motivo de Cancelamento)
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom'; 
@@ -9,6 +9,9 @@ import { DashboardView } from '../components/views/secretary/DashboardView';
 import { PatientHistoryView } from '../components/views/secretary/PatientHistoryView';
 import { GeneralReportView } from '../components/views/secretary/GeneralReportView';
 import { RecentDeliveriesView } from '../components/views/secretary/RecentDeliveriesView';
+
+// --- (NOVO) Import do Modal de Motivo ---
+import { ViewReasonModal } from '../components/common/ViewReasonModal';
 
 // --- Imports de Utils e Ícones ---
 import { getMedicationName } from '../utils/helpers';
@@ -21,7 +24,7 @@ export default function SecretaryDashboardPage({
   patients = [],
   records = [],
   medications = [],
-  users = [], // <-- A prop 'users' é recebida aqui
+  users = [],
   filterYear = new Date().getFullYear(),
   activeTabForced,
   addToast,
@@ -30,55 +33,49 @@ export default function SecretaryDashboardPage({
 
   // --- Estados do Controlador ---
   const [currentView, setCurrentView] = useState('dashboard');
-  
-  // Estado para passar filtro (ex: 'Pendente') do Dashboard para o Relatório Geral
   const [filterStatus, setFilterStatus] = useState('all');
-  
-  // Estado para passar o objeto do paciente (vindo das Entregas Recentes) para o Histórico
   const [initialPatientForHistory, setInitialPatientForHistory] = useState(null);
+  
+  // --- (NOVO) Estado para o Modal de Motivo ---
+  const [viewingReasonRecord, setViewingReasonRecord] = useState(null);
   
   
   // --- Wrapper de Navegação (Usado apenas para limpar estados) ---
   const navigateToView = useCallback((view) => {
-    // Se a nova view NÃO for a de histórico, limpa o paciente inicial.
     if (view !== 'records') {
         setInitialPatientForHistory(null);
     }
-    // Se a nova view NÃO for a de relatório, limpa o filtro de status.
     if (view !== 'all_history') {
         setFilterStatus('all');
     }
-    // Define a nova view
     setCurrentView(view);
   }, []); 
 
 
   // --- useEffect (Sincroniza URL com o Estado Interno) ---
   useEffect(() => {
+    let targetView = activeTabForced || 'dashboard';
     
-    let targetView = activeTabForced || 'dashboard'; // O default é dashboard
-    
-    // Mapeia rotas do App.jsx para os nomes das views internas
     if (targetView === 'reports' || targetView === 'reports-general') {
       targetView = 'all_history';
     }
+    if (targetView === 'patient-history') {
+      targetView = 'records';
+    }
     
-    // Se a rota for desconhecida, vá para o dashboard
     if (!['dashboard', 'records', 'deliveries', 'all_history'].includes(targetView)) {
       targetView = 'dashboard';
     }
     
-    // Chama a função que limpa estados e define a view interna
     navigateToView(targetView); 
 
-  }, [activeTabForced, navigateToView]); // Depende APENAS da URL
+  }, [activeTabForced, navigateToView]);
   
 
   // --- Helpers Globais (Corrigido para _id) ---
   const patientMap = useMemo(() => {
     if (!Array.isArray(patients)) return {};
     return patients.reduce((acc, patient) => {
-      // CORRIGIDO: para usar _id (MongoDB)
       acc[patient._id] = patient.name || 'Desconhecido';
       return acc;
     }, {});
@@ -91,31 +88,22 @@ export default function SecretaryDashboardPage({
     [patientMap]
   );
   
-  // --- (INÍCIO DA CORREÇÃO) Funções de Callback para os Filhos ---
+  // --- Funções de Callback para os Filhos ---
   
-  /**
-   * Esta função é usada pelos botões "Pendentes" no DashboardView.
-   * Ela define o filtro ANTES de navegar, garantindo que a página
-   * de relatórios abra com o filtro correto.
-   */
   const handleNavigateWithFilter = (viewUrl, status) => {
-    setFilterStatus(status); // 1. Define o filtro
-    navigate(viewUrl);       // 2. Navega para a URL
+    setFilterStatus(status);
+    navigate(viewUrl);
   };
   
-  // Navegação da view "Entregas Recentes" para "Histórico"
   const handleNavigateToPatientHistory = (patientId) => {
-    // CORRIGIDO: para usar p._id (MongoDB)
     const patient = patients.find(p => p._id === patientId); 
     if (patient) {
       setInitialPatientForHistory(patient); 
-      // Navega para a URL correta, o 'useEffect' fará o resto
       navigate('/patient-history');          
     } else {
       addToast?.('Erro: Paciente não encontrado para navegação.', 'error');
     }
   };
-  // --- (FIM DA CORREÇÃO) ---
 
   // --- Renderização Condicional (O Corpo Principal) ---
   const renderCurrentView = () => {
@@ -128,17 +116,16 @@ export default function SecretaryDashboardPage({
             patients={patients}
             records={records}
             medications={medications}
-            users={users} // Prop 'users' mantida
+            users={users}
             filterYear={filterYear}
-            getPatientNameById={getPatientNameById}
+            getPatientNameById={getPatientNameById} // (Mantido)
             getMedicationName={getMedicationName}
             icons={icons} 
-            // --- (CORREÇÃO) Passando a função de filtro ---
             onNavigateWithFilter={handleNavigateWithFilter}
           />
         );
 
-      case 'records':
+      case 'records': // Rota /patient-history
         return (
           <PatientHistoryView
             patients={patients}
@@ -146,10 +133,12 @@ export default function SecretaryDashboardPage({
             medications={medications}
             getMedicationName={getMedicationName}
             initialPatient={initialPatientForHistory}
+            onHistoryViewed={() => {}} // (Mantido)
+            onViewReason={setViewingReasonRecord} // <-- (NOVO) Passa o handler
           />
         );
 
-      case 'all_history':
+      case 'all_history': // Rota /reports-general
         return (
           <GeneralReportView
             user={user}
@@ -158,8 +147,9 @@ export default function SecretaryDashboardPage({
             addToast={addToast}
             getPatientNameById={getPatientNameById}
             getMedicationName={getMedicationName}
-            initialFilterStatus={filterStatus} // <-- O filtro é lido aqui
-            onReportViewed={() => {}} // Correção do crash
+            initialFilterStatus={filterStatus}
+            onReportViewed={() => {}} // (Mantido)
+            onViewReason={setViewingReasonRecord} // <-- (NOVO) Passa o handler
           />
         );
 
@@ -170,12 +160,11 @@ export default function SecretaryDashboardPage({
             medications={medications}
             getPatientNameById={getPatientNameById}
             getMedicationName={getMedicationName}
-            onPatientClick={handleNavigateToPatientHistory} // Este clique é interno (Pai -> Filho -> Pai)
+            onPatientClick={handleNavigateToPatientHistory}
           />
         );
 
       default:
-        // Fallback
         return (
           <div className="text-center p-10">
             <h2 className="text-xl font-semibold text-gray-700">Visão Inválida</h2>
@@ -188,5 +177,18 @@ export default function SecretaryDashboardPage({
     }
   };
 
-  return <>{renderCurrentView()}</>;
+  return (
+    <>
+      {renderCurrentView()}
+      
+      {/* --- (NOVO) Renderiza o Modal de Motivo --- */}
+      {viewingReasonRecord && (
+        <ViewReasonModal
+          record={viewingReasonRecord}
+          onClose={() => setViewingReasonRecord(null)}
+          getPatientNameById={getPatientNameById}
+        />
+      )}
+    </>
+  );
 }

@@ -1,6 +1,9 @@
 // src/components/common/PatientRecordsTable.jsx
+// (ATUALIZADO: Adicionado botão "Ver Motivo" para status "Cancelado")
+
 import React from 'react';
 import { StatusBadge } from './StatusBadge';
+import { icons } from '../../utils/icons'; // <-- 1. IMPORTAR ÍCONES
 
 // Helper interno (Compara ID como string)
 const getMedicationNameLocal = (medicationId, meds = []) => {
@@ -10,16 +13,12 @@ const getMedicationNameLocal = (medicationId, meds = []) => {
 // Função para formatar a Data de Referência com segurança (YYYY-MM-DD -> DD/MM/YYYY)
 const formatDateRef = (dateStr) => {
   if (!dateStr) return '---';
-
-  // Pega a string de data (ex: 2025-10-30T03:00:00.000Z) e isola YYYY-MM-DD
   const isoDatePart = dateStr.slice(0, 10);
-
-  // Cria um novo objeto Date forçando a leitura como data local (T00:00:00) para evitar fuso horário
   return new Date(isoDatePart + 'T00:00:00').toLocaleDateString('pt-BR');
 };
 
-// Exportação nomeada
-export function PatientRecordsTable({ records = [], medications = [] }) {
+// 2. RECEBER A NOVA PROP 'onViewReason'
+export function PatientRecordsTable({ records = [], medications = [], onViewReason }) {
   if (!Array.isArray(records) || records.length === 0) {
     return (
       <p className="text-gray-500 mt-4 text-center">
@@ -55,12 +54,9 @@ export function PatientRecordsTable({ records = [], medications = [] }) {
             .sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate))
             .map((record) => (
               <tr key={record.id} className="border-b hover:bg-gray-50">
-                {/* 🚨 APLICAÇÃO DA CORREÇÃO: Usa a função segura */}
                 <td className="py-2 px-3">
                   {formatDateRef(record.referenceDate)}
                 </td>
-
-                {/* Entrada (data e hora) */}
                 <td className="py-2 px-3 text-gray-700">
                   {record.entryDate
                     ? new Date(record.entryDate).toLocaleString('pt-BR', {
@@ -69,7 +65,6 @@ export function PatientRecordsTable({ records = [], medications = [] }) {
                       })
                     : '---'}
                 </td>
-                {/* Entrega (data e hora) */}
                 <td className="py-2 px-3 text-gray-700">
                   {record.deliveryDate
                     ? new Date(record.deliveryDate).toLocaleString('pt-BR', {
@@ -78,8 +73,6 @@ export function PatientRecordsTable({ records = [], medications = [] }) {
                       })
                     : '---'}
                 </td>
-
-                {/* Medicações */}
                 <td className="py-2 px-3 text-gray-700">
                   {Array.isArray(record.medications)
                     ? record.medications
@@ -90,10 +83,24 @@ export function PatientRecordsTable({ records = [], medications = [] }) {
                         .join(', ')
                     : 'N/A'}
                 </td>
-                {/* Status */}
+                
+                {/* --- 3. (INÍCIO DA MUDANÇA) --- */}
                 <td className="py-2 px-3">
                   <StatusBadge status={record.status} />
+                  {/* Adiciona o botão se o status for "Cancelado" e a prop existir */}
+                  {record.status === 'Cancelado' && onViewReason && (
+                    <button
+                      onClick={() => onViewReason(record)}
+                      className="mt-1 text-xs text-blue-600 hover:underline cursor-pointer flex items-center gap-1"
+                      title="Ver motivo do cancelamento"
+                    >
+                      <span className="w-4 h-4">{icons.info}</span>
+                      (Ver Motivo)
+                    </button>
+                  )}
                 </td>
+                {/* --- (FIM DA MUDANÇA) --- */}
+
               </tr>
             ))}
         </tbody>

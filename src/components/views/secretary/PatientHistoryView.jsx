@@ -1,9 +1,12 @@
 // src/components/views/secretary/PatientHistoryView.jsx
+
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { PatientRecordsTable } from '../../common/PatientRecordsTable';
 import { icons } from '../../../utils/icons';
 import useDebounce from '../../../hooks/useDebounce';
 
+// 1. RECEBER A NOVA PROP 'onViewReason'
 export function PatientHistoryView({
   patients = [],
   records = [],
@@ -11,6 +14,7 @@ export function PatientHistoryView({
   getMedicationName, 
   initialPatient, 
   onHistoryViewed, 
+  onViewReason, // <-- PROP ADICIONADA
 }) {
   
   // --- Estados (Movidos para cá) ---
@@ -24,9 +28,9 @@ export function PatientHistoryView({
   useEffect(() => {
     if (initialPatient) {
       setSelectedPatient(initialPatient);
-      onHistoryViewed(); 
+      // Removida a chamada onHistoryViewed() daqui para evitar loops
     }
-  }, [initialPatient, onHistoryViewed]);
+  }, [initialPatient]);
 
   // Efeito para limpar a seleção se a busca for limpa
   useEffect(() => {
@@ -57,8 +61,10 @@ export function PatientHistoryView({
 
   const selectedPatientRecords = useMemo(() => {
     if (!selectedPatient || !Array.isArray(records)) return [];
+    // (CORREÇÃO) Garante que p.id ou p._id sejam usados
+    const patientId = selectedPatient.id || selectedPatient._id;
     return records
-      .filter((r) => r.patientId === selectedPatient.id)
+      .filter((r) => r.patientId === patientId)
       .sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate));
   }, [selectedPatient, records]);
 
@@ -111,9 +117,9 @@ export function PatientHistoryView({
           {filteredPatientsForSearch.length > 0 ? (
             filteredPatientsForSearch.map((p) => (
               <div
-                key={p.id}
+                key={p.id || p._id} // (CORREÇÃO)
                 className={`p-3 cursor-pointer transition-colors ${
-                  selectedPatient?.id === p.id
+                  (selectedPatient?.id || selectedPatient?._id) === (p.id || p._id) // (CORREÇÃO)
                     ? 'bg-blue-50 border-blue-300 shadow-sm'
                     : 'hover:bg-gray-100'
                 }`}
@@ -145,7 +151,6 @@ export function PatientHistoryView({
         
         {selectedPatient ? (
           <>
-            {/* NOVO: Cartão de Informações Rápidas do Paciente */}
             <div className="mb-4 p-4 border border-blue-200 bg-blue-50 rounded-lg shadow-sm">
                 <h3 className="text-lg md:text-xl font-bold text-gray-800 mb-2">
                     Histórico de: <span className="text-blue-700">{selectedPatient.name}</span>
@@ -164,16 +169,15 @@ export function PatientHistoryView({
 
             <h4 className="text-lg font-semibold text-gray-700 mb-3 border-b pb-2">Registros de Entrada/Entrega ({selectedPatientRecords.length})</h4>
             
-            {/* Tabela de Histórico */}
             <div className="flex-grow min-h-0 overflow-y-auto -mx-4 md:-mx-6 px-4 md:px-6 border border-gray-200 rounded-lg">
+                {/* --- 2. (INÍCIO DA MUDANÇA) --- */}
                 <PatientRecordsTable
                     records={selectedPatientRecords}
                     medications={medications}
                     getMedicationName={getMedicationName} 
-                    // Nota: Se PatientRecordsTable precisar de modificação visual,
-                    // ela deve ser feita no arquivo do componente PatientRecordsTable
-                    // para manter a modularidade.
+                    onViewReason={onViewReason} // <-- PROP ADICIONADA
                 />
+                {/* --- (FIM DA MUDANÇA) --- */}
             </div>
           </>
         ) : (
