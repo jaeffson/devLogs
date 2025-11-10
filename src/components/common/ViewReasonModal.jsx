@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Modal } from './Modal';
-import { icons } from '../utils/icons';
+import { icons } from '../../utils/icons';
 
 export function ViewReasonModal({ record, onClose, getPatientNameById }) {
   if (!record) return null;

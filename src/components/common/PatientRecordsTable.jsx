@@ -1,8 +1,8 @@
 // src/components/common/PatientRecordsTable.jsx
 
 import React from 'react';
-import { StatusBadge } from './StatusBadge';
-import { icons } from '../utils/icons'; 
+import { StatusBadge } from '../common/StatusBadge';
+import { icons } from '../../utils/icons'; 
 
 // Helper interno (Compara ID como string)
 const getMedicationNameLocal = (medicationId, meds = []) => {

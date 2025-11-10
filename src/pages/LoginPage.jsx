@@ -236,7 +236,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
           </form>
           
           <div className="mt-6 text-center text-xs text-gray-400">
-            <p>Versão 1.1.7</p>
+            <p>Versão 1.1.1</p>
             <p>©2025 Todos os direitos reservados</p>
           </div>
         </div>
