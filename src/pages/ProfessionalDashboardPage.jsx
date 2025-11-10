@@ -1,9 +1,10 @@
 // src/pages/ProfessionalDashboardPage.jsx
-// (CORRIGIDO: Lógica 'handleSavePatient' para enviar NULL em vez de "" para CPF/SUS)
+// (COMPLETO - ATUALIZADO: Adicionada verificação de registro recente < 20 dias)
+// (COMPLETO - ATUALIZADO: Adicionada funcionalidade "Repetir Registro" - Clonar)
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios'; 
+import axios from 'axios';
 
 // --- Imports (Corrigidos) ---
 import { Modal, ConfirmModal } from '../components/common/Modal';
@@ -22,42 +23,51 @@ import { getMedicationName } from '../utils/helpers';
 import { useDebounce } from '../hooks/useDebounce';
 
 // --- URL BASE DA API ---
-const API_BASE_URL = 'https://backendmedlog-4.onrender.com/api'; 
+const API_BASE_URL = 'https://backendmedlog-4.onrender.com/api';
 // -----------------------
 
 // --- (NOVO) Constante de 30 dias ---
 const MS_IN_30_DAYS = 30 * 24 * 60 * 60 * 1000;
 
+// --- (NOVO) Constante de 20 dias ---
+const MS_IN_20_DAYS = 20 * 24 * 60 * 60 * 1000;
+
 // --- Componente da Página Principal ---
 export default function ProfessionalDashboardPage({
   user,
   patients = [],
-  setPatients, 
+  setPatients,
   records = [],
-  setRecords, 
+  setRecords,
   medications = [],
-  setMedications, 
+  setMedications,
   addToast,
   addLog,
   activeTabForced, // Esta prop vem da URL (via MainLayout)
 }) {
   const navigate = useNavigate(); // Hook para mudar a URL
-  
+
   // O currentView agora é um "espelho" do activeTabForced (URL)
   const [currentView, setCurrentView] = useState('dashboard');
-  
+
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
   const [editingPatient, setEditingPatient] = useState(null);
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
+
+  // --- (ESTADO ATUALIZADO) ---
   const [confirmation, setConfirmation] = useState({
     isOpen: false,
     message: '',
     data: null,
     onConfirm: null,
+    title: 'Confirmação',
+    confirmText: 'Confirmar',
+    isDestructive: false,
   });
+
   const [attendingRecord, setAttendingRecord] = useState(null);
 
   // Novo estado para controlar o modal de cancelamento
@@ -81,11 +91,11 @@ export default function ProfessionalDashboardPage({
   const dashQuickRef = useRef(null);
 
   // --- Estado do Filtro de Histórico ---
-  const [statusFilter, setStatusFilter] = useState('Todos'); 
+  const [statusFilter, setStatusFilter] = useState('Todos');
 
   // --- Estados de Paginação ---
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(20); 
+  const [itemsPerPage] = useState(20);
 
   // --- Debounce ---
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
@@ -94,8 +104,6 @@ export default function ProfessionalDashboardPage({
 
   // --- (CORREÇÃO) useEffect agora é a ÚNICA fonte da verdade para 'currentView' ---
   useEffect(() => {
-    // Sincroniza o estado interno com a URL
-    // As rotas do MainLayout (ex: /patients) definem o 'activeTabForced'
     setCurrentView(activeTabForced || 'dashboard');
   }, [activeTabForced]);
 
@@ -139,57 +147,136 @@ export default function ProfessionalDashboardPage({
   // --- Função de Sincronização de Estado (CRUCIAL) ---
   const syncGlobalState = async (refetchFunction, errorMsg) => {
     if (typeof refetchFunction === 'function') {
-        // Assume que as props setPatients, setRecords, setMedications são 
-        // funções assíncronas que buscam dados da API e atualizam o estado global.
-        await refetchFunction();
+      await refetchFunction();
     } else {
-        console.error(`Função de recarga não encontrada para ${errorMsg}.`);
+      console.error(`Função de recarga não encontrada para ${errorMsg}.`);
     }
   };
   // --- FIM FUNÇÃO SINCRONAÇÃO ---
-
 
   // --- Função de Validação de Duplicidade (Manter como UX) ---
   const checkDuplicatePatient = ({ cpf, susCard, currentId }) => {
     const isDuplicate =
       Array.isArray(patients) &&
       patients.some((patient) => {
-        const currentPatientId = patient._id || patient.id; 
+        const currentPatientId = patient._id || patient.id;
 
         if (currentPatientId === currentId) return false;
-        
+
         const patientCPF = String(patient.cpf || '').replace(/\D/g, '');
         const cpfIsMatch = cpf && patientCPF && cpf === patientCPF;
         const patientSusCard = String(patient.susCard || '').replace(/\D/g, '');
         const susIsMatch =
           susCard && patientSusCard && susCard === patientSusCard;
-        
+
         return cpfIsMatch || susIsMatch;
       });
     return isDuplicate;
   };
 
-  // --- Funções Helper ---
+  // --- (HELPER ATUALIZADO) ---
   const closeConfirmation = () =>
     setConfirmation({
       isOpen: false,
       message: '',
       data: null,
       onConfirm: null,
+      title: 'Confirmação',
+      confirmText: 'Confirmar',
+      isDestructive: false,
     });
-  
+
   const getPatientNameById = (patientId) =>
     Array.isArray(patients)
-      ? patients.find((p) => (p._id || p.id) === patientId)?.name || 'Desconhecido'
+      ? patients.find((p) => (p._id || p.id) === patientId)?.name ||
+        'Desconhecido'
       : 'Desconhecido';
 
   // 🚨 FUNÇÃO CORRIGIDA PARA FLICKERING E ESCOPO
   const handleEditPatient = (patient) => {
-    // Garante que a edição não altere a lista original no estado 'patients'.
-    setEditingPatient(patient ? JSON.parse(JSON.stringify(patient)) : null); 
+    setEditingPatient(patient ? JSON.parse(JSON.stringify(patient)) : null);
     setIsPatientModalOpen(true);
   };
-  
+
+  // --- (NOVA FUNÇÃO HELPER 1) ---
+  // Verifica se o paciente tem um registro (Pendente ou Atendido) nos últimos 20 dias
+  const findRecentRecord = (patientId, recordToExcludeId = null) => {
+    if (!patientId || !Array.isArray(records)) return null;
+
+    const now = new Date().getTime();
+
+    // Filtra registros para o paciente, excluindo o registro que estamos editando/clonando
+    const patientRecords = records
+      .filter((r) => {
+        const recordId = r._id || r.id;
+        // Ignora registros cancelados e o próprio registro (se estiver editando/clonando)
+        return (
+          r.patientId === patientId &&
+          r.status !== 'Cancelado' &&
+          recordId !== recordToExcludeId
+        );
+      })
+      .sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate)); // Pega o mais recente
+
+    if (patientRecords.length === 0) {
+      return null; // Nenhum outro registro encontrado
+    }
+
+    const mostRecentRecord = patientRecords[0];
+    const mostRecentEntryTime = new Date(mostRecentRecord.entryDate).getTime();
+
+    // Verifica se a data de *entrada* mais recente está dentro da janela de 20 dias
+    if (now - mostRecentEntryTime < MS_IN_20_DAYS) {
+      return mostRecentRecord; // ENCONTRADO!
+    }
+
+    return null; // O registro mais recente é mais antigo que 20 dias
+  };
+
+  // --- (NOVA FUNÇÃO HELPER 2) ---
+  // Esta função "portão" (gatekeeper) decide se abre o modal de registro ou o de aviso
+  const openRecordModalWithCheck = (patient, recordData = null) => {
+    const patientId = patient?._id || patient?.id;
+
+    // Verifica por registros recentes, excluindo o ID do registro que podemos estar clonando/editando
+    const recentRecord = findRecentRecord(
+      patientId,
+      recordData?._id || recordData?.id || null
+    );
+
+    // SÓ AVISA SE:
+    // 1. Estamos criando um NOVO registro (recordData === null)
+    // 2. E um registro recente FOI ENCONTRADO (recentRecord !== null)
+    if (recordData === null && recentRecord) {
+      const lastEntryDate = new Date(recentRecord.entryDate).toLocaleDateString(
+        'pt-BR'
+      );
+      const status = recentRecord.status;
+
+      // Mostra o modal de confirmação com a MENSAGEM DE AVISO
+      setConfirmation({
+        isOpen: true,
+        title: 'Aviso de Registro Recente',
+        message: `Este paciente já possui um registro recente (Status: ${status}, Data: ${lastEntryDate}). Deseja criar uma nova entrada mesmo assim?`,
+        onConfirm: () => {
+          // O usuário clicou "Sim", então abrimos o formulário
+          setSelectedPatient(patient);
+          setEditingRecord(null); // É um novo registro
+          setIsRecordModalOpen(true);
+          closeConfirmation(); // Fecha o aviso
+        },
+        data: null,
+        confirmText: 'Sim, Criar Mesmo Assim',
+        isDestructive: false, // Não é uma ação destrutiva
+      });
+    } else {
+      // Caso contrário (sem registro recente, ou estamos editando/clonando), abre o modal direto
+      setSelectedPatient(patient);
+      setEditingRecord(recordData); // Será null (novo), ou terá dados (edição/clone)
+      setIsRecordModalOpen(true);
+    }
+  };
+
   // --- Memos (Mantidos) ---
   const filteredPatients = useMemo(
     () =>
@@ -211,7 +298,7 @@ export default function ProfessionalDashboardPage({
   const patientRecords = useMemo(() => {
     const targetId = selectedPatient?._id || selectedPatient?.id;
     if (!targetId || !Array.isArray(records)) return [];
-    
+
     return records
       .filter((r) => r.patientId === targetId)
       .sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate));
@@ -219,7 +306,7 @@ export default function ProfessionalDashboardPage({
 
   const pendingRecords = useMemo(
     () =>
-      Array.isArray(records) 
+      Array.isArray(records)
         ? records
             .filter((r) => r.status === 'Pendente')
             .sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate))
@@ -241,7 +328,6 @@ export default function ProfessionalDashboardPage({
     [patients, debouncedQuickSearchTerm]
   );
 
-  // (NOVO) Memo para filtro de pacientes (Dashboard)
   const dashQuickFilteredPatients = useMemo(
     () =>
       Array.isArray(patients)
@@ -256,49 +342,42 @@ export default function ProfessionalDashboardPage({
     [patients, debouncedDashQuickSearch]
   );
 
-  // --- (NOVO) Memo para calcular registros pendentes vencidos ---
-  // (Lógica robusta copiada do DashboardView da Secretária)
   const overduePendingRecords = useMemo(() => {
     if (!Array.isArray(records)) return [];
     const now = new Date().getTime();
 
-    return records.filter(r => {
+    return records.filter((r) => {
       if (r.status !== 'Pendente' || !r.entryDate) return false;
-      
+
       try {
         const entryTime = new Date(r.entryDate).getTime();
-        // Verifica se a diferença em milissegundos é maior que 30 dias
-        return (now - entryTime) > MS_IN_30_DAYS;
+        return now - entryTime > MS_IN_30_DAYS;
       } catch (e) {
         return false;
       }
-    }); // Retorna o array de registros vencidos
+    });
   }, [records]);
-  // --- (FIM) ---
 
   const filteredRecords = useMemo(() => {
     const sorted = records.sort(
       (a, b) => new Date(b.entryDate) - new Date(a.entryDate)
     );
-    // (CORREÇÃO) O filtro agora usa o 'statusFilter' do estado
     if (statusFilter === 'Todos') {
       return sorted;
     }
     return sorted.filter((r) => r.status === statusFilter);
-  }, [records, statusFilter]); // Adicionado 'statusFilter' como dependência
+  }, [records, statusFilter]);
 
-  // --- Memos (Paginação) ---
   const totalPages = useMemo(() => {
     return Math.ceil(filteredRecords.length / itemsPerPage);
   }, [filteredRecords, itemsPerPage]);
 
   const currentRecords = useMemo(() => {
     const indexOfLastItem = currentPage * itemsPerPage;
-    const indexOfFirstItem = indexOfLastItem - itemsPerPage; 
+    const indexOfFirstItem = indexOfLastItem - itemsPerPage;
     return filteredRecords.slice(indexOfFirstItem, indexOfLastItem);
   }, [filteredRecords, currentPage, itemsPerPage]);
 
-  // --- NOVO MEMO (Filtro de 1 Semana para Entregas) - [CORRIGIDO] ---
   const recentDeliveries = useMemo(() => {
     const parseDateAsUTC = (dateString) => {
       if (!dateString || !/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
@@ -317,7 +396,7 @@ export default function ProfessionalDashboardPage({
     if (!Array.isArray(records)) {
       return [];
     }
-    
+
     return records
       .filter((r) => {
         if (r.status !== 'Atendido' || !r.deliveryDate) {
@@ -332,208 +411,205 @@ export default function ProfessionalDashboardPage({
         return dateB - dateA;
       });
   }, [records]);
-  // --- FIM DO MEMO CORRIGIDO ---
 
-
-  // --- Funções CRUD (REESCRITAS PARA API) ---
-  
-  // 1. SALVAR PACIENTE (CREATE/UPDATE)
-  // --- (INÍCIO DA CORREÇÃO DO BUG 409) ---
   const handleSavePatient = async (patientData) => {
     try {
-        let response;
-        const patientId = patientData._id || patientData.id; 
-        const patientName = patientData.name;
-        
-        // Se o CPF ou SUS for uma string vazia "", envie 'null'
-        // para evitar o erro de 'unique index' do MongoDB.
-        const cleanedCPF = patientData.cpf ? String(patientData.cpf).trim() : null;
-        const cleanedSusCard = patientData.susCard ? String(patientData.susCard).trim() : null;
+      let response;
+      const patientId = patientData._id || patientData.id;
+      const patientName = patientData.name;
 
-        const payload = {
-            name: patientName,
-            cpf: cleanedCPF, // <-- Use o valor limpo
-            susCard: cleanedSusCard, // <-- Use o valor limpo
-            observations: patientData.observations,
-            generalNotes: patientData.generalNotes,
-            status: patientData.status,
-        };
-        // --- (FIM DA CORREÇÃO DO BUG 409) ---
+      const cleanedCPF = patientData.cpf
+        ? String(patientData.cpf).trim()
+        : null;
+      const cleanedSusCard = patientData.susCard
+        ? String(patientData.susCard).trim()
+        : null;
 
-        if (patientId && patientId !== 'new') {
-            // Atualização (PUT)
-            response = await axios.put(`${API_BASE_URL}/patients/${patientId}`, payload);
-            addToast('Paciente atualizado com sucesso!', 'success');
-            addLog?.(user?.name, `atualizou dados do paciente ${patientName}`);
-        } else {
-            // Criação (POST)
-            response = await axios.post(`${API_BASE_URL}/patients`, payload);
-            addToast('Paciente cadastrado com sucesso!', 'success');
-            addLog?.(user?.name, `cadastrou novo paciente ${patientName}`); // Corrigido NatientName -> patientName
-        }
-        
-        await syncGlobalState(setPatients, 'pacientes');
-        
-        const updatedPatient = response.data;
-        setSelectedPatient(updatedPatient);
+      const payload = {
+        name: patientName,
+        cpf: cleanedCPF,
+        susCard: cleanedSusCard,
+        observations: patientData.observations,
+        generalNotes: patientData.generalNotes,
+        status: patientData.status,
+      };
 
+      if (patientId && patientId !== 'new') {
+        response = await axios.put(
+          `${API_BASE_URL}/patients/${patientId}`,
+          payload
+        );
+        addToast('Paciente atualizado com sucesso!', 'success');
+        addLog?.(user?.name, `atualizou dados do paciente ${patientName}`);
+      } else {
+        response = await axios.post(`${API_BASE_URL}/patients`, payload);
+        addToast('Paciente cadastrado com sucesso!', 'success');
+        addLog?.(user?.name, `cadastrou novo paciente ${patientName}`);
+      }
 
+      await syncGlobalState(setPatients, 'pacientes');
+
+      const updatedPatient = response.data;
+      setSelectedPatient(updatedPatient);
     } catch (error) {
-        console.error('[API Error] Salvar Paciente:', error.response?.data || error);
-        // Pega a mensagem específica do backend (ex: "CPF já cadastrado")
-        const msg = error.response?.data?.message || 'Erro ao salvar paciente. Tente novamente.';
-        addToast(msg, 'error');
-        
+      console.error(
+        '[API Error] Salvar Paciente:',
+        error.response?.data || error
+      );
+      const msg =
+        error.response?.data?.message ||
+        'Erro ao salvar paciente. Tente novamente.';
+      addToast(msg, 'error');
     } finally {
-        setIsPatientModalOpen(false);
-        setEditingPatient(null);
+      setIsPatientModalOpen(false);
+      setEditingPatient(null);
     }
   };
-  // --- (FIM DA FUNÇÃO handleSavePatient CORRIGIDA) ---
-  
-  
-  // 2. EXCLUIR PACIENTE (DELETE)
+
   const handleDeletePatient = async (patientId) => {
     const patient = patients.find((p) => (p._id || p.id) === patientId);
-    
-    try {
-        await axios.delete(`${API_BASE_URL}/patients/${patientId}`);
-        
-        addToast('Paciente excluído!', 'success');
-        addLog?.(user?.name, `excluiu o paciente ${patient?.name}`);
 
-        await syncGlobalState(setPatients, 'pacientes');
-        
-        setSelectedPatient(null);
-        
+    try {
+      await axios.delete(`${API_BASE_URL}/patients/${patientId}`);
+
+      addToast('Paciente excluído!', 'success');
+      addLog?.(user?.name, `excluiu o paciente ${patient?.name}`);
+
+      await syncGlobalState(setPatients, 'pacientes');
+
+      setSelectedPatient(null);
     } catch (error) {
-        console.error('[API Error] Excluir Paciente:', error);
-        addToast('Falha ao excluir paciente. Pode haver registros associados.', 'error');
+      console.error('[API Error] Excluir Paciente:', error);
+      addToast(
+        'Falha ao excluir paciente. Pode haver registros associados.',
+        'error'
+      );
     }
   };
-  
-  // 3. SALVAR REGISTRO (CREATE/UPDATE) - [VERSÃO CORRIGIDA PARA "ID INVÁLIDO"]
+
   const handleSaveRecord = async (recordData) => {
     try {
-        let response;
-        const recordId = recordData._id || recordData.id; 
-        const patientName = getPatientNameById(recordData.patientId);
-        
-        const profissionalIdentifier = user?._id || user?.id;
-        if (!profissionalIdentifier) {
-            // Este erro agora não deve mais acontecer após o fix do Login
-            addToast("Erro crítico: ID do profissional não encontrado. Faça login novamente.", 'error');
-            throw new Error("ID do profissional não encontrado.");
-        }
+      let response;
+      const recordId = recordData._id || recordData.id;
+      const patientName = getPatientNameById(recordData.patientId);
 
-        // --- (INÍCIO DA CORREÇÃO) ---
-        // O RecordForm provavelmente envia: [{ _id: '123', name: 'Dipirona', quantity: '1' }]
-        // O Backend espera:               [{ medicationId: '123', quantity: '1' }]
-        // Esta função "mapeia" os dados para o formato correto antes de enviar à API.
-        
-        const cleanedMedications = (recordData.medications || []).map(med => {
-            // Pega o ID, não importa como ele venha (med._id, med.id, ou med.medicationId)
-            const id = med._id || med.id || med.medicationId;
+      const profissionalIdentifier = user?._id || user?.id;
+      if (!profissionalIdentifier) {
+        addToast(
+          'Erro crítico: ID do profissional não encontrado. Faça login novamente.',
+          'error'
+        );
+        throw new Error('ID do profissional não encontrado.');
+      }
 
-            // Se o ID for um objeto (ex: { _id: '123' }), pega o valor de dentro
-            const finalMedicationId = (typeof id === 'object' && id !== null) ? (id._id || id.id) : id;
+      const cleanedMedications = (recordData.medications || [])
+        .map((med) => {
+          const id = med._id || med.id || med.medicationId;
+          const finalMedicationId =
+            typeof id === 'object' && id !== null ? id._id || id.id : id;
 
-            if (!finalMedicationId) {
-                console.warn('Item de medicação inválido descartado (sem ID):', med);
-                return null;
-            }
+          if (!finalMedicationId) {
+            console.warn(
+              'Item de medicação inválido descartado (sem ID):',
+              med
+            );
+            return null;
+          }
 
-            return {
-                medicationId: String(finalMedicationId), // Garante que é uma string
-                quantity: med.quantity || 'N/A' // Garante que a quantidade exista
-            };
-        }).filter(med => med !== null); // Remove itens nulos que falharam na validação
-        // --- (FIM DA CORREÇÃO) ---
+          return {
+            medicationId: String(finalMedicationId),
+            quantity: med.quantity || 'N/A',
+          };
+        })
+        .filter((med) => med !== null);
 
+      const payload = {
+        patientId: recordData.patientId,
+        profissionalId: profissionalIdentifier,
+        medications: cleanedMedications,
+        referenceDate: recordData.referenceDate,
+        observation: recordData.observation,
+        totalValue: recordData.totalValue,
+        status: recordData.status || 'Pendente',
+      };
 
-        const payload = {
-            patientId: recordData.patientId, 
-            profissionalId: profissionalIdentifier, // ID do usuário logado
-            medications: cleanedMedications, // <-- AQUI USAMOS O ARRAY CORRIGIDO
-            referenceDate: recordData.referenceDate,
-            observation: recordData.observation,
-            totalValue: recordData.totalValue,
-            status: recordData.status || 'Pendente',
-        };
+      if (recordId && recordId !== 'new') {
+        response = await axios.put(
+          `${API_BASE_URL}/records/${recordId}`,
+          payload
+        );
+        addToast('Registro atualizado!', 'success');
+        addLog?.(user?.name, `atualizou registro para ${patientName}`);
+      } else {
+        response = await axios.post(`${API_BASE_URL}/records`, payload);
+        addToast('Registro salvo!', 'success');
+        addLog?.(user?.name, `criou registro para ${patientName}`);
+      }
 
-        if (recordId && recordId !== 'new') {
-            // Atualização (PUT)
-            response = await axios.put(`${API_BASE_URL}/records/${recordId}`, payload); 
-            addToast('Registro atualizado!', 'success');
-            addLog?.(user?.name, `atualizou registro para ${patientName}`);
-        } else {
-            // Criação (POST)
-            response = await axios.post(`${API_BASE_URL}/records`, payload);
-            addToast('Registro salvo!', 'success');
-            addLog?.(user?.name, `criou registro para ${patientName}`);
-        }
-
-        await syncGlobalState(setRecords, 'registros');
-
+      await syncGlobalState(setRecords, 'registros');
     } catch (error) {
-        // Agora o log de erro será mais detalhado se algo ainda falhar
-        console.error('[API Error] Salvar Registro:', error.response?.data || error.message); 
-        const msg = error.response?.data?.message || 'Erro ao salvar registro. Verifique os dados.';
-        addToast(msg, 'error');
-        
+      console.error(
+        '[API Error] Salvar Registro:',
+        error.response?.data || error.message
+      );
+      const msg =
+        error.response?.data?.message ||
+        'Erro ao salvar registro. Verifique os dados.';
+      addToast(msg, 'error');
     } finally {
-        setIsRecordModalOpen(false);
-        setEditingRecord(null);
+      setIsRecordModalOpen(false);
+      setEditingRecord(null);
 
-        setQuickAddPatientId('');
-        setSelectedPatientName('');
-        setQuickSearchTerm('');
-        setDashQuickPatientId('');
-        setDashQuickPatientName('');
-        setDashQuickSearch('');
+      setQuickAddPatientId('');
+      setSelectedPatientName('');
+      setQuickSearchTerm('');
+      setDashQuickPatientId('');
+      setDashQuickPatientName('');
+      setDashQuickSearch('');
     }
   };
-  
-  // 4. EXCLUIR REGISTRO (DELETE)
+
   const handleDeleteRecord = async (recordId) => {
     const record = records.find((r) => (r._id || r.id) === recordId);
-    
+
     try {
-        await axios.delete(`${API_BASE_URL}/records/${recordId}`);
-        
-        addToast('Registro excluído!', 'success');
-        addLog?.(user?.name, `excluiu registro de ${getPatientNameById(record?.patientId)}`);
-        
-        await syncGlobalState(setRecords, 'registros');
-        
+      await axios.delete(`${API_BASE_URL}/records/${recordId}`);
+
+      addToast('Registro excluído!', 'success');
+      addLog?.(
+        user?.name,
+        `excluiu registro de ${getPatientNameById(record?.patientId)}`
+      );
+
+      await syncGlobalState(setRecords, 'registros');
     } catch (error) {
-        console.error('[API Error] Excluir Registro:', error);
-        addToast('Falha ao excluir registro. Tente novamente.', 'error');
+      console.error('[API Error] Excluir Registro:', error);
+      addToast('Falha ao excluir registro. Tente novamente.', 'error');
     }
   };
-  
-  // 5. CADASTRAR NOVA MEDICAÇÃO (CRIAÇÃO RÁPIDA)
+
   const handleAddNewMedication = async (medData) => {
     try {
-        const response = await axios.post(`${API_BASE_URL}/medications`, { name: medData.name.trim() });
-        const newMed = response.data;
+      const response = await axios.post(`${API_BASE_URL}/medications`, {
+        name: medData.name.trim(),
+      });
+      const newMed = response.data;
 
-        addToast('Medicação cadastrada!', 'success');
-        addLog?.(user?.name, `cadastrou medicação: ${newMed.name}`);
-        
-        await syncGlobalState(setMedications, 'medicações');
-        
-        return newMed; 
-        
+      addToast('Medicação cadastrada!', 'success');
+      addLog?.(user?.name, `cadastrou medicação: ${newMed.name}`);
+
+      await syncGlobalState(setMedications, 'medicações');
+
+      return newMed;
     } catch (error) {
-        console.error('[API Error] Nova Medicação:', error);
-        const msg = error.response?.data?.message || 'Erro ao cadastrar medicação.';
-        addToast(msg, 'error');
-        return null;
+      console.error('[API Error] Nova Medicação:', error);
+      const msg =
+        error.response?.data?.message || 'Erro ao cadastrar medicação.';
+      addToast(msg, 'error');
+      return null;
     }
   };
-  
-  // 6. ATUALIZAR STATUS (ATENDIMENTO)
+
   const handleUpdateRecordStatus = async (recordId, deliveryDateStr) => {
     if (!deliveryDateStr) {
       addToast('Selecione uma data.', 'error');
@@ -541,67 +617,92 @@ export default function ProfessionalDashboardPage({
     }
 
     try {
-        await axios.patch(`${API_BASE_URL}/records/${recordId}/status`, { 
-            status: 'Atendido', 
-            deliveryDate: deliveryDateStr 
-        });
+      await axios.patch(`${API_BASE_URL}/records/${recordId}/status`, {
+        status: 'Atendido',
+        deliveryDate: deliveryDateStr,
+      });
 
-        addToast('Registro Atendido!', 'success');
-        addLog?.(user?.name, `marcou registro (ID: ${recordId}) como Atendido`);
-        
-        await syncGlobalState(setRecords, 'registros');
+      addToast('Registro Atendido!', 'success');
+      addLog?.(user?.name, `marcou registro (ID: ${recordId}) como Atendido`);
 
+      await syncGlobalState(setRecords, 'registros');
     } catch (error) {
-        console.error('[API Error] Atualizar Status:', error);
-        addToast('Falha ao atualizar status. Tente novamente.', 'error');
+      console.error('[API Error] Atualizar Status:', error);
+      addToast('Falha ao atualizar status. Tente novamente.', 'error');
     } finally {
-        setAttendingRecord(null);
+      setAttendingRecord(null);
     }
   };
 
-  // 7. ATUALIZAR STATUS (CANCELAMENTO)
   const handleCancelRecordStatus = async (recordId, cancelReason) => {
     try {
-        await axios.patch(`${API_BASE_URL}/records/${recordId}/status`, { 
-            status: 'Cancelado', 
-            deliveryDate: null,
-            cancelReason: cancelReason // <-- Envia o motivo para a API
-        });
+      await axios.patch(`${API_BASE_URL}/records/${recordId}/status`, {
+        status: 'Cancelado',
+        deliveryDate: null,
+        cancelReason: cancelReason,
+      });
 
-        addToast('Registro Cancelado.', 'info');
-        // Adiciona o motivo ao log
-        addLog?.(user?.name, `cancelou registro (ID: ${recordId}). Motivo: ${cancelReason}`);
-        
-        await syncGlobalState(setRecords, 'registros');
+      addToast('Registro Cancelado.', 'info');
+      addLog?.(
+        user?.name,
+        `cancelou registro (ID: ${recordId}). Motivo: ${cancelReason}`
+      );
 
+      await syncGlobalState(setRecords, 'registros');
     } catch (error) {
-        console.error('[API Error] Cancelar Status:', error);
-        addToast('Falha ao cancelar status. Tente novamente.', 'error');
+      console.error('[API Error] Cancelar Status:', error);
+      addToast('Falha ao cancelar status. Tente novamente.', 'error');
     }
   };
 
+  const handleCloneRecord = (recordToClone) => {
+    // 1. Encontra o paciente do registro a ser clonado
+    const patientForRecord = Array.isArray(patients)
+      ? patients.find((p) => (p._id || p.id) === recordToClone.patientId)
+      : null;
 
-  // --- Funções UI (Mantidas) ---
-  const handleViewPatientHistory = (patientId) => {
-    // Esta função agora deve NAVEGAR
-    navigate('/patients');
+    if (!patientForRecord) {
+      addToast('Paciente deste registro não foi encontrado.', 'error');
+      return;
+    }
+
+    // 2. Cria uma cópia profunda do registro para não modificar o original
+    const clonedData = JSON.parse(JSON.stringify(recordToClone));
+
+    // 3. Prepara o objeto clonado para ser um NOVO registro
+    const finalClonedData = {
+      ...clonedData,
+      _id: null, // ESSENCIAL: Garante que será um novo registro (CREATE)
+      id: null, // ESSENCIAL: Remove o ID antigo
+
+      // 4. Reseta os campos de status e data
+      status: 'Pendente',
+      referenceDate: new Date().toISOString().slice(0, 10), // Define a data de hoje
+      entryDate: new Date().toISOString(), // Define a data de hoje
+      deliveryDate: null,
+      cancelReason: null,
+    };
+
+    // 5. ATUALIZADO: Chama o "Portão" em vez de abrir o modal diretamente
+    openRecordModalWithCheck(patientForRecord, finalClonedData);
   };
+  // --- FIM DA NOVA FUNÇÃO ---
+
+  // --- (FUNÇÕES ATUALIZADAS) ---
+  // Funções UI (Atualizadas para usar o "Portão" 'openRecordModalWithCheck')
+
   const handleQuickAddRecord = (e, patient) => {
     e.stopPropagation();
-    setSelectedPatient(patient);
-    setEditingRecord(null);
-    setIsRecordModalOpen(true);
+    openRecordModalWithCheck(patient, null); // <-- ATUALIZADO
   };
-  // Função de Adicionar Rápido (Histórico)
+
   const openQuickAddModal = () => {
     if (quickAddPatientId) {
       const patient = Array.isArray(patients)
-        ? patients.find((p) => (p._id || p.id) === (quickAddPatientId))
+        ? patients.find((p) => (p._id || p.id) === quickAddPatientId)
         : null;
       if (patient) {
-        setSelectedPatient(patient);
-        setEditingRecord(null);
-        setIsRecordModalOpen(true);
+        openRecordModalWithCheck(patient, null); // <-- ATUALIZADO
       } else {
         addToast('Paciente não encontrado.', 'error');
       }
@@ -610,17 +711,15 @@ export default function ProfessionalDashboardPage({
     }
   };
 
-  // (NOVO) Função de Adicionar Rápido (Dashboard)
   const openDashQuickAddModal = () => {
     if (dashQuickPatientId) {
       const patient = Array.isArray(patients)
-        ? patients.find((p) => (p._id || p.id) === (dashQuickPatientId))
+        ? patients.find((p) => (p._id || p.id) === dashQuickPatientId)
         : null;
       if (patient) {
-        setSelectedPatient(patient);
-        setEditingRecord(null);
-        setIsRecordModalOpen(true);
+        openRecordModalWithCheck(patient, null); // <-- ATUALIZADO
 
+        // Limpa os campos do quick add do dashboard
         setDashQuickPatientId('');
         setDashQuickPatientName('');
         setDashQuickSearch('');
@@ -631,45 +730,47 @@ export default function ProfessionalDashboardPage({
       addToast('Selecione um paciente.', 'error');
     }
   };
-  
-  // --- (NOVO) Função para navegar com filtro ---
+
   const handleNavigateWithFilter = (status) => {
-    setStatusFilter(status); // 1. Define o filtro
-    navigate('/history');    // 2. Navega para a página de histórico
+    setStatusFilter(status);
+    navigate('/history');
   };
 
-
-  // --- Renderização Condicional (CORRIGIDA) ---
+  // --- Renderização Condicional (O Corpo Principal) ---
   const renderCurrentView = () => {
     switch (currentView) {
       case 'dashboard':
         return (
-          // --- (INÍCIO) SEÇÃO DO DASHBOARD REDESENHADA ---
           <div className="space-y-8 animate-fade-in">
-            
-            {/* Título */}
             <h2 className="text-2xl md:text-3xl font-bold text-gray-800">
               Dashboard Profissional
             </h2>
-            
-            {/* --- (INÍCIO) Alerta de Registros Vencidos (Re-adicionado) --- */}
+
             {overduePendingRecords.length > 0 && isOverdueAlertVisible && (
               <div
                 className="bg-white border-l-8 border-red-600 p-4 rounded-lg shadow-lg flex items-start gap-3"
                 role="alert"
               >
-                {/* Ícone com toque visual (SVG) */}
                 <div className="flex-shrink-0 text-red-500 mt-1">
                   <span className="w-6 h-6">
                     {icons.exclamation || (
-                      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                      <svg
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        xmlns="http://www.w3.org/2000/svg"
+                        strokeWidth={1.5}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
+                        />
                       </svg>
                     )}
                   </span>
                 </div>
 
-                {/* Conteúdo do Texto */}
                 <div className="flex-grow">
                   <p className="font-bold text-gray-800">Atenção!</p>
                   <p className="text-sm text-gray-700">
@@ -680,14 +781,13 @@ export default function ProfessionalDashboardPage({
                     há mais de 30 dias.
                   </p>
                   <button
-                    onClick={() => handleNavigateWithFilter('Pendente')} // <-- (NOVO) Usa a função com filtro
+                    onClick={() => handleNavigateWithFilter('Pendente')}
                     className="text-sm text-indigo-600 hover:text-indigo-800 hover:underline font-medium mt-1 cursor-pointer transition-colors"
                   >
                     Ver registros pendentes
                   </button>
                 </div>
 
-                {/* Botão de Fechar (SVG) */}
                 <button
                   onClick={() => setIsOverdueAlertVisible(false)}
                   className="p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 rounded-full cursor-pointer transition-colors"
@@ -695,31 +795,35 @@ export default function ProfessionalDashboardPage({
                 >
                   <span className="w-5 h-5">
                     {icons.close || (
-                      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      <svg
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        xmlns="http://www.w3.org/2000/svg"
+                        strokeWidth={2}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M6 18L18 6M6 6l12 12"
+                        />
                       </svg>
                     )}
                   </span>
                 </button>
               </div>
             )}
-            {/* --- (FIM) Fim do Alerta --- */}
-            
-            {/* Grid de Cards com Novo Visual e 'navigate' */}
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6">
-              
-              {/* Card 1: Entradas Pendentes (CORRIGIDO: usa navigate) */}
-              <div 
+              <div
                 className="bg-yellow-100 text-yellow-900 p-5 rounded-lg shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer"
-                onClick={() => navigate('/history')} // <-- Sincronizado com o menu da esquerda
+                onClick={() => navigate('/history')}
               >
                 <div className="flex items-center gap-3">
                   <span className="text-yellow-500 bg-white p-2 rounded-full">
-                    {icons.clipboard || (<span></span>)}
+                    {icons.clipboard || <span></span>}
                   </span>
-                  <h3 className="text-lg font-semibold">
-                    Entradas Pendentes
-                  </h3>
+                  <h3 className="text-lg font-semibold">Entradas Pendentes</h3>
                 </div>
                 <p className="text-4xl font-bold mt-3 text-yellow-800">
                   {pendingRecords.length}
@@ -729,18 +833,15 @@ export default function ProfessionalDashboardPage({
                 </p>
               </div>
 
-              {/* Card 2: Total de Pacientes (CORRIGIDO: usa navigate) */}
-              <div 
+              <div
                 className="bg-blue-100 text-blue-900 p-5 rounded-lg shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer"
-                onClick={() => navigate('/patients')} // <-- Sincronizado com o menu da esquerda
+                onClick={() => navigate('/patients')}
               >
                 <div className="flex items-center gap-3">
                   <span className="text-blue-500 bg-white p-2 rounded-full">
-                    {icons.users || (<span></span>)}
+                    {icons.users || <span></span>}
                   </span>
-                  <h3 className="text-lg font-semibold">
-                    Total de Pacientes
-                  </h3>
+                  <h3 className="text-lg font-semibold">Total de Pacientes</h3>
                 </div>
                 <p className="text-4xl font-bold mt-3 text-blue-800">
                   {patients.length}
@@ -750,18 +851,15 @@ export default function ProfessionalDashboardPage({
                 </p>
               </div>
 
-              {/* Card 3: Entregas da Semana (CORRIGIDO: usa navigate) */}
-              <div 
+              <div
                 className="bg-green-100 text-green-900 p-5 rounded-lg shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer"
-                onClick={() => navigate('/deliveries')} // <-- Sincronizado com o menu da esquerda
+                onClick={() => navigate('/deliveries')}
               >
                 <div className="flex items-center gap-3">
                   <span className="text-green-500 bg-white p-2 rounded-full">
-                    {icons.check || (<span></span>)}
+                    {icons.check || <span></span>}
                   </span>
-                  <h3 className="text-lg font-semibold">
-                    Entregas da Semana
-                  </h3>
+                  <h3 className="text-lg font-semibold">Entregas da Semana</h3>
                 </div>
                 <p className="text-4xl font-bold mt-3 text-green-800">
                   {recentDeliveries.length}
@@ -771,25 +869,23 @@ export default function ProfessionalDashboardPage({
                 </p>
               </div>
 
-              {/* Card 4: Registro Rápido (Visual Sutil) */}
               <div
                 className="bg-white p-5 rounded-lg shadow-lg hover:shadow-xl border-l-8 border-indigo-500 transition-all duration-300 flex flex-col justify-center gap-3"
-                ref={dashQuickRef} 
+                ref={dashQuickRef}
               >
                 <h3 className="text-lg font-semibold text-indigo-800 mb-1">
                   Registro Rápido
                 </h3>
 
-                {/* O select customizado (Dashboard) */}
                 <div className="relative flex-grow w-full">
                   <button
                     type="button"
-                    onClick={() => setIsDashQuickOpen((prev) => !prev)} 
+                    onClick={() => setIsDashQuickOpen((prev) => !prev)}
                     className="w-full p-2 pl-3 pr-10 border rounded-lg text-sm bg-gray-50 text-left flex justify-between items-center cursor-pointer hover:border-indigo-500 transition-colors"
                   >
                     <span
                       className={
-                        dashQuickPatientId ? 'text-gray-900' : 'text-gray-500' 
+                        dashQuickPatientId ? 'text-gray-900' : 'text-gray-500'
                       }
                     >
                       {dashQuickPatientName || 'Selecione um paciente...'}
@@ -799,15 +895,15 @@ export default function ProfessionalDashboardPage({
                     </span>
                   </button>
 
-                  {isDashQuickOpen && ( 
+                  {isDashQuickOpen && (
                     <div className="absolute z-10 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-60 flex flex-col">
                       <div className="p-2 border-b sticky top-0 bg-white">
                         <input
                           type="text"
                           placeholder="Buscar paciente..."
                           className="w-full p-2 border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                          value={dashQuickSearch} 
-                          onChange={(e) => setDashQuickSearch(e.target.value)} 
+                          value={dashQuickSearch}
+                          onChange={(e) => setDashQuickSearch(e.target.value)}
                           autoFocus
                         />
                       </div>
@@ -816,25 +912,25 @@ export default function ProfessionalDashboardPage({
                         <div
                           className="p-2 text-sm text-gray-500 hover:bg-indigo-50 cursor-pointer transition-colors"
                           onClick={() => {
-                            setDashQuickPatientId(''); 
-                            setDashQuickPatientName('Selecione um paciente...'); 
-                            setIsDashQuickOpen(false); 
-                            setDashQuickSearch(''); 
+                            setDashQuickPatientId('');
+                            setDashQuickPatientName('Selecione um paciente...');
+                            setIsDashQuickOpen(false);
+                            setDashQuickSearch('');
                           }}
                         >
                           -- Limpar seleção --
                         </div>
 
-                        {dashQuickFilteredPatients.length > 0 ? ( 
-                          dashQuickFilteredPatients.map((p) => ( 
+                        {dashQuickFilteredPatients.length > 0 ? (
+                          dashQuickFilteredPatients.map((p) => (
                             <div
                               key={p._id || p.id}
                               className="p-2 text-sm hover:bg-indigo-50 cursor-pointer transition-colors"
                               onClick={() => {
-                                setDashQuickPatientId(String(p._id || p.id)); 
-                                setDashQuickPatientName(p.name); 
-                                setIsDashQuickOpen(false); 
-                                setDashQuickSearch(''); 
+                                setDashQuickPatientId(String(p._id || p.id));
+                                setDashQuickPatientName(p.name);
+                                setIsDashQuickOpen(false);
+                                setDashQuickSearch('');
                               }}
                             >
                               {p.name}
@@ -850,10 +946,9 @@ export default function ProfessionalDashboardPage({
                   )}
                 </div>
 
-                {/* Botão de Adicionar (Dashboard) */}
                 <button
-                  onClick={openDashQuickAddModal} 
-                  disabled={!dashQuickPatientId} 
+                  onClick={openDashQuickAddModal}
+                  disabled={!dashQuickPatientId}
                   className="w-full flex items-center justify-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 text-sm font-medium cursor-pointer transition-colors"
                 >
                   <span className="w-4 h-4">{icons.plus}</span> Adicionar
@@ -862,62 +957,66 @@ export default function ProfessionalDashboardPage({
               </div>
             </div>
 
-            {/* --- Seção de Atalhos Rápidos (com 'navigate') --- */}
             <div className="pt-6 border-t">
               <h3 className="text-xl font-semibold text-gray-700 mb-4">
                 Atalhos Rápidos
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                
-                {/* --- (INÍCIO DA CORREÇÃO) --- */}
-                {/* Atalho 1: Gerenciar Pacientes (Adicionado cursor-pointer) */}
                 <button
-                  onClick={() => navigate('/patients')} // <-- Sincronizado
+                  onClick={() => navigate('/patients')}
                   className="p-5 bg-white rounded-lg shadow-lg hover:shadow-xl hover:bg-gray-50 transition-all duration-300 flex items-center gap-4 text-left cursor-pointer"
                 >
                   <span className="p-3 bg-blue-100 text-blue-600 rounded-full">
                     {icons.users || <span></span>}
                   </span>
                   <div>
-                    <p className="text-base font-semibold text-gray-900">Gerenciar Pacientes</p>
-                    <p className="text-sm text-gray-500">Ver lista e editar pacientes</p>
+                    <p className="text-base font-semibold text-gray-900">
+                      Gerenciar Pacientes
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      Ver lista e editar pacientes
+                    </p>
                   </div>
                 </button>
 
-                {/* Atalho 2: Histórico Geral (Adicionado cursor-pointer) */}
                 <button
-                  onClick={() => navigate('/history')} // <-- Sincronizado
+                  onClick={() => navigate('/history')}
                   className="p-5 bg-white rounded-lg shadow-lg hover:shadow-xl hover:bg-gray-50 transition-all duration-300 flex items-center gap-4 text-left cursor-pointer"
                 >
                   <span className="p-3 bg-purple-100 text-purple-600 rounded-full">
                     {icons.history || <span></span>}
                   </span>
                   <div>
-                    <p className="text-base font-semibold text-gray-900">Histórico Geral</p>
-                    <p className="text-sm text-gray-500">Ver todos os registros</p>
+                    <p className="text-base font-semibold text-gray-900">
+                      Histórico Geral
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      Ver todos os registros
+                    </p>
                   </div>
                 </button>
 
-                {/* Atalho 3: Registro Rápido (Adicionado cursor-pointer) */}
                 <button
-                  onClick={() => navigate('/history')} // <-- Leva para o histórico (onde está o form rápido)
+                  onClick={() => navigate('/history')}
                   className="p-5 bg-white rounded-lg shadow-lg hover:shadow-xl hover:bg-gray-50 transition-all duration-300 flex items-center gap-4 text-left cursor-pointer"
                 >
-                  <span className="p-3 bg-indigo-100 text-indigo-600 rounded-full"> 
-                    {icons.clipboard || <span></span>} 
+                  <span className="p-3 bg-indigo-100 text-indigo-600 rounded-full">
+                    {icons.clipboard || <span></span>}
                   </span>
                   <div>
-                    <p className="text-base font-semibold text-gray-900">Registro Rápido</p> 
-                    <p className="text-sm text-gray-500">Adicionar um novo registro</p>
+                    <p className="text-base font-semibold text-gray-900">
+                      Registro Rápido
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      Adicionar um novo registro
+                    </p>
                   </div>
                 </button>
-                {/* --- (FIM DA CORREÇÃO) --- */}
               </div>
             </div>
-            
           </div>
-          // --- (FIM) SEÇÃO DO DASHBOARD REDESENHADA ---
         );
+
       case 'patients':
         return (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-8rem)] animate-fade-in">
@@ -985,7 +1084,8 @@ export default function ProfessionalDashboardPage({
                     <div
                       key={patient._id || patient.id}
                       className={`p-3 rounded-lg cursor-pointer mb-2 border transition-colors ${
-                        (selectedPatient?._id || selectedPatient?.id) === (patient._id || patient.id)
+                        (selectedPatient?._id || selectedPatient?.id) ===
+                        (patient._id || patient.id)
                           ? 'bg-blue-100 border-blue-400'
                           : 'hover:bg-blue-50 border-gray-200'
                       }`}
@@ -1005,6 +1105,7 @@ export default function ProfessionalDashboardPage({
                         </p>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <StatusBadge status={patient.status} />
+
                           <button
                             onClick={(e) => handleQuickAddRecord(e, patient)}
                             title="Novo Registro Rápido"
@@ -1047,9 +1148,7 @@ export default function ProfessionalDashboardPage({
                         </p>
                       </div>
                       <div className="mt-3 text-sm">
-                        <strong className="text-gray-800">
-                          Observações:
-                        </strong>
+                        <strong className="text-gray-800">Observações:</strong>
                         <p className="text-gray-600 italic">
                           {selectedPatient?.observations || 'Nenhuma'}
                         </p>
@@ -1065,43 +1164,47 @@ export default function ProfessionalDashboardPage({
                     </div>
                     <div className="flex gap-2 flex-shrink-0">
                       <button
-                        onClick={() => handleEditPatient(selectedPatient)} 
+                        onClick={() => handleEditPatient(selectedPatient)}
                         className="p-2 text-gray-600 hover:text-blue-600 hover:bg-gray-100 rounded-md cursor-pointer transition-colors"
                         title="Editar Paciente"
                       >
                         <span className="w-4 h-4 block">{icons.edit}</span>
                       </button>
-                      
-                      {/* --- Botão Excluir Paciente (Oculto para Profissional) --- */}
-                      {(user?.role !== 'profissional' && user?.role !== 'Profissional') && (
-                        <button
-                          onClick={() =>
-                            setConfirmation({
-                              isOpen: true,
-                              message: `Tem certeza? Excluir ${selectedPatient?.name} é uma ação PERMANENTE e não pode ser desfeita.`,
-                              onConfirm: () =>
-                                handleDeletePatient(selectedPatient._id || selectedPatient.id),
-                              data: (selectedPatient._id || selectedPatient.id) // Passando o ID aqui
-                            })
-                          }
-                          className="p-2 text-gray-600 hover:text-red-600 hover:bg-gray-100 rounded-md cursor-pointer transition-colors"
-                          title="Excluir Paciente"
-                        >
-                          <span className="w-4 h-4 block">{icons.trash}</span>
-                        </button>
-                      )}
-                      
+
+                      {user?.role !== 'profissional' &&
+                        user?.role !== 'Profissional' && (
+                          <button
+                            onClick={() =>
+                              setConfirmation({
+                                isOpen: true,
+                                title: 'Confirmar Exclusão', // Título
+                                message: `Tem certeza? Excluir ${selectedPatient?.name} é uma ação PERMANENTE e não pode ser desfeita.`,
+                                onConfirm: () =>
+                                  handleDeletePatient(
+                                    selectedPatient._id || selectedPatient.id
+                                  ),
+                                data: selectedPatient._id || selectedPatient.id,
+                                confirmText: 'Sim, Excluir', // Texto
+                                isDestructive: true, // Cor vermelha
+                              })
+                            }
+                            className="p-2 text-gray-600 hover:text-red-600 hover:bg-gray-100 rounded-md cursor-pointer transition-colors"
+                            title="Excluir Paciente"
+                          >
+                            <span className="w-4 h-4 block">{icons.trash}</span>
+                          </button>
+                        )}
                     </div>
                   </div>
                   <div className="flex justify-between items-center mt-2 mb-3">
                     <h3 className="text-lg font-semibold text-gray-700">
                       Histórico de Registros
                     </h3>
+                    {/* --- ATUALIZADO --- */}
                     <button
-                      onClick={() => {
-                        setEditingRecord(null);
-                        setIsRecordModalOpen(true);
-                      }}
+                      onClick={() =>
+                        openRecordModalWithCheck(selectedPatient, null)
+                      }
                       className="flex items-center gap-1.5 px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 text-xs font-medium cursor-pointer transition-colors"
                     >
                       <span className="w-3 h-3">{icons.plus}</span> Novo
@@ -1134,16 +1237,15 @@ export default function ProfessionalDashboardPage({
             </div>
           </div>
         );
-      // VISÃO: HISTÓRICO (Estilizado)
+
       case 'historico':
         return (
-          // ... (Seu código da aba Histórico)
           <div className="bg-white rounded-lg shadow-md p-4 md:p-6 animate-fade-in flex flex-col h-[calc(100vh-8rem)]">
             <h2 className="text-xl md:text-2xl font-bold mb-4 text-gray-800">
               Histórico Geral de Entradas
             </h2>
 
-            {/* --- Bloco 'Adicionar Rápido' (Estilizado) --- */}
+            {/* --- ATUALIZADO --- */}
             <div className="bg-blue-50 p-4 rounded-lg mb-4 border border-blue-200 shadow-sm">
               <h4 className="flex items-center gap-2 font-semibold mb-3 text-blue-800 text-base">
                 <span className="w-5 h-5 text-blue-600">{icons.plus}</span>
@@ -1233,9 +1335,7 @@ export default function ProfessionalDashboardPage({
                 </button>
               </div>
             </div>
-            {/* --- Fim do Bloco 'Adicionar Rápido' --- */}
 
-            {/* --- Bloco 'Filtros de Status' (Estilizado) --- */}
             <div className="flex items-center gap-2 mb-4 flex-wrap">
               <span className="text-sm font-semibold">Filtrar por Status:</span>
               {['Todos', 'Pendente', 'Atendido', 'Cancelado'].map((status) => (
@@ -1252,9 +1352,7 @@ export default function ProfessionalDashboardPage({
                 </button>
               ))}
             </div>
-            {/* --- Fim dos Filtros --- */}
 
-            {/* --- Container da Tabela (Estilizado) --- */}
             <div className="overflow-x-auto overflow-y-auto flex-grow min-h-0">
               <table className="min-w-full bg-white text-sm">
                 <thead className="bg-gray-50 sticky top-0 border-b border-gray-200">
@@ -1284,10 +1382,7 @@ export default function ProfessionalDashboardPage({
                     >
                       <td className="py-3 px-3 font-medium">
                         <button
-                          onClick={() =>
-                            // (CORREÇÃO) Navega para a página de pacientes
-                            navigate('/patients')
-                          }
+                          onClick={() => navigate('/patients')}
                           className="text-blue-600 hover:underline text-left cursor-pointer transition-colors"
                         >
                           {getPatientNameById(record.patientId)}
@@ -1322,9 +1417,8 @@ export default function ProfessionalDashboardPage({
                               >
                                 Atender
                               </button>
-                              
-                              {/* --- Botão "Cancelar" (Oculto para Profissional) --- */}
-                              {(user?.role !== '' && user?.role !== '') && (
+
+                              {user?.role !== '' && user?.role !== '' && (
                                 <button
                                   onClick={() => setCancelingRecord(record)}
                                   className="px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 font-medium cursor-pointer transition-colors"
@@ -1334,6 +1428,19 @@ export default function ProfessionalDashboardPage({
                               )}
                             </>
                           )}
+
+                          {record.status === 'Atendido' && (
+                            <button
+                              onClick={() => handleCloneRecord(record)}
+                              className="p-1 text-gray-500 hover:text-green-600 cursor-pointer transition-colors"
+                              title="Repetir este registro para o mês atual"
+                            >
+                              <span className="w-5 h-5 block">
+                                {icons.duplicate}
+                              </span>
+                            </button>
+                          )}
+
                           <button
                             onClick={() => {
                               const patientForRecord = Array.isArray(patients)
@@ -1352,25 +1459,32 @@ export default function ProfessionalDashboardPage({
                           >
                             <span className="w-4 h-4 block">{icons.edit}</span>
                           </button>
-                          
-                          {/* --- Botão "Excluir Registro" (Oculto para Profissional) --- */}
-                          {(user?.role !== 'profissional' && user?.role !== 'Profissional') && (
-                            <button
-                              onClick={() =>
-                                setConfirmation({
-                                  isOpen: true,
-                                  message: 'Excluir registro?',
-                                  onConfirm: () => handleDeleteRecord(record._id || record.id),
-                                  data: (record._id || record.id) // Passando o ID
-                                })
-                              }
-                              className="p-1 text-gray-500 hover:text-red-600 cursor-pointer transition-colors"
-                              title="Excluir"
-                            >
-                              <span className="w-4 h-4 block">{icons.trash}</span>
-                            </button>
-                          )}
-                          
+
+                          {user?.role !== 'profissional' &&
+                            user?.role !== 'Profissional' && (
+                              <button
+                                onClick={() =>
+                                  setConfirmation({
+                                    isOpen: true,
+                                    title: 'Confirmar Exclusão',
+                                    message: 'Excluir registro?',
+                                    onConfirm: () =>
+                                      handleDeleteRecord(
+                                        record._id || record.id
+                                      ),
+                                    data: record._id || record.id,
+                                    confirmText: 'Sim, Excluir',
+                                    isDestructive: true,
+                                  })
+                                }
+                                className="p-1 text-gray-500 hover:text-red-600 cursor-pointer transition-colors"
+                                title="Excluir"
+                              >
+                                <span className="w-4 h-4 block">
+                                  {icons.trash}
+                                </span>
+                              </button>
+                            )}
                         </div>
                       </td>
                     </tr>
@@ -1378,7 +1492,6 @@ export default function ProfessionalDashboardPage({
                 </tbody>
               </table>
 
-              {/* Mensagem de 'vazio' */}
               {filteredRecords.length === 0 && (
                 <p className="text-center text-gray-500 py-6">
                   {statusFilter === 'Todos'
@@ -1387,9 +1500,6 @@ export default function ProfessionalDashboardPage({
                 </p>
               )}
             </div>
-            {/* Fim do Container da Tabela */}
-
-            {/* Controles de Paginação (Estilizado) */}
             {filteredRecords.length > itemsPerPage && (
               <div className="flex justify-between items-center pt-4 border-t border-gray-200 mt-auto">
                 <span className="text-sm text-gray-700">
@@ -1426,11 +1536,9 @@ export default function ProfessionalDashboardPage({
                 </div>
               </div>
             )}
-            {/* --- FIM (Paginação) --- */}
           </div>
         );
 
-      // VISÃO: ENTREGAS
       case 'deliveries':
         return (
           <div className="bg-white rounded-lg shadow-md p-4 md:p-6 animate-fade-in flex flex-col h-[calc(100vh-8rem)]">
@@ -1438,7 +1546,6 @@ export default function ProfessionalDashboardPage({
               Entregas Atendidas (Última Semana)
             </h2>
 
-            {/* Mensagem se não houver entregas recentes */}
             {recentDeliveries.length === 0 ? (
               <div className="flex-grow flex items-center justify-center">
                 <p className="text-center text-gray-500 py-10">
@@ -1446,7 +1553,6 @@ export default function ProfessionalDashboardPage({
                 </p>
               </div>
             ) : (
-              // Container da Tabela (com scroll)
               <div className="overflow-x-auto overflow-y-auto flex-grow min-h-0">
                 <table className="min-w-full bg-white text-sm">
                   <thead className="bg-gray-50 sticky top-0 border-b border-gray-200">
@@ -1474,27 +1580,24 @@ export default function ProfessionalDashboardPage({
                         key={record._id || record.id}
                         className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
                       >
-                        {/* Data da Entrega (Corrigido para tratar UTC) */}
                         <td className="py-3 px-3 font-medium text-gray-800">
-                          {new Date(record.deliveryDate + 'T00:00:00').toLocaleDateString('pt-BR', {
+                          {new Date(
+                            record.deliveryDate + 'T00:00:00'
+                          ).toLocaleDateString('pt-BR', {
                             day: '2-digit',
                             month: '2-digit',
                             year: 'numeric',
-                            timeZone: 'UTC', // Garante que a data seja lida como UTC
+                            timeZone: 'UTC',
                           })}
                         </td>
-
-                        {/* Paciente (Linkável) (CORRIGIDO: usa navigate) */}
                         <td className="py-3 px-3">
                           <button
-                            onClick={() => navigate('/patients')} // <-- MUDEI AQUI
+                            onClick={() => navigate('/patients')}
                             className="text-blue-600 hover:underline font-medium text-left cursor-pointer transition-colors"
                           >
                             {getPatientNameById(record.patientId)}
                           </button>
                         </td>
-
-                        {/* Medicações */}
                         <td className="py-3 px-3 text-gray-700">
                           {Array.isArray(record.medications)
                             ? record.medications
@@ -1505,16 +1608,12 @@ export default function ProfessionalDashboardPage({
                                 .join(', ')
                             : 'N/A'}
                         </td>
-
-                        {/* Data da Entrada (Original) */}
                         <td className="py-3 px-3 text-gray-700">
                           {new Date(record.entryDate).toLocaleString('pt-BR', {
                             dateStyle: 'short',
                             timeStyle: 'short',
                           })}
                         </td>
-
-                        {/* Status */}
                         <td className="py-3 px-3">
                           <StatusBadge status={record.status} />
                         </td>
@@ -1526,20 +1625,10 @@ export default function ProfessionalDashboardPage({
             )}
           </div>
         );
-        
-      // --- (INÍCIO DA NOVA SEÇÃO) ---
-      // VISÃO: MEDICAÇÕES (Renderiza a página de medicações)
-     case 'medications':
+
+      case 'medications':
         return (
-          <MedicationsPage
-              user={user}
-              // As props 'medications' e 'setMedications' foram removidas.
-              // A página de medicações agora cuida dos seus próprios dados
-              // (buscando da rota paginada '/api/medications'),
-              // enquanto o RecordForm usa a lista global (de '/api/medications/all').
-              addToast={addToast}
-              addLog={addLog}
-          />
+          <MedicationsPage user={user} addToast={addToast} addLog={addLog} />
         );
       default:
         return (
@@ -1552,29 +1641,23 @@ export default function ProfessionalDashboardPage({
 
   return (
     <>
-      {/* Esta página agora renderiza APENAS o conteúdo da view.
-          A navegação (a barra da esquerda) é 100% controlada
-          pelo MainLayout.jsx, que é o seu "menu fixo".
-      */}
       {renderCurrentView()}
-
-      {/* --- Modais --- */}
       {isPatientModalOpen && (
         <PatientForm
-          patient={editingPatient} 
+          patient={editingPatient}
           onSave={handleSavePatient}
           onClose={() => {
             setIsPatientModalOpen(false);
             setEditingPatient(null);
           }}
           checkDuplicate={checkDuplicatePatient}
-          addToast={addToast} 
+          addToast={addToast}
         />
       )}
-      {isRecordModalOpen && selectedPatient && ( 
+      {isRecordModalOpen && selectedPatient && (
         <RecordForm
           patient={selectedPatient}
-          profissionalId={user?._id || user?.id} // Usa _id/id do usuário logado
+          profissionalId={user?._id || user?.id}
           record={editingRecord}
           onSave={handleSaveRecord}
           onClose={() => {
@@ -1583,21 +1666,26 @@ export default function ProfessionalDashboardPage({
           }}
           medicationsList={Array.isArray(medications) ? medications : []}
           onNewMedication={handleAddNewMedication}
-          addToast={addToast} 
+          addToast={addToast}
         />
       )}
+
+      {/* O Modal de Confirmação  */}
       {confirmation.isOpen && (
         <ConfirmModal
+          title={confirmation.title}
           message={confirmation.message}
+          confirmText={confirmation.confirmText}
+          isDestructive={confirmation.isDestructive}
           onConfirm={() => {
-            // Passa confirmation.data para o onConfirm, que é o ID, 
-            // e fecha o modal.
-            confirmation.onConfirm(confirmation.data); 
-            closeConfirmation();
+            if (confirmation.onConfirm) {
+              confirmation.onConfirm(confirmation.data);
+            }
           }}
           onClose={closeConfirmation}
         />
       )}
+
       {attendingRecord && (
         <AttendRecordModal
           record={attendingRecord}
@@ -1605,17 +1693,16 @@ export default function ProfessionalDashboardPage({
           onClose={() => setAttendingRecord(null)}
           getPatientName={getPatientNameById}
           medications={medications}
-          getMedicationName={getMedicationName} 
+          getMedicationName={getMedicationName}
         />
       )}
 
-      {/* --- Renderiza o novo modal de cancelamento --- */}
       {cancelingRecord && (
         <CancelRecordModal
           record={cancelingRecord}
           onClose={() => setCancelingRecord(null)}
           onConfirm={handleCancelRecordStatus}
-          getPatientNameById={getPatientNameById} // Passa o helper de nome
+          getPatientNameById={getPatientNameById}
         />
       )}
     </>
