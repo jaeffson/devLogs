@@ -1,9 +1,8 @@
 // src/components/common/PatientRecordsTable.jsx
-// (ATUALIZADO: Adicionado botão "Ver Motivo" para status "Cancelado")
 
 import React from 'react';
 import { StatusBadge } from './StatusBadge';
-import { icons } from '../../utils/icons'; // <-- 1. IMPORTAR ÍCONES
+import { icons } from '../utils/icons'; 
 
 // Helper interno (Compara ID como string)
 const getMedicationNameLocal = (medicationId, meds = []) => {
@@ -17,7 +16,6 @@ const formatDateRef = (dateStr) => {
   return new Date(isoDatePart + 'T00:00:00').toLocaleDateString('pt-BR');
 };
 
-// 2. RECEBER A NOVA PROP 'onViewReason'
 export function PatientRecordsTable({ records = [], medications = [], onViewReason }) {
   if (!Array.isArray(records) || records.length === 0) {
     return (
@@ -84,10 +82,8 @@ export function PatientRecordsTable({ records = [], medications = [], onViewReas
                     : 'N/A'}
                 </td>
                 
-                {/* --- 3. (INÍCIO DA MUDANÇA) --- */}
                 <td className="py-2 px-3">
                   <StatusBadge status={record.status} />
-                  {/* Adiciona o botão se o status for "Cancelado" e a prop existir */}
                   {record.status === 'Cancelado' && onViewReason && (
                     <button
                       onClick={() => onViewReason(record)}
@@ -99,8 +95,6 @@ export function PatientRecordsTable({ records = [], medications = [], onViewReas
                     </button>
                   )}
                 </td>
-                {/* --- (FIM DA MUDANÇA) --- */}
-
               </tr>
             ))}
         </tbody>
