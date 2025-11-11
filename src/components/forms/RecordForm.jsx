@@ -6,7 +6,38 @@ import { Modal } from '../common/Modal';
 import MedicationForm from './MedicationForm';
 import { icons } from '../../utils/icons'; // <-- 1. Importar ícones
 
-const quantityOptions = ['1cx','1cx(60cp)','2cxs','3cxs','4cxs','5xs','6cxs','7cxs','1tb'];
+const quantityOptions = [
+  // --- Caixas de Comprimidos (cp) ---
+  '1cx (20cp)',
+  '1cx (28cp)',
+  '1cx (30cp)', // Padrão
+  '1cx (60cp)',
+  '2cxs (total 60cp)',
+  '3cxs',
+  '4cxs',
+  '5cxs', // Corrigido (era '5xs')
+  '6cxs',
+  '7cxs',
+  
+  // --- Tiras de Teste (diabetes) ---
+  '1cx (10 tiras)',
+  '1cx (25 tiras)',
+  '1cx (50 tiras)',
+  
+  // --- Formas Líquidas/Tópicas ---
+  '1 Frasco',
+  '2 Frascos',
+  '3 Frascos',
+  '1 Bisnaga',
+  '2 Bisnagas',
+  '1 Ampola',
+  '1 Seringa',
+  
+  // --- Genéricos (mantidos) ---
+  '1cx',
+  '2cxs',
+  '1tb'
+];;
 
 export default function RecordForm({
   patient,
