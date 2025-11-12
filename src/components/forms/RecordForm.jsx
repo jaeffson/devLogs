@@ -1,7 +1,5 @@
 // src/components/forms/RecordForm.jsx
-// (ATUALIZADO: Novo layout "clean" para a lista de medicações)
-// (MANTIDO: Correção do overflow do dropdown de medicações)
-// (MANTIDO: Lista de 'quantityOptions' expandida)
+// (ATUALIZADO: Corrigido bug de fuso horário na 'referenceDate' (Data de Referência))
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Modal } from '../common/Modal';
@@ -10,11 +8,10 @@ import { icons } from '../../utils/icons';
 
 // Lista de opções de quantidade
 const quantityOptions = [
-  '1cx (30cp)',  '1cx (60cp)',
- '2cxs (total 60cp)', '2cxs (total 120cp)',
+  '1cx (30cp)', '1cx (60cp)',
+   '2cxs (total 60cp)', '2cxs (total 120cp)',
   '3cxs', '4cxs', '5cxs', '6cxs', '7cxs',
-  '1cx (10 tiras)', '1cx (25 tiras)', '1cx (50 tiras)',
-  '1 Frasco', '2 Frascos', '3 Frascos','4 Frascos','5 Frascos',
+  '1 Frasco', '2 Frascos', '3 Frascos',
   '1 Bisnaga', '2 Bisnagas', '1 Ampola', '1 Seringa',
   '1cx', '2cxs', '1tb'
 ];
@@ -42,20 +39,34 @@ export default function RecordForm({
   const [medSearchTerm, setMedSearchTerm] = useState('');
   const medSelectRef = useRef(null);
 
-  // --- LÓGICA (Sem alteração) ---
-  const getTodayIsoDate = () => new Date().toISOString().slice(0, 10);
+  // --- (INÍCIO DA CORREÇÃO) ---
+  // Substituída a função getTodayIsoDate pela getLocalDateString
+  const getLocalDateString = (date = new Date()) => {
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  // --- (FIM DA CORREÇÃO) ---
   
   const formattedDate = (dateString) => {
     if (!dateString) return 'Data inválida';
     const isoDatePart = dateString.slice(0, 10);
     const parts = isoDatePart.split('-');
-    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    if (parts.length === 3) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
     return 'Data Inválida';
   };
 
   useEffect(() => {
-    const today = getTodayIsoDate();
+    // --- (INÍCIO DA CORREÇÃO) ---
+    // Usa a nova função local
+    const today = getLocalDateString();
+    // --- (FIM DA CORREÇÃO) ---
+
     if (record) {
+      // Se for edição ou clone, usa a data do registro (com fallback para 'today')
       setReferenceDate(record.referenceDate ? new Date(record.referenceDate).toISOString().slice(0, 10) : today);
       setObservation(record.observation || '');
       const existingMeds =
@@ -71,6 +82,7 @@ export default function RecordForm({
           : [{ medicationId: '', quantity: quantityOptions[0], value: '', tempId: Date.now() }]
       );
     } else {
+      // Se for um NOVO registro, usa 'today'
       setReferenceDate(today);
       setObservation('');
       setMedications([{ medicationId: '', quantity: quantityOptions[0], value: '', tempId: Date.now() }]);
@@ -78,6 +90,15 @@ export default function RecordForm({
     setErrors({});
   }, [record]);
 
+  // ... (O restante do arquivo RecordForm.jsx não precisa de NENHUMA alteração) ...
+  // ... (Cole o restante do seu arquivo RecordForm.jsx daqui para baixo) ...
+  
+  // (Lógica de handlers, validação e handleSubmit)
+  // ... (todo o resto do arquivo) ...
+  // (A lógica de handleSubmit já está correta, pois ela envia a 'referenceDate'
+  // que agora está correta no estado)
+
+  // (Lógica de handlers...)
   useEffect(() => {
     function handleClickOutside(event) {
       if (medSelectRef.current && !medSelectRef.current.contains(event.target)) {
@@ -174,7 +195,9 @@ export default function RecordForm({
       referenceDate,
       observation: observation.trim(),
       status: record?.status || 'Pendente',
-      entryDate: record?.entryDate || new Date().toISOString(),
+      // (INÍCIO DA CORREÇÃO) Usa new Date() (local) em vez de new Date().toISOString() (UTC)
+      entryDate: record?.entryDate || new Date(),
+      // (FIM DA CORREÇÃO)
       deliveryDate: record?.deliveryDate || null,
       medications: validMedications,
       totalValue,
@@ -182,9 +205,8 @@ export default function RecordForm({
     onSave(recordData);
     onClose();
   };
-  // --- FIM DA LÓGICA ---
-
-
+  
+  // (Render / JSX)
   return (
     <>
       <Modal onClose={onClose} modalClasses="max-w-3xl">
@@ -223,7 +245,6 @@ export default function RecordForm({
                      </p>
                 )}
 
-                {/* --- (INÍCIO DO NOVO LAYOUT) --- */}
                 <div
                   className="space-y-3 border border-gray-200 rounded-lg"
                   ref={medSelectRef}
@@ -265,7 +286,7 @@ export default function RecordForm({
                               } bg-white`}
                             />
 
-                            {/* Dropdown (sem alteração na lógica) */}
+                            {/* Dropdown */}
                             {openMedSelectIndex === index && (
                               <div 
                                 className="absolute z-10 w-full bg-white border border-gray-300 rounded-lg shadow-lg mt-1 max-h-60 flex flex-col"
@@ -356,7 +377,6 @@ export default function RecordForm({
                     );
                   })}
                 </div>
-                {/* --- (FIM DO NOVO LAYOUT) --- */}
 
 
                 <button

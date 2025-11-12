@@ -1,9 +1,17 @@
 // src/components/common/AttendRecordModal.jsx
-// (ATUALIZADO: Botão de confirmar com spinner de carregamento)
+// (ATUALIZADO: Corrigido bug de fuso horário na data 'today')
 
 import React, { useState } from 'react';
 import { Modal } from './Modal';
-import { icons } from '../../utils/icons'; // Importa ícones
+import { icons } from '../../utils/icons';
+
+const getLocalDateString = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+// --- (FIM DA CORREÇÃO) ---
 
 export function AttendRecordModal({
   record,
@@ -12,14 +20,15 @@ export function AttendRecordModal({
   getPatientName,
   medications, 
   getMedicationName, 
-  // --- (INÍCIO DA MUDANÇA 1) ---
-  isSaving, // Nova prop para controlar o estado de salvamento
-  // --- (FIM DA MUDANÇA 1) ---
+  isSaving,
 }) {
-  const today = new Date().toISOString().slice(0, 10);
+
+  // --- (INÍCIO DA CORREÇÃO) ---
+  // Usa a nova função para definir 'today'
+  const today = getLocalDateString(); 
+  // --- (FIM DA CORREÇÃO) ---
   
   const recordId = record?._id; 
-  
   const [deliveryDate, setDeliveryDate] = useState(today); 
 
   const patientName =
@@ -28,19 +37,11 @@ export function AttendRecordModal({
       : 'Paciente desconhecido';
 
   const handleConfirmClick = () => {
-    // --- (INÍCIO DA MUDANÇA 2) ---
-    // Ação de confirmação só ocorre se NÃO estiver salvando
     if (!isSaving && recordId && deliveryDate) { 
-    // --- (FIM DA MUDANÇA 2) ---
       console.log(
         `[AttendRecordModal] Confirmando Atendimento para Record ID: ${recordId}, Data: ${deliveryDate}`
       ); 
       onConfirm(recordId, deliveryDate);
-      
-      // 🚨 REMOVIDO: O 'onClose()' foi removido daqui.
-      // O componente pai (ProfessionalDashboardPage) fechará o modal
-      // apenas QUANDO a API responder.
-      // onClose(); 
     } else if (!recordId || !deliveryDate) {
       alert('Erro: ID do registro ausente ou data de entrega inválida.');
     }
@@ -101,7 +102,7 @@ export function AttendRecordModal({
           value={deliveryDate}
           onChange={(e) => setDeliveryDate(e.target.value)}
           className="w-full p-2 border rounded border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm"
-          max={today}
+          max={today} 
           required
         />
         
@@ -111,13 +112,12 @@ export function AttendRecordModal({
 
       </div>
 
-      {/* --- (INÍCIO DA MUDANÇA 3) --- */}
       <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
         <button
           type="button"
           onClick={onClose}
           className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 font-medium text-sm transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          disabled={isSaving} // Desabilita o "Cancelar" enquanto salva
+          disabled={isSaving}
         >
           Cancelar
         </button>
@@ -125,20 +125,16 @@ export function AttendRecordModal({
           type="button"
           onClick={handleConfirmClick}
           className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 font-medium text-sm transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 flex items-center justify-center gap-2"
-          disabled={!deliveryDate || !recordId || isSaving} // Desabilita se incompleto OU salvando
+          disabled={!deliveryDate || !recordId || isSaving}
         >
           {isSaving ? (
-            // Mostra o spinner girando
             <span className="w-5 h-5 animate-spin">{icons.spinner}</span>
           ) : (
-            // Mostra o check
             <span className="w-5 h-5">{icons.check}</span>
           )}
-          {/* Muda o texto do botão */}
           {isSaving ? 'Confirmando...' : 'Confirmar Entrega'}
         </button>
       </div>
-      {/* --- (FIM DA MUDANÇA 3) --- */}
     </Modal>
   );
 }
