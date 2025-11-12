@@ -10,11 +10,11 @@ import { icons } from '../../utils/icons';
 
 // Lista de opções de quantidade
 const quantityOptions = [
-  '1cx (20cp)', '1cx (28cp)', '1cx (30cp)', '1cx (40cp)', '1cx (50cp)', '1cx (60cp)',
-  '2cxs (total 40cp)', '2cxs (total 60cp)', '2cxs (total 120cp)',
+  '1cx (30cp)',  '1cx (60cp)',
+ '2cxs (total 60cp)', '2cxs (total 120cp)',
   '3cxs', '4cxs', '5cxs', '6cxs', '7cxs',
   '1cx (10 tiras)', '1cx (25 tiras)', '1cx (50 tiras)',
-  '1 Frasco', '2 Frascos', '3 Frascos',
+  '1 Frasco', '2 Frascos', '3 Frascos','4 Frascos','5 Frascos',
   '1 Bisnaga', '2 Bisnagas', '1 Ampola', '1 Seringa',
   '1cx', '2cxs', '1tb'
 ];
