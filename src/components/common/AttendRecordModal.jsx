@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal } from './Modal';
 import { icons } from '../../utils/icons';
 
-export default function AttendRecordModal({
+export  function AttendRecordModal({
   isOpen,         // Pode vir como isOpen ou apenas renderizado condicionalmente
   onClose,
   record,

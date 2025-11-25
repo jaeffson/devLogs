@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Modal } from './Modal';
 import { icons } from '../../utils/icons'; // Opcional, se quiser usar ícones
 
-export default function ConfirmModal({
+export  function ConfirmModal({
   title = "Confirmação",
   message,
   onConfirm,
