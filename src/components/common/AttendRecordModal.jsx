@@ -1,177 +1,139 @@
 // src/components/common/AttendRecordModal.jsx
-import React, { useState, useEffect } from 'react';
+// (ATUALIZADO: Corrigido bug de fuso horário na data 'today')
+
+import React, { useState } from 'react';
 import { Modal } from './Modal';
 import { icons } from '../../utils/icons';
+
+const getLocalDateString = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+// --- (FIM DA CORREÇÃO) ---
 
 export function AttendRecordModal({
   record,
   onConfirm,
   onClose,
   getPatientName,
-  medications = [], // Lista de medicações
-  getMedicationName,
-  isSaving, // Prop original (mantida por compatibilidade)
+  medications, 
+  getMedicationName, 
+  isSaving,
 }) {
-  // 1. Estado local para o Spinner
-  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // --- (INÍCIO DA CORREÇÃO) ---
+  // Usa a nova função para definir 'today'
+  const today = getLocalDateString(); 
+  // --- (FIM DA CORREÇÃO) ---
   
-  // 2. Data de hoje formatada para o input datetime-local
-  const getLocalDateString = (date = new Date()) => {
-    const year = date.getFullYear();
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const day = date.getDate().toString().padStart(2, '0');
-    const hours = date.getHours().toString().padStart(2, '0');
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
-  };
+  const recordId = record?._id; 
+  const [deliveryDate, setDeliveryDate] = useState(today); 
 
-  const [deliveryDate, setDeliveryDate] = useState('');
-  const [observation, setObservation] = useState('');
+  const patientName =
+    typeof getPatientName === 'function'
+      ? getPatientName(record?.patientId)
+      : 'Paciente desconhecido';
 
-  // Atualiza estados quando o modal abre
-  useEffect(() => {
-    if (record) {
-      setDeliveryDate(getLocalDateString());
-      setObservation('');
-      setIsSubmitting(false);
-    }
-  }, [record]);
-
-  if (!record) return null;
-
-  const patientName = typeof getPatientName === 'function'
-    ? getPatientName(record.patientId)
-    : (record.patientName || 'Paciente');
-
-  // 3. Função de Confirmação com Async/Await
-  const handleConfirmClick = async () => {
-    if (!deliveryDate) return;
-
-    setIsSubmitting(true); // Ativa spinner
-
-    try {
-      // Chama a função do pai e espera terminar
-      await onConfirm({
-        recordId: record._id || record.id,
-        deliveryDate,
-        observation
-      });
-      // Se der certo, o modal será fechado pelo pai ou por aqui se quiser
-      // onClose(); 
-    } catch (error) {
-      console.error("Erro ao confirmar:", error);
-    } finally {
-      setIsSubmitting(false); // Desativa spinner
+  const handleConfirmClick = () => {
+    if (!isSaving && recordId && deliveryDate) { 
+      console.log(
+        `[AttendRecordModal] Confirmando Atendimento para Record ID: ${recordId}, Data: ${deliveryDate}`
+      ); 
+      onConfirm(recordId, deliveryDate);
+    } else if (!recordId || !deliveryDate) {
+      alert('Erro: ID do registro ausente ou data de entrega inválida.');
     }
   };
-
-  // Define se está carregando (pela prop pai ou estado local)
-  const isLoading = isSaving || isSubmitting;
 
   return (
-    <Modal onClose={onClose} title="Confirmar Entrega">
-      <div className="space-y-5">
+    <Modal onClose={onClose}>
+      <div className="flex items-center gap-3 pb-4 border-b border-gray-200 mb-4">
+        <span className="w-6 h-6 text-green-600">
+            {icons.check}
+        </span>
+        <h2 className="text-lg font-semibold text-gray-800">
+          Confirmar Atendimento
+        </h2>
+      </div>
+
+      <div className="mb-4 space-y-2 text-sm">
+        <p>
+          Paciente: <strong className="text-gray-700">{patientName}</strong>
+        </p>
         
-        {/* Bloco de Informação do Paciente */}
-        <div className="bg-blue-50 p-4 rounded-md border border-blue-100">
-          <p className="text-sm text-blue-800 mb-1">Paciente:</p>
-          <p className="text-lg font-bold text-blue-900">{patientName}</p>
-        </div>
-
-        {/* --- LISTA DE MEDICAÇÕES (RESTAURADA) --- */}
         <div>
-          <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-            <span className="text-gray-500">{icons.pill || '💊'}</span>
-            Medicações a Entregar:
+          <h4 className="font-medium text-gray-700 mb-1">
+            Medicações Registradas:
           </h4>
-          <div className="bg-gray-50 rounded-md border border-gray-200 max-h-40 overflow-y-auto">
-            {medications && medications.length > 0 ? (
-              <ul className="divide-y divide-gray-200">
-                {medications.map((med, idx) => {
-                  const medName = getMedicationName 
-                    ? getMedicationName(med.medicationId) 
-                    : (med.medicationName || 'Medicação');
-                  return (
-                    <li key={idx} className="px-3 py-2 text-sm flex justify-between items-center">
-                      <span className="font-medium text-gray-700">{medName}</span>
-                      <span className="bg-white px-2 py-0.5 rounded border text-gray-600 text-xs">
-                        {med.quantity}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <p className="p-3 text-sm text-gray-500 italic">Nenhuma medicação listada.</p>
-            )}
-          </div>
+          {typeof getMedicationName === 'function' &&
+          Array.isArray(medications) ? (
+            <ul className="list-disc list-inside text-gray-600 space-y-1 pl-1 max-h-32 overflow-y-auto border rounded p-2 bg-gray-50 text-xs">
+              {record?.medications?.length > 0 ? (
+                record.medications.map((medItem, index) => (
+                  <li key={medItem.recordMedId || index}>
+                    {getMedicationName(medItem.medicationId, medications) ||
+                      `ID ${medItem.medicationId} não encontrado`}
+                    {medItem.quantity && ` (${medItem.quantity})`}
+                  </li>
+                ))
+              ) : (
+                <li className="text-gray-500 italic">Nenhuma medicação.</li>
+              )}
+            </ul>
+          ) : (
+            <p className="text-red-500 text-xs">
+              Erro: Dados de medicação indisponíveis.
+            </p> 
+          )}
         </div>
+      </div>
+      <div className="mb-6">
+        <label
+          htmlFor="deliveryDateAttended"
+          className="block text-sm font-medium text-gray-700 mb-1"
+        >
+          Confirmar Data da Entrega
+        </label>
+        <input
+          id="deliveryDateAttended"
+          type="date"
+          value={deliveryDate}
+          onChange={(e) => setDeliveryDate(e.target.value)}
+          className="w-full p-2 border rounded border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm"
+          max={today} 
+          required
+        />
+        
+        <p className="text-xs text-gray-500 mt-1">
+          Aviso: Não é permitido selecionar datas futuras.
+        </p>
 
-        {/* Campo: Data da Entrega */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Data/Hora da Entrega
-          </label>
-          <input
-            type="datetime-local"
-            value={deliveryDate}
-            onChange={(e) => setDeliveryDate(e.target.value)}
-            disabled={isLoading}
-            className="w-full p-2.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-          />
-        </div>
+      </div>
 
-        {/* Campo: Observação */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Observações (Opcional)
-          </label>
-          <textarea
-            value={observation}
-            onChange={(e) => setObservation(e.target.value)}
-            disabled={isLoading}
-            placeholder="Quem recebeu? Alguma observação?"
-            className="w-full p-2.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 outline-none resize-none"
-            rows="2"
-          />
-        </div>
-
-        {/* Botões */}
-        <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-          <button
-            onClick={onClose}
-            disabled={isLoading}
-            className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50"
-          >
-            Cancelar
-          </button>
-          
-          <button
-            onClick={handleConfirmClick}
-            disabled={isLoading || !deliveryDate}
-            className={`
-              px-4 py-2 rounded-md font-medium text-white flex items-center justify-center gap-2 min-w-[130px] transition-all
-              ${(isLoading)
-                ? 'bg-green-400 cursor-not-allowed' 
-                : 'bg-green-600 hover:bg-green-700 active:bg-green-800'}
-            `}
-          >
-            {isLoading ? (
-              <>
-                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                <span>Salvando...</span>
-              </>
-            ) : (
-              <>
-                <span>{icons.check}</span>
-                <span>Confirmar</span>
-              </>
-            )}
-          </button>
-        </div>
+      <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+        <button
+          type="button"
+          onClick={onClose}
+          className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 font-medium text-sm transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={isSaving}
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          onClick={handleConfirmClick}
+          className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 font-medium text-sm transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 flex items-center justify-center gap-2"
+          disabled={!deliveryDate || !recordId || isSaving}
+        >
+          {isSaving ? (
+            <span className="w-5 h-5 animate-spin">{icons.spinner}</span>
+          ) : (
+            <span className="w-5 h-5">{icons.check}</span>
+          )}
+          {isSaving ? 'Confirmando...' : 'Confirmar Entrega'}
+        </button>
       </div>
     </Modal>
   );
