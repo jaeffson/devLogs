@@ -1,16 +1,13 @@
-// src/components/common/AttendRecordModal.jsx
 import React, { useState, useEffect } from 'react';
 import { Modal } from './Modal';
 import { icons } from '../../utils/icons';
 
-// Função auxiliar para data (mantendo sua lógica original)
+// Função auxiliar para pegar a data atual no formato YYYY-MM-DD
 const getLocalDateString = (date = new Date()) => {
   const year = date.getFullYear();
   const month = (date.getMonth() + 1).toString().padStart(2, '0');
   const day = date.getDate().toString().padStart(2, '0');
-  const hours = date.getHours().toString().padStart(2, '0');
-  const minutes = date.getMinutes().toString().padStart(2, '0');
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
+  return `${year}-${month}-${day}`;
 };
 
 export function AttendRecordModal({
@@ -18,126 +15,119 @@ export function AttendRecordModal({
   onConfirm,
   onClose,
   getPatientName,
-  medications = [], // Lista de medicações
   getMedicationName, 
-  isSaving, // Prop vinda do pai
+  isSaving,
 }) {
-  // Estado local para controlar o spinner interno
+  // Estado local para controlar o spinner
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const [deliveryDate, setDeliveryDate] = useState('');
-  const [observation, setObservation] = useState('');
+  // Define a data inicial como hoje
+  const today = getLocalDateString();
+  const [deliveryDate, setDeliveryDate] = useState(today);
 
-  // Inicializa os dados ao abrir o modal
+  // ID do registro para validação
+  const recordId = record?._id || record?.id;
+
+  // Atualiza a data sempre que o modal abre
   useEffect(() => {
     if (record) {
-      setDeliveryDate(getLocalDateString());
-      setObservation('');
+      setDeliveryDate(today);
       setIsSubmitting(false);
     }
-  }, [record]);
+  }, [record, today]);
 
+  // Se não tiver registro, não mostra nada
   if (!record) return null;
 
   const patientName = typeof getPatientName === 'function'
     ? getPatientName(record.patientId)
     : (record.patientName || 'Paciente');
 
-  // Lógica de confirmação com suporte a async/await para o spinner
   const handleConfirmClick = async () => {
-    if (!deliveryDate) return;
+    if (!recordId || !deliveryDate) return;
 
-    setIsSubmitting(true); // Ativa o spinner
+    setIsSubmitting(true);
 
     try {
-      // Chama a função original passando os dados
+      // Executa a confirmação (espera a Promise se for async)
       await onConfirm({
-        recordId: record._id || record.id,
-        deliveryDate,
-        observation
+        recordId,
+        deliveryDate
       });
-      // Nota: Não fechamos o modal aqui, deixamos o pai controlar ou fechar após sucesso
+      // Fecha o modal após sucesso (opcional, depende se o pai fecha)
+      onClose();
     } catch (error) {
       console.error("Erro ao confirmar:", error);
     } finally {
-      setIsSubmitting(false); // Desativa o spinner se der erro
+      setIsSubmitting(false);
     }
   };
 
-  // O botão fica em loading se o pai disser (isSaving) ou se o estado local disser (isSubmitting)
+  // Combina loading do pai (isSaving) com loading local (isSubmitting)
   const isLoading = isSaving || isSubmitting;
 
   return (
     <Modal onClose={onClose} title="Confirmar Entrega">
       <div className="space-y-4">
         
-        {/* 1. Informações do Paciente */}
+        {/* Info do Paciente */}
         <div className="bg-blue-50 p-3 rounded-md border border-blue-100">
           <p className="text-sm text-blue-800">
             Confirmar entrega para: <span className="font-bold">{patientName}</span>
           </p>
         </div>
 
-        {/* 2. Lista de Medicações (Mantendo a lógica de exibição) */}
-        {medications && medications.length > 0 && (
-          <div>
-            <h4 className="text-sm font-semibold text-gray-700 mb-2">Medicações:</h4>
-            <div className="bg-gray-50 rounded border border-gray-200 max-h-32 overflow-y-auto">
-              <ul className="divide-y divide-gray-200">
-                {medications.map((med, idx) => {
-                  const medName = getMedicationName 
-                    ? getMedicationName(med.medicationId) 
-                    : (med.medicationName || 'Medicação');
-                  return (
-                    <li key={idx} className="px-3 py-2 text-sm flex justify-between items-center">
-                      <span className="text-gray-700">{medName}</span>
-                      <span className="bg-white px-2 py-0.5 rounded border text-xs font-medium text-gray-600">
-                        {med.quantity}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
+        {/* Lista de Medicações DO REGISTRO (Lógica original restaurada) */}
+        {record.medications && record.medications.length > 0 && (
+          <div className="bg-gray-50 p-3 rounded-md border border-gray-200">
+            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+              Medicações Solicitadas:
+            </h4>
+            <ul className="space-y-2">
+              {record.medications.map((item, index) => {
+                // Tenta pegar o nome pela função ou usa o que já está no item
+                const name = getMedicationName 
+                  ? getMedicationName(item.medicationId) 
+                  : (item.medicationName || 'Medicação');
+                
+                return (
+                  <li key={index} className="flex justify-between text-sm">
+                    <span className="text-gray-700 font-medium">{name}</span>
+                    <span className="text-gray-500 bg-white px-2 rounded border border-gray-200 text-xs flex items-center">
+                      {item.quantity}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
         )}
 
-        {/* 3. Input de Data */}
+        {/* Input de Data */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Data/Hora da Entrega
+            Data da Entrega
           </label>
           <input
-            type="datetime-local"
+            type="date"
             value={deliveryDate}
             onChange={(e) => setDeliveryDate(e.target.value)}
             disabled={isLoading}
-            className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-green-500 outline-none"
+            max={today} 
+            className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm outline-none transition-colors"
           />
-        </div>
-
-        {/* 4. Input de Observação */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Observações (Opcional)
-          </label>
-          <textarea
-            value={observation}
-            onChange={(e) => setObservation(e.target.value)}
-            disabled={isLoading}
-            placeholder="Ex: Entregue para familiar..."
-            className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-green-500 outline-none resize-none"
-            rows="2"
-          />
+          <p className="text-xs text-gray-500 mt-1">
+            Aviso: Não é permitido selecionar datas futuras.
+          </p>
         </div>
 
         {/* Botões */}
-        <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+        <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 mt-2">
           <button
             type="button"
             onClick={onClose}
             disabled={isLoading}
-            className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 font-medium text-sm transition-colors disabled:opacity-50"
+            className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 font-medium text-sm transition-colors cursor-pointer disabled:opacity-50"
           >
             Cancelar
           </button>
@@ -145,15 +135,16 @@ export function AttendRecordModal({
           <button
             type="button"
             onClick={handleConfirmClick}
-            disabled={isLoading || !deliveryDate}
+            disabled={!deliveryDate || !recordId || isLoading}
             className={`
-              px-4 py-2 rounded-md font-medium text-white text-sm flex items-center justify-center gap-2 min-w-[120px] transition-colors
-              ${isLoading ? 'bg-green-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'}
+              px-4 py-2 rounded-md font-medium text-sm text-white flex items-center justify-center gap-2 min-w-[120px] transition-all
+              ${isLoading 
+                ? 'bg-green-400 cursor-not-allowed' 
+                : 'bg-green-600 hover:bg-green-700 active:bg-green-800 cursor-pointer'}
             `}
           >
             {isLoading ? (
               <>
-                {/* SPINNER AQUI */}
                 <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -162,7 +153,7 @@ export function AttendRecordModal({
               </>
             ) : (
               <>
-                <span>{icons.check || '✓'}</span>
+                <span className="w-4 h-4">{icons.check || '✓'}</span>
                 <span>Confirmar</span>
               </>
             )}
