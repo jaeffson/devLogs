@@ -1,139 +1,118 @@
 // src/components/common/AttendRecordModal.jsx
-// (ATUALIZADO: Corrigido bug de fuso horário na data 'today')
-
 import React, { useState } from 'react';
 import { Modal } from './Modal';
 import { icons } from '../../utils/icons';
 
-const getLocalDateString = (date = new Date()) => {
-  const year = date.getFullYear();
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
-  const day = date.getDate().toString().padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-// --- (FIM DA CORREÇÃO) ---
-
-export function AttendRecordModal({
+export default function AttendRecordModal({
+  isOpen,
+  onClose,
   record,
   onConfirm,
-  onClose,
-  getPatientName,
-  medications, 
-  getMedicationName, 
-  isSaving,
 }) {
-
-  // --- (INÍCIO DA CORREÇÃO) ---
-  // Usa a nova função para definir 'today'
-  const today = getLocalDateString(); 
-  // --- (FIM DA CORREÇÃO) ---
+  // Estado para controlar o loader
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const recordId = record?._id; 
-  const [deliveryDate, setDeliveryDate] = useState(today); 
+  const [deliveryDate, setDeliveryDate] = useState(
+    new Date().toISOString().slice(0, 16) // Padrão input datetime-local
+  );
+  const [observation, setObservation] = useState('');
 
-  const patientName =
-    typeof getPatientName === 'function'
-      ? getPatientName(record?.patientId)
-      : 'Paciente desconhecido';
+  if (!isOpen) return null;
 
-  const handleConfirmClick = () => {
-    if (!isSaving && recordId && deliveryDate) { 
-      console.log(
-        `[AttendRecordModal] Confirmando Atendimento para Record ID: ${recordId}, Data: ${deliveryDate}`
-      ); 
-      onConfirm(recordId, deliveryDate);
-    } else if (!recordId || !deliveryDate) {
-      alert('Erro: ID do registro ausente ou data de entrega inválida.');
+  const handleConfirm = async () => {
+    // 1. Ativa o loader
+    setIsSubmitting(true);
+
+    try {
+      // 2. Aguarda a conclusão da função onConfirm (que deve ser async ou retornar Promise)
+      await onConfirm({
+        recordId: record.id || record._id,
+        deliveryDate,
+        observation,
+      });
+
+      // 3. Se deu tudo certo (sem erro), fecha o modal automaticamente
+      onClose();
+      
+    } catch (error) {
+      console.error("Erro ao confirmar entrega:", error);
+      // Aqui o loader vai parar (no finally) e o modal continua aberto para o usuário tentar de novo
+    } finally {
+      // 4. Desativa o loader independentemente do resultado
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <Modal onClose={onClose}>
-      <div className="flex items-center gap-3 pb-4 border-b border-gray-200 mb-4">
-        <span className="w-6 h-6 text-green-600">
-            {icons.check}
-        </span>
-        <h2 className="text-lg font-semibold text-gray-800">
-          Confirmar Atendimento
-        </h2>
-      </div>
-
-      <div className="mb-4 space-y-2 text-sm">
-        <p>
-          Paciente: <strong className="text-gray-700">{patientName}</strong>
+    <Modal onClose={onClose} title="Confirmar Entrega de Medicação">
+      <div className="space-y-4">
+        <p className="text-gray-600">
+          Você está confirmando a entrega para o paciente{' '}
+          <span className="font-bold text-gray-800">{record?.patientName}</span>.
         </p>
-        
+
+        {/* Data da Entrega */}
         <div>
-          <h4 className="font-medium text-gray-700 mb-1">
-            Medicações Registradas:
-          </h4>
-          {typeof getMedicationName === 'function' &&
-          Array.isArray(medications) ? (
-            <ul className="list-disc list-inside text-gray-600 space-y-1 pl-1 max-h-32 overflow-y-auto border rounded p-2 bg-gray-50 text-xs">
-              {record?.medications?.length > 0 ? (
-                record.medications.map((medItem, index) => (
-                  <li key={medItem.recordMedId || index}>
-                    {getMedicationName(medItem.medicationId, medications) ||
-                      `ID ${medItem.medicationId} não encontrado`}
-                    {medItem.quantity && ` (${medItem.quantity})`}
-                  </li>
-                ))
-              ) : (
-                <li className="text-gray-500 italic">Nenhuma medicação.</li>
-              )}
-            </ul>
-          ) : (
-            <p className="text-red-500 text-xs">
-              Erro: Dados de medicação indisponíveis.
-            </p> 
-          )}
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Data/Hora da Entrega
+          </label>
+          <input
+            type="datetime-local"
+            value={deliveryDate}
+            onChange={(e) => setDeliveryDate(e.target.value)}
+            disabled={isSubmitting}
+            className="w-full p-2 border rounded border-gray-300 focus:ring-2 focus:ring-green-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+          />
         </div>
-      </div>
-      <div className="mb-6">
-        <label
-          htmlFor="deliveryDateAttended"
-          className="block text-sm font-medium text-gray-700 mb-1"
-        >
-          Confirmar Data da Entrega
-        </label>
-        <input
-          id="deliveryDateAttended"
-          type="date"
-          value={deliveryDate}
-          onChange={(e) => setDeliveryDate(e.target.value)}
-          className="w-full p-2 border rounded border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm"
-          max={today} 
-          required
-        />
-        
-        <p className="text-xs text-gray-500 mt-1">
-          Aviso: Não é permitido selecionar datas futuras.
-        </p>
 
-      </div>
+        {/* Observação */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Observações (Opcional)
+          </label>
+          <textarea
+            value={observation}
+            onChange={(e) => setObservation(e.target.value)}
+            disabled={isSubmitting}
+            className="w-full p-2 border rounded border-gray-300 focus:ring-2 focus:ring-green-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+            placeholder="Ex: Entregue para o filho do paciente..."
+            rows="3"
+          />
+        </div>
 
-      <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-        <button
-          type="button"
-          onClick={onClose}
-          className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 font-medium text-sm transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          disabled={isSaving}
-        >
-          Cancelar
-        </button>
-        <button
-          type="button"
-          onClick={handleConfirmClick}
-          className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 font-medium text-sm transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 flex items-center justify-center gap-2"
-          disabled={!deliveryDate || !recordId || isSaving}
-        >
-          {isSaving ? (
-            <span className="w-5 h-5 animate-spin">{icons.spinner}</span>
-          ) : (
-            <span className="w-5 h-5">{icons.check}</span>
-          )}
-          {isSaving ? 'Confirmando...' : 'Confirmar Entrega'}
-        </button>
+        {/* Botões de Ação */}
+        <div className="flex justify-end gap-3 mt-6 border-t pt-4">
+          <button
+            onClick={onClose}
+            disabled={isSubmitting}
+            className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
+          >
+            Cancelar
+          </button>
+          
+          <button
+            onClick={handleConfirm}
+            disabled={isSubmitting}
+            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 active:bg-green-800 disabled:bg-green-400 disabled:cursor-not-allowed font-medium flex items-center gap-2 transition-colors min-w-[120px] justify-center"
+          >
+            {isSubmitting ? (
+              <>
+                {/* SVG Spinner de Carregamento */}
+                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>Salvando...</span>
+              </>
+            ) : (
+              <>
+                {/* Ícone de Check normal */}
+                <span className="w-5 h-5">{icons.check || '✓'}</span>
+                <span>Confirmar</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </Modal>
   );
