@@ -1,71 +1,99 @@
 // src/components/common/AttendRecordModal.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Modal } from './Modal';
 import { icons } from '../../utils/icons';
 
-export function AttendRecordModal({
-  isOpen,
+export default function AttendRecordModal({
+  isOpen,         // Pode vir como isOpen ou apenas renderizado condicionalmente
   onClose,
   record,
   onConfirm,
+  getPatientName, // Mantendo compatibilidade com seu código
+  isSaving,       // Mantendo compatibilidade (mas vamos usar o estado interno)
 }) {
-  // Estado para controlar o loader
+  // Estado local para controlar o carregamento (Spinner)
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const [deliveryDate, setDeliveryDate] = useState(
-    new Date().toISOString().slice(0, 16) // Padrão input datetime-local
-  );
+  // Estados do formulário
+  const [deliveryDate, setDeliveryDate] = useState('');
   const [observation, setObservation] = useState('');
 
-  if (!isOpen) return null;
+  // Pega o nome do paciente de forma segura (usando sua prop ou o objeto record)
+  const patientName = typeof getPatientName === 'function' 
+    ? getPatientName(record?.patientId) 
+    : (record?.patientName || 'Paciente');
+
+  // Inicializa os dados quando o modal abre ou o registro muda
+  useEffect(() => {
+    if (record) {
+      // Define data/hora atual ajustada para o fuso horário local (para input datetime-local)
+      const now = new Date();
+      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+      setDeliveryDate(now.toISOString().slice(0, 16));
+      
+      setObservation('');
+      setIsSubmitting(false);
+    }
+  }, [record, isOpen]);
+
+  // Se não houver registro, não renderiza nada (proteção)
+  if (!record) return null;
 
   const handleConfirm = async () => {
-    // 1. Ativa o loader
+    if (!deliveryDate) return; // Validação básica
+
+    // 1. Ativa o loading
     setIsSubmitting(true);
 
     try {
-      // 2. Aguarda a conclusão da função onConfirm (que deve ser async ou retornar Promise)
+      // 2. Chama a função do pai e ESPERA (await) ela terminar
+      // O 'recordId' é passado garantindo que pegamos o _id ou id
       await onConfirm({
-        recordId: record.id || record._id,
+        recordId: record._id || record.id,
         deliveryDate,
         observation,
       });
 
-      // 3. Se deu tudo certo (sem erro), fecha o modal automaticamente
+      // 3. Se o pai não der erro, fechamos o modal
       onClose();
       
     } catch (error) {
       console.error("Erro ao confirmar entrega:", error);
-      // Aqui o loader vai parar (no finally) e o modal continua aberto para o usuário tentar de novo
+      // Se der erro, o modal continua aberto para o usuário tentar de novo
     } finally {
-      // 4. Desativa o loader independentemente do resultado
+      // 4. Desativa o loading (caso o modal não tenha fechado ou tenha dado erro)
       setIsSubmitting(false);
     }
   };
 
   return (
-    <Modal onClose={onClose} title="Confirmar Entrega de Medicação">
-      <div className="space-y-4">
-        <p className="text-gray-600">
-          Você está confirmando a entrega para o paciente{' '}
-          <span className="font-bold text-gray-800">{record?.patientName}</span>.
-        </p>
+    <Modal onClose={onClose} title="Confirmar Entrega">
+      <div className="space-y-5">
+        
+        {/* Mensagem de Confirmação */}
+        <div className="bg-blue-50 p-3 rounded-md border border-blue-100 flex items-start gap-3">
+          <span className="text-blue-600 mt-0.5 w-5 h-5 flex-shrink-0">{icons.info}</span>
+          <p className="text-sm text-blue-800">
+            Você está registrando a entrega de medicação para:<br/>
+            <span className="font-bold text-lg block mt-1">{patientName}</span>
+          </p>
+        </div>
 
-        {/* Data da Entrega */}
+        {/* Campo: Data/Hora */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Data/Hora da Entrega
+            Data e Hora da Entrega
           </label>
           <input
             type="datetime-local"
             value={deliveryDate}
             onChange={(e) => setDeliveryDate(e.target.value)}
-            disabled={isSubmitting}
-            className="w-full p-2 border rounded border-gray-300 focus:ring-2 focus:ring-green-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+            disabled={isSubmitting || isSaving}
+            className="w-full p-2.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500 disabled:bg-gray-100 disabled:text-gray-500 outline-none transition-all"
           />
         </div>
 
-        {/* Observação */}
+        {/* Campo: Observações */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Observações (Opcional)
@@ -73,31 +101,38 @@ export function AttendRecordModal({
           <textarea
             value={observation}
             onChange={(e) => setObservation(e.target.value)}
-            disabled={isSubmitting}
-            className="w-full p-2 border rounded border-gray-300 focus:ring-2 focus:ring-green-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-            placeholder="Ex: Entregue para o filho do paciente..."
+            disabled={isSubmitting || isSaving}
+            className="w-full p-2.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500 disabled:bg-gray-100 outline-none transition-all resize-none"
+            placeholder="Ex: Entregue para o filho(a)..."
             rows="3"
           />
         </div>
 
-        {/* Botões de Ação */}
-        <div className="flex justify-end gap-3 mt-6 border-t pt-4">
+        {/* Rodapé com Botões */}
+        <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 mt-2">
           <button
+            type="button"
             onClick={onClose}
-            disabled={isSubmitting}
-            className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
+            disabled={isSubmitting || isSaving}
+            className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 font-medium transition-colors disabled:opacity-50 cursor-pointer"
           >
             Cancelar
           </button>
           
           <button
+            type="button"
             onClick={handleConfirm}
-            disabled={isSubmitting}
-            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 active:bg-green-800 disabled:bg-green-400 disabled:cursor-not-allowed font-medium flex items-center gap-2 transition-colors min-w-[120px] justify-center"
+            disabled={isSubmitting || isSaving || !deliveryDate}
+            className={`
+              px-4 py-2 rounded-md font-medium text-white flex items-center justify-center gap-2 min-w-[140px] transition-all shadow-sm
+              ${(isSubmitting || isSaving)
+                ? 'bg-green-400 cursor-not-allowed' 
+                : 'bg-green-600 hover:bg-green-700 active:bg-green-800 cursor-pointer'}
+            `}
           >
-            {isSubmitting ? (
+            {(isSubmitting || isSaving) ? (
               <>
-                {/* SVG Spinner de Carregamento */}
+                {/* SVG Spinner */}
                 <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -106,8 +141,7 @@ export function AttendRecordModal({
               </>
             ) : (
               <>
-                {/* Ícone de Check normal */}
-                <span className="w-5 h-5">{icons.check || '✓'}</span>
+                <span className="w-5 h-5">{icons.check}</span>
                 <span>Confirmar</span>
               </>
             )}
