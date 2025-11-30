@@ -1,18 +1,18 @@
 // src/pages/MedicationsPage.jsx 
-// (ATUALIZADO: Com Paginação e Estilo Profissional Refinado)
+// (CORRIGIDO: Conexão Local e API Centralizada)
 
 import React, { useState, useEffect, useCallback } from 'react'; 
-import axios from 'axios'; 
+// CORREÇÃO 1: Importamos a instância 'api' em vez do axios direto
+import api from '../services/api'; 
 
 // --- Imports de Componentes ---
 import MedicationForm from '../components/forms/MedicationForm';
 import { DestructiveConfirmModal } from '../components/common/DestructiveConfirmModal';
 import { icons } from '../utils/icons';
 
-// URL base da API
-const API_BASE_URL = 'https://backendmedlog-4.onrender.com/api'; 
+// CORREÇÃO 2: Removemos a constante API_BASE_URL. O api.js gerencia isso.
 
-// Hook customizado simples para "atrasar" a busca (evita uma chamada API a cada tecla)
+// Hook customizado simples para "atrasar" a busca
 function useDebounce(value, delay) {
     const [debouncedValue, setDebouncedValue] = useState(value);
     useEffect(() => {
@@ -44,7 +44,7 @@ export default function MedicationsPage({
     const [isLoading, setIsLoading] = useState(false); 
 
     // --- Debounce ---
-    const debouncedSearchTerm = useDebounce(searchTerm, 400); // 400ms de atraso
+    const debouncedSearchTerm = useDebounce(searchTerm, 400);
 
     // --- Helper de Permissão ---
     const isAdmin = user?.role === 'admin';
@@ -55,7 +55,8 @@ export default function MedicationsPage({
     const fetchMedications = useCallback(async () => {
         setIsLoading(true);
         try {
-            const response = await axios.get(`${API_BASE_URL}/medications`, {
+            // CORREÇÃO 3: Uso de api.get e caminho relativo
+            const response = await api.get('/medications', {
                 params: {
                     page: currentPage,
                     search: debouncedSearchTerm
@@ -70,12 +71,12 @@ export default function MedicationsPage({
         }
     }, [addToast, currentPage, debouncedSearchTerm]); 
 
-    // Carregamento inicial e ao mudar de página ou busca
+    // Carregamento inicial
     useEffect(() => {
         fetchMedications();
     }, [fetchMedications]);
     
-    // Reseta para a página 1 quando o usuário digita uma nova busca
+    // Reseta página na busca
     useEffect(() => {
         setCurrentPage(1);
     }, [debouncedSearchTerm]);
@@ -103,11 +104,13 @@ export default function MedicationsPage({
             const medId = medData._id || medData.id;
             
             if(medId) {
-                await axios.put(`${API_BASE_URL}/medications/${medId}`, { name: cleanedName });
+                // CORREÇÃO 4: api.put com caminho relativo
+                await api.put(`/medications/${medId}`, { name: cleanedName });
                 addToast('Medicação atualizada com sucesso!', 'success');
                 addLog?.(user?.name, `atualizou medicação ${cleanedName} (ID: ${medId})`);
             } else {
-                await axios.post(`${API_BASE_URL}/medications`, { name: cleanedName });
+                // CORREÇÃO 5: api.post com caminho relativo
+                await api.post('/medications', { name: cleanedName });
                 addToast('Medicação cadastrada com sucesso!', 'success');
                 addLog?.(user?.name, `cadastrou nova medicação: ${cleanedName}`);
             }
@@ -140,7 +143,8 @@ export default function MedicationsPage({
         const medId = med._id || med.id;
         
         try {
-            await axios.delete(`${API_BASE_URL}/medications/${medId}`);
+            // CORREÇÃO 6: api.delete com caminho relativo
+            await api.delete(`/medications/${medId}`);
             addToast('Medicação excluída com sucesso!', 'success');
             addLog?.(user?.name, `excluiu medicação ${med?.name || ''} (ID: ${medId})`);
             
@@ -167,7 +171,7 @@ export default function MedicationsPage({
         }
     }
     
-    // Variáveis auxiliares para os estados
+    // Variáveis auxiliares
     const hasMedications = medicationData.data.length > 0;
     const isSearchActive = debouncedSearchTerm.length > 0;
 
@@ -179,7 +183,6 @@ export default function MedicationsPage({
                     Gerenciar Medicações
                 </h2>
                 
-                {/* --- (ESTILO BOTÃO PRIMÁRIO) --- */}
                 {canCreateOrEdit && (
                   <button
                       onClick={() => handleOpenModal()}
@@ -189,10 +192,9 @@ export default function MedicationsPage({
                       <span className="w-4 h-4">{icons.plus}</span> Nova Medicação
                   </button>
                 )}
-                {/* --- (FIM ESTILO) --- */}
             </div>
 
-            {/* --- (ESTILO CAMPO DE BUSCA) --- */}
+            {/* Campo de Busca */}
             <div className="mb-4 relative">
                 <input
                     type="text"
@@ -206,9 +208,8 @@ export default function MedicationsPage({
                     <span className="w-5 h-5">{icons.search}</span>
                 </div>
             </div>
-            {/* --- (FIM ESTILO) --- */}
 
-            {/* Lógica de Carregamento e Estado Vazio */}
+            {/* Lista e Estados */}
             {isLoading ? (
                  <p className="text-center text-gray-500 py-10 text-base">Carregando medicações...</p>
             ) : !hasMedications && isSearchActive ? (
@@ -216,13 +217,11 @@ export default function MedicationsPage({
                     Nenhuma medicação encontrada para "<strong>{debouncedSearchTerm}</strong>".
                 </p>
             ) : !hasMedications && !isSearchActive ? (
-                // Tela Vazia
                 <div className="text-center text-gray-500 py-16 px-6">
                     <div className="mb-4 text-gray-300 w-16 h-16 mx-auto">{icons.pill || icons.alert}</div> 
                     <h3 className="font-semibold text-lg text-gray-700 mb-1">Nenhuma Medicação Cadastrada</h3>
                     <p className="text-sm mb-4">Comece cadastrando a primeira medicação no sistema.</p>
                     
-                    {/* --- (ESTILO BOTÃO ESTADO VAZIO) --- */}
                     {canCreateOrEdit && (
                       <button 
                           onClick={() => handleOpenModal()} 
@@ -231,14 +230,11 @@ export default function MedicationsPage({
                           <span className="w-4 h-4">{icons.plus}</span> Cadastrar Medicação
                       </button>
                     )}
-                    {/* --- (FIM ESTILO) --- */}
                 </div>
             ) : (
-                // Tabela de resultados
                 <>
                     <div className="overflow-x-auto border border-gray-200 rounded-lg">
                         <table className="min-w-full bg-white text-sm table-auto">
-                            {/* --- (ESTILO CABEÇALHO TABELA) --- */}
                             <thead className="bg-gray-50 sticky top-0 z-10">
                                 <tr>
                                     <th className="w-24 text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th> 
@@ -250,7 +246,6 @@ export default function MedicationsPage({
                                     )}
                                 </tr>
                             </thead>
-                            {/* --- (FIM ESTILO) --- */}
                             
                             <tbody className="divide-y divide-gray-200">
                                 {medicationData.data.map(med => {
@@ -261,7 +256,6 @@ export default function MedicationsPage({
                                         <td className="py-3 px-4 font-medium text-gray-800 break-words">{med.name}</td>
                                         <td className="py-3 px-4 text-gray-600 whitespace-nowrap">{formatDate(med.createdAt)}</td> 
                                         
-                                        {/* --- (ESTILO BOTÕES AÇÃO) --- */}
                                         {canCreateOrEdit && (
                                           <td className="py-2.5 px-4 whitespace-nowrap">
                                               <div className="flex items-center gap-2">
@@ -286,14 +280,12 @@ export default function MedicationsPage({
                                               </div>
                                           </td>
                                         )}
-                                        {/* --- (FIM ESTILO) --- */}
                                     </tr>
                                 )})}
                             </tbody>
                         </table>
                     </div>
 
-                    {/* --- (ESTILO PAGINAÇÃO) --- */}
                     {medicationData.totalPages > 1 && (
                         <div className="flex justify-between items-center mt-4 text-sm">
                             <button
@@ -317,11 +309,9 @@ export default function MedicationsPage({
                             </button>
                         </div>
                     )}
-                    {/* --- (FIM ESTILO) --- */}
                 </>
             )}
 
-            {/* Modais (Sem mudanças) */}
             {isModalOpen && (
                 <MedicationForm
                     medication={editingMedication} 

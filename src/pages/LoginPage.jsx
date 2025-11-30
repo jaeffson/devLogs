@@ -1,14 +1,11 @@
 // src/pages/LoginPage.jsx
-// (DESIGN ATUALIZADO: Usando sua nova imagem de logo)
+// (DESIGN ATUALIZADO & CORREÇÃO DE CONEXÃO LOCAL)
 
 import React, { useState } from 'react';
-import axios from 'axios';
+// CORREÇÃO 1: Importamos sua instância configurada 'api' em vez do axios puro
+import api from '../services/api'; 
 import logo from '../assents/medlogs-logo.png'
 
-// --- URL BASE DA API (Mantida) ---
-const API_BASE_URL = 'https://backendmedlog-4.onrender.com/api';
-
-// --- ÍCONES (Mantidos) ---
 const UserIcon = (
   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
 );
@@ -21,10 +18,8 @@ const LockIcon = (
 const RoleIcon = (
   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
 );
-// (O BrandIcon SVG foi removido, pois usaremos a imagem)
 
 
-// --- LÓGICA DO COMPONENTE (100% MANTIDA) ---
 export default function LoginPage({ onLogin, addToast, addLog }) {
   const [isLoginView, setIsLoginView] = useState(true);
   const [email, setEmail] = useState('');
@@ -62,7 +57,8 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
 
     try {
       if (isLoginView) {
-        const response = await axios.post(`${API_BASE_URL}/auth/login`, {
+
+        const response = await api.post('/auth/login', {
           email: credentials.email,
           password: credentials.password
         });
@@ -80,7 +76,8 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
           return;
         }
       } else {
-        await axios.post(`${API_BASE_URL}/auth/register`, credentials);
+        // CORREÇÃO 4: Mesma coisa para o registro
+        await api.post('/auth/register', credentials);
         addToast('Cadastro realizado! Aguarde aprovação.', 'success');
         addLog?.('Novo Usuário', `${credentials.name} (${credentials.email}) realizou cadastro e aguarda aprovação.`);
         setIsLoginView(true);
@@ -104,7 +101,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
   // --- FIM DA LÓGICA ---
 
 
-  // --- (INÍCIO DO DESIGN COM A NOVA LOGO) ---
+  // --- (DESIGN COM A NOVA LOGO - MANTIDO) ---
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-100 to-white flex items-center justify-center p-4">
       
@@ -113,13 +110,12 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
         <div className="text-center p-6">
           <div className="inline-block mb-3">
             
-            {/* PASSO 2: Substitua o {BrandIcon} pela tag <img> */}
             <img 
               src={logo} 
               alt="MedLogs Logo" 
-              width="100" // Você pode ajustar o tamanho
+              width="100" 
               height="100" 
-              className="mx-auto" // Garante que a imagem fique centralizada
+              className="mx-auto" 
             />
             
           </div>
@@ -129,7 +125,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
           </p>
         </div>
 
-        {/* Formulário (Padding reduzido para p-6) */}
+        {/* Formulário */}
         <div className="p-6 pt-0">
           <form onSubmit={handleAuth} noValidate>
             

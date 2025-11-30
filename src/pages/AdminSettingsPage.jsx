@@ -1,6 +1,9 @@
 // src/pages/AdminSettingsPage.jsx
+// (CORRIGIDO: Conexão Local e API Centralizada)
+
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import axios from 'axios'; // <-- Importar Axios
+// CORREÇÃO 1: Importamos 'api' em vez de axios direto
+import api from '../services/api'; 
 
 // --- Imports de Componentes ---
 import UserForm from '../components/forms/UserForm';
@@ -10,8 +13,7 @@ import { StatusBadge } from '../components/common/StatusBadge';
 import  {AnnualBudgetChart}  from '../components/common/AnnualBudgetChart';
 import { icons } from '../utils/icons';
 
-// URL base da API (deve ser a mesma definida no App.jsx)
-const API_BASE_URL = 'https://backendmedlog-4.onrender.com/api'; 
+// CORREÇÃO 2: Removemos a constante API_BASE_URL. O api.js gerencia isso.
 
 // --- Componente da Página ---
 export default function AdminSettingsPage({
@@ -26,13 +28,11 @@ export default function AdminSettingsPage({
     const [isUserModalOpen, setIsUserModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
     
-    // --- MUDANÇA: Estado para o novo modal ---
+    // --- Estado para o novo modal ---
     const [deleteConfirmation, setDeleteConfirmation] = useState({ isOpen: false, userToDelete: null });
     const [statusConfirmation, setStatusConfirmation] = useState({ isOpen: false, message: '', data: null, onConfirm: null });
 
     const [newBudgetValue, setNewBudgetValue] = useState(String(annualBudget || '0'));
-
-    // A função 'refetchUsers' local foi REMOVIDA.
 
     // Sincroniza o estado interno (newBudgetValue) quando a prop annualBudget mudar
     useEffect(() => {
@@ -73,13 +73,13 @@ export default function AdminSettingsPage({
         try {
             let response;
             if(userId) {
-                // ROTA PUT para atualização
-                response = await axios.put(`${API_BASE_URL}/users/${userId}`, cleanedUserData);
+                // CORREÇÃO 3: api.put
+                response = await api.put(`/users/${userId}`, cleanedUserData);
                 addToast('Usuário atualizado com sucesso!', 'success');
                 addLog?.(user?.name, `atualizou dados do usuário ${cleanedUserData.name}`);
             } else {
-                // ROTA POST para criação
-                response = await axios.post(`${API_BASE_URL}/users`, cleanedUserData);
+                // CORREÇÃO 4: api.post
+                response = await api.post('/users', cleanedUserData);
                 addToast('Usuário criado com sucesso!', 'success');
                 addLog?.(user?.name, `criou usuário: ${cleanedUserData.name}`);
             }
@@ -112,8 +112,8 @@ export default function AdminSettingsPage({
         const newStatus = (userToToggle.status !== 'active') ? 'active' : 'inactive';
         
         try {
-            // ROTA PATCH de status
-            await axios.patch(`${API_BASE_URL}/users/${userId}/status`, { status: newStatus });
+            // CORREÇÃO 5: api.patch
+            await api.patch(`/users/${userId}/status`, { status: newStatus });
             
             addToast(`Usuário ${newStatus === 'active' ? 'ativado' : 'desativado'}!`, 'success');
             addLog?.(user?.name, `${newStatus === 'active' ? 'ativou' : 'desativou'} usuário ${userToToggle?.name}`);
@@ -146,8 +146,8 @@ export default function AdminSettingsPage({
         const userId = userToDelete._id || userToDelete.id;
 
         try {
-            // ROTA DELETE
-            await axios.delete(`${API_BASE_URL}/users/${userId}`);
+            // CORREÇÃO 6: api.delete
+            await api.delete(`/users/${userId}`);
 
             addToast(`Usuário excluído.`, 'success');
             addLog?.(user?.name, `EXCLUIU usuário ${userToDelete?.name}`);
@@ -164,10 +164,7 @@ export default function AdminSettingsPage({
     // --- FIM DAS FUNÇÕES CRUD DE USUÁRIOS ---
 
 
-    // --- (INÍCIO DA CORREÇÃO) ---
-    // Esta função agora chama a API diretamente (POST) e,
-    // em caso de sucesso, chama a 'handleUpdateBudget' do App.jsx
-    // (que apenas atualiza o estado).
+    // --- FUNÇÃO DE ORÇAMENTO (CORRIGIDA) ---
     const handleBudgetSave = async () => {
         // 1. Limpa a string (Ex: "5.000,00" -> "5000.00")
         const cleanedValue = newBudgetValue.replace(/\./g, '').replace(',', '.');
@@ -181,8 +178,8 @@ export default function AdminSettingsPage({
         }
 
         try {
-            // 2. Envia o valor numérico limpo para a API
-            await axios.post(`${API_BASE_URL}/settings/budget`, {
+            // CORREÇÃO 7: api.post com caminho relativo
+            await api.post('/settings/budget', {
                 budget: value 
             });
 
@@ -195,7 +192,6 @@ export default function AdminSettingsPage({
             addToast('Falha ao salvar orçamento no servidor.', 'error');
         }
     };
-    // --- (FIM DA CORREÇÃO) ---
 
     const sortedActivityLog = useMemo(() =>
         [...activityLog].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)),

@@ -6,7 +6,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
-// --- Imports (Corrigidos) ---
+import api from '../services/api';
 import { Modal, ConfirmModal } from '../components/common/Modal';
 import PatientForm from '../components/forms/PatientForm';
 import RecordForm from '../components/forms/RecordForm';
@@ -22,9 +22,7 @@ import { icons } from '../utils/icons';
 import { getMedicationName } from '../utils/helpers';
 import { useDebounce } from '../hooks/useDebounce';
 
-// --- URL BASE DA API ---
-const API_BASE_URL = 'https://backendmedlog-4.onrender.com/api';
-// -----------------------
+
 
 // --- (NOVO) Constante de 30 dias ---
 const MS_IN_30_DAYS = 30 * 24 * 60 * 60 * 1000;
@@ -411,19 +409,14 @@ export default function ProfessionalDashboardPage({
         return dateB - dateA;
       });
   }, [records]);
-
+// --- Ações de API (CORRIGIDAS) ---
   const handleSavePatient = async (patientData) => {
     try {
       let response;
       const patientId = patientData._id || patientData.id;
       const patientName = patientData.name;
-
-      const cleanedCPF = patientData.cpf
-        ? String(patientData.cpf).trim()
-        : null;
-      const cleanedSusCard = patientData.susCard
-        ? String(patientData.susCard).trim()
-        : null;
+      const cleanedCPF = patientData.cpf ? String(patientData.cpf).trim() : null;
+      const cleanedSusCard = patientData.susCard ? String(patientData.susCard).trim() : null;
 
       const payload = {
         name: patientName,
@@ -435,30 +428,23 @@ export default function ProfessionalDashboardPage({
       };
 
       if (patientId && patientId !== 'new') {
-        response = await axios.put(
-          `${API_BASE_URL}/patients/${patientId}`,
-          payload
-        );
+        // CORREÇÃO: Usando api.put e caminho relativo
+        response = await api.put(`/patients/${patientId}`, payload);
         addToast('Paciente atualizado com sucesso!', 'success');
         addLog?.(user?.name, `atualizou dados do paciente ${patientName}`);
       } else {
-        response = await axios.post(`${API_BASE_URL}/patients`, payload);
+        // CORREÇÃO: Usando api.post
+        response = await api.post('/patients', payload);
         addToast('Paciente cadastrado com sucesso!', 'success');
         addLog?.(user?.name, `cadastrou novo paciente ${patientName}`);
       }
 
       await syncGlobalState(setPatients, 'pacientes');
-
       const updatedPatient = response.data;
       setSelectedPatient(updatedPatient);
     } catch (error) {
-      console.error(
-        '[API Error] Salvar Paciente:',
-        error.response?.data || error
-      );
-      const msg =
-        error.response?.data?.message ||
-        'Erro ao salvar paciente. Tente novamente.';
+      console.error('[API Error] Salvar Paciente:', error.response?.data || error);
+      const msg = error.response?.data?.message || 'Erro ao salvar paciente. Tente novamente.';
       addToast(msg, 'error');
     } finally {
       setIsPatientModalOpen(false);
@@ -468,22 +454,16 @@ export default function ProfessionalDashboardPage({
 
   const handleDeletePatient = async (patientId) => {
     const patient = patients.find((p) => (p._id || p.id) === patientId);
-
     try {
-      await axios.delete(`${API_BASE_URL}/patients/${patientId}`);
-
+      // CORREÇÃO: Usando api.delete
+      await api.delete(`/patients/${patientId}`);
       addToast('Paciente excluído!', 'success');
       addLog?.(user?.name, `excluiu o paciente ${patient?.name}`);
-
       await syncGlobalState(setPatients, 'pacientes');
-
       setSelectedPatient(null);
     } catch (error) {
       console.error('[API Error] Excluir Paciente:', error);
-      addToast(
-        'Falha ao excluir paciente. Pode haver registros associados.',
-        'error'
-      );
+      addToast('Falha ao excluir paciente. Pode haver registros associados.', 'error');
     }
   };
 
@@ -492,30 +472,20 @@ export default function ProfessionalDashboardPage({
       let response;
       const recordId = recordData._id || recordData.id;
       const patientName = getPatientNameById(recordData.patientId);
-
       const profissionalIdentifier = user?._id || user?.id;
       if (!profissionalIdentifier) {
-        addToast(
-          'Erro crítico: ID do profissional não encontrado. Faça login novamente.',
-          'error'
-        );
+        addToast('Erro crítico: ID do profissional não encontrado. Faça login novamente.', 'error');
         throw new Error('ID do profissional não encontrado.');
       }
 
       const cleanedMedications = (recordData.medications || [])
         .map((med) => {
           const id = med._id || med.id || med.medicationId;
-          const finalMedicationId =
-            typeof id === 'object' && id !== null ? id._id || id.id : id;
-
+          const finalMedicationId = typeof id === 'object' && id !== null ? id._id || id.id : id;
           if (!finalMedicationId) {
-            console.warn(
-              'Item de medicação inválido descartado (sem ID):',
-              med
-            );
+            console.warn('Item de medicação inválido descartado (sem ID):', med);
             return null;
           }
-
           return {
             medicationId: String(finalMedicationId),
             quantity: med.quantity || 'N/A',
@@ -534,32 +504,24 @@ export default function ProfessionalDashboardPage({
       };
 
       if (recordId && recordId !== 'new') {
-        response = await axios.put(
-          `${API_BASE_URL}/records/${recordId}`,
-          payload
-        );
+        // CORREÇÃO: api.put
+        response = await api.put(`/records/${recordId}`, payload);
         addToast('Registro atualizado!', 'success');
         addLog?.(user?.name, `atualizou registro para ${patientName}`);
       } else {
-        response = await axios.post(`${API_BASE_URL}/records`, payload);
+        // CORREÇÃO: api.post
+        response = await api.post('/records', payload);
         addToast('Registro salvo!', 'success');
         addLog?.(user?.name, `criou registro para ${patientName}`);
       }
-
       await syncGlobalState(setRecords, 'registros');
     } catch (error) {
-      console.error(
-        '[API Error] Salvar Registro:',
-        error.response?.data || error.message
-      );
-      const msg =
-        error.response?.data?.message ||
-        'Erro ao salvar registro. Verifique os dados.';
+      console.error('[API Error] Salvar Registro:', error.response?.data || error.message);
+      const msg = error.response?.data?.message || 'Erro ao salvar registro. Verifique os dados.';
       addToast(msg, 'error');
     } finally {
       setIsRecordModalOpen(false);
       setEditingRecord(null);
-
       setQuickAddPatientId('');
       setSelectedPatientName('');
       setQuickSearchTerm('');
@@ -571,16 +533,11 @@ export default function ProfessionalDashboardPage({
 
   const handleDeleteRecord = async (recordId) => {
     const record = records.find((r) => (r._id || r.id) === recordId);
-
     try {
-      await axios.delete(`${API_BASE_URL}/records/${recordId}`);
-
+      // CORREÇÃO: api.delete
+      await api.delete(`/records/${recordId}`);
       addToast('Registro excluído!', 'success');
-      addLog?.(
-        user?.name,
-        `excluiu registro de ${getPatientNameById(record?.patientId)}`
-      );
-
+      addLog?.(user?.name, `excluiu registro de ${getPatientNameById(record?.patientId)}`);
       await syncGlobalState(setRecords, 'registros');
     } catch (error) {
       console.error('[API Error] Excluir Registro:', error);
@@ -590,21 +547,16 @@ export default function ProfessionalDashboardPage({
 
   const handleAddNewMedication = async (medData) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/medications`, {
-        name: medData.name.trim(),
-      });
+      // CORREÇÃO: api.post
+      const response = await api.post('/medications', { name: medData.name.trim() });
       const newMed = response.data;
-
       addToast('Medicação cadastrada!', 'success');
       addLog?.(user?.name, `cadastrou medicação: ${newMed.name}`);
-
       await syncGlobalState(setMedications, 'medicações');
-
       return newMed;
     } catch (error) {
       console.error('[API Error] Nova Medicação:', error);
-      const msg =
-        error.response?.data?.message || 'Erro ao cadastrar medicação.';
+      const msg = error.response?.data?.message || 'Erro ao cadastrar medicação.';
       addToast(msg, 'error');
       return null;
     }
@@ -615,16 +567,14 @@ export default function ProfessionalDashboardPage({
       addToast('Selecione uma data.', 'error');
       return;
     }
-
     try {
-      await axios.patch(`${API_BASE_URL}/records/${recordId}/status`, {
+      // CORREÇÃO: api.patch
+      await api.patch(`/records/${recordId}/status`, {
         status: 'Atendido',
         deliveryDate: deliveryDateStr,
       });
-
       addToast('Registro Atendido!', 'success');
       addLog?.(user?.name, `marcou registro (ID: ${recordId}) como Atendido`);
-
       await syncGlobalState(setRecords, 'registros');
     } catch (error) {
       console.error('[API Error] Atualizar Status:', error);
@@ -636,18 +586,14 @@ export default function ProfessionalDashboardPage({
 
   const handleCancelRecordStatus = async (recordId, cancelReason) => {
     try {
-      await axios.patch(`${API_BASE_URL}/records/${recordId}/status`, {
+      // CORREÇÃO: api.patch
+      await api.patch(`/records/${recordId}/status`, {
         status: 'Cancelado',
         deliveryDate: null,
         cancelReason: cancelReason,
       });
-
       addToast('Registro Cancelado.', 'info');
-      addLog?.(
-        user?.name,
-        `cancelou registro (ID: ${recordId}). Motivo: ${cancelReason}`
-      );
-
+      addLog?.(user?.name, `cancelou registro (ID: ${recordId}). Motivo: ${cancelReason}`);
       await syncGlobalState(setRecords, 'registros');
     } catch (error) {
       console.error('[API Error] Cancelar Status:', error);
@@ -656,44 +602,30 @@ export default function ProfessionalDashboardPage({
   };
 
   const handleCloneRecord = (recordToClone) => {
-    // 1. Encontra o paciente do registro a ser clonado
     const patientForRecord = Array.isArray(patients)
       ? patients.find((p) => (p._id || p.id) === recordToClone.patientId)
       : null;
-
     if (!patientForRecord) {
       addToast('Paciente deste registro não foi encontrado.', 'error');
       return;
     }
-
-    // 2. Cria uma cópia profunda do registro para não modificar o original
     const clonedData = JSON.parse(JSON.stringify(recordToClone));
-
-    // 3. Prepara o objeto clonado para ser um NOVO registro
     const finalClonedData = {
       ...clonedData,
-      _id: null, // ESSENCIAL: Garante que será um novo registro (CREATE)
-      id: null, // ESSENCIAL: Remove o ID antigo
-
-      // 4. Reseta os campos de status e data
+      _id: null, 
+      id: null, 
       status: 'Pendente',
-      referenceDate: new Date().toISOString().slice(0, 10), // Define a data de hoje
-      entryDate: new Date().toISOString(), // Define a data de hoje
+      referenceDate: new Date().toISOString().slice(0, 10), 
+      entryDate: new Date().toISOString(),
       deliveryDate: null,
       cancelReason: null,
     };
-
-    // 5. ATUALIZADO: Chama o "Portão" em vez de abrir o modal diretamente
     openRecordModalWithCheck(patientForRecord, finalClonedData);
   };
-  // --- FIM DA NOVA FUNÇÃO ---
-
-  // --- (FUNÇÕES ATUALIZADAS) ---
-  // Funções UI (Atualizadas para usar o "Portão" 'openRecordModalWithCheck')
 
   const handleQuickAddRecord = (e, patient) => {
     e.stopPropagation();
-    openRecordModalWithCheck(patient, null); // <-- ATUALIZADO
+    openRecordModalWithCheck(patient, null); 
   };
 
   const openQuickAddModal = () => {
@@ -702,7 +634,7 @@ export default function ProfessionalDashboardPage({
         ? patients.find((p) => (p._id || p.id) === quickAddPatientId)
         : null;
       if (patient) {
-        openRecordModalWithCheck(patient, null); // <-- ATUALIZADO
+        openRecordModalWithCheck(patient, null); 
       } else {
         addToast('Paciente não encontrado.', 'error');
       }
@@ -717,9 +649,7 @@ export default function ProfessionalDashboardPage({
         ? patients.find((p) => (p._id || p.id) === dashQuickPatientId)
         : null;
       if (patient) {
-        openRecordModalWithCheck(patient, null); // <-- ATUALIZADO
-
-        // Limpa os campos do quick add do dashboard
+        openRecordModalWithCheck(patient, null); 
         setDashQuickPatientId('');
         setDashQuickPatientName('');
         setDashQuickSearch('');
