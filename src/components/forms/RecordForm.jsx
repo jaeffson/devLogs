@@ -1,5 +1,5 @@
 // src/components/forms/RecordForm.jsx
-// (ATUALIZADO: Corrigido bug de fuso horário na 'referenceDate' (Data de Referência))
+// (ATUALIZADO: Incluído lógica de 'isSaving' e spinner básico em CSS)
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Modal } from '../common/Modal';
@@ -9,13 +9,35 @@ import { icons } from '../../utils/icons';
 // Lista de opções de quantidade
 const quantityOptions = [
   '1cx (30cp)', '1cx (60cp)',
-   '2cxs (total 60cp)', '2cxs (total 120cp)',
+  '2cxs (total 60cp)', '2cxs (total 120cp)',
   '3cxs', '4cxs', '5cxs', '6cxs', '7cxs',
   '1 Frasco', '2 Frascos', '3 Frascos',
   '1 Bisnaga', '2 Bisnagas', '1 Ampola', '1 Seringa',
   '1cx', '2cxs', '1tb'
 ];
 
+// Componente simples de Spinner (CSS Puro)
+const SimpleSpinner = () => (
+  <div
+    style={{
+      border: '4px solid rgba(255, 255, 255, 0.3)',
+      borderTop: '4px solid #fff',
+      borderRadius: '50%',
+      width: '20px',
+      height: '20px',
+      animation: 'spin 1s linear infinite',
+      marginRight: '8px',
+    }}
+  />
+);
+
+// Adicionando a keyframe 'spin' globalmente (pode ser inserido no seu CSS global se preferir)
+const spinnerKeyframes = `
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+`;
 
 export default function RecordForm({
   patient,
@@ -38,16 +60,25 @@ export default function RecordForm({
   const [openMedSelectIndex, setOpenMedSelectIndex] = useState(null);
   const [medSearchTerm, setMedSearchTerm] = useState('');
   const medSelectRef = useRef(null);
+  // NOVO: Estado para controlar o carregamento/salvamento
+  const [isSaving, setIsSaving] = useState(false); 
 
-  // --- (INÍCIO DA CORREÇÃO) ---
-  // Substituída a função getTodayIsoDate pela getLocalDateString
+  // Insere o keyframe CSS para o spinner. (Idealmente, estaria em um arquivo CSS)
+  useEffect(() => {
+    if (!document.getElementById('simple-spinner-style')) {
+      const style = document.createElement('style');
+      style.id = 'simple-spinner-style';
+      style.textContent = spinnerKeyframes;
+      document.head.appendChild(style);
+    }
+  }, []);
+
   const getLocalDateString = (date = new Date()) => {
     const year = date.getFullYear();
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
     const day = date.getDate().toString().padStart(2, '0');
     return `${year}-${month}-${day}`;
   };
-  // --- (FIM DA CORREÇÃO) ---
   
   const formattedDate = (dateString) => {
     if (!dateString) return 'Data inválida';
@@ -60,13 +91,9 @@ export default function RecordForm({
   };
 
   useEffect(() => {
-    // --- (INÍCIO DA CORREÇÃO) ---
-    // Usa a nova função local
     const today = getLocalDateString();
-    // --- (FIM DA CORREÇÃO) ---
 
     if (record) {
-      // Se for edição ou clone, usa a data do registro (com fallback para 'today')
       setReferenceDate(record.referenceDate ? new Date(record.referenceDate).toISOString().slice(0, 10) : today);
       setObservation(record.observation || '');
       const existingMeds =
@@ -82,7 +109,6 @@ export default function RecordForm({
           : [{ medicationId: '', quantity: quantityOptions[0], value: '', tempId: Date.now() }]
       );
     } else {
-      // Se for um NOVO registro, usa 'today'
       setReferenceDate(today);
       setObservation('');
       setMedications([{ medicationId: '', quantity: quantityOptions[0], value: '', tempId: Date.now() }]);
@@ -90,15 +116,6 @@ export default function RecordForm({
     setErrors({});
   }, [record]);
 
-  // ... (O restante do arquivo RecordForm.jsx não precisa de NENHUMA alteração) ...
-  // ... (Cole o restante do seu arquivo RecordForm.jsx daqui para baixo) ...
-  
-  // (Lógica de handlers, validação e handleSubmit)
-  // ... (todo o resto do arquivo) ...
-  // (A lógica de handleSubmit já está correta, pois ela envia a 'referenceDate'
-  // que agora está correta no estado)
-
-  // (Lógica de handlers...)
   useEffect(() => {
     function handleClickOutside(event) {
       if (medSelectRef.current && !medSelectRef.current.contains(event.target)) {
@@ -171,7 +188,7 @@ export default function RecordForm({
     return newErrors;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => { // Tornada assíncrona para melhor UX com onSave
     e.preventDefault();
     const formErrors = validateRecordForm();
     if (Object.keys(formErrors).length > 0) {
@@ -179,6 +196,10 @@ export default function RecordForm({
       addToast?.('Preencha os campos obrigatórios.', 'error');
       return;
     }
+    
+    // Inicia o estado de salvamento
+    setIsSaving(true); 
+
     const validMedications = medications
       .filter((m) => m.medicationId && m.quantity)
       .map((m) => ({
@@ -195,15 +216,23 @@ export default function RecordForm({
       referenceDate,
       observation: observation.trim(),
       status: record?.status || 'Pendente',
-      // (INÍCIO DA CORREÇÃO) Usa new Date() (local) em vez de new Date().toISOString() (UTC)
       entryDate: record?.entryDate || new Date(),
-      // (FIM DA CORREÇÃO)
       deliveryDate: record?.deliveryDate || null,
       medications: validMedications,
       totalValue,
     };
-    onSave(recordData);
-    onClose();
+
+    try {
+      // Espera a conclusão do salvamento (chamada de API)
+      await onSave(recordData); 
+      onClose(); // Fecha o modal SÓ APÓS o salvamento
+    } catch (error) {
+        addToast?.('Erro ao salvar registro. Tente novamente.', 'error');
+        // Você pode querer logar o erro aqui: console.error(error);
+    } finally {
+        // Garante que o estado de salvamento é desativado
+        setIsSaving(false); 
+    }
   };
   
   // (Render / JSX)
@@ -367,7 +396,7 @@ export default function RecordForm({
                             type="button"
                             onClick={() => removeMedicationField(index)}
                             className="h-10 w-full flex items-center justify-center text-red-600 rounded-md font-medium hover:bg-red-100 active:bg-red-200 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-                            disabled={medications.length <= 1}
+                            disabled={medications.length <= 1 || isSaving}
                             title="Remover medicação"
                           >
                             <span className="w-5 h-5">{icons.trash}</span>
@@ -382,7 +411,8 @@ export default function RecordForm({
                 <button
                   type="button"
                   onClick={addMedicationField}
-                  className="mt-3 flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-100 text-blue-700 rounded-md font-semibold hover:bg-blue-200 active:bg-blue-300 cursor-pointer"
+                  className="mt-3 flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-100 text-blue-700 rounded-md font-semibold hover:bg-blue-200 active:bg-blue-300 cursor-pointer disabled:opacity-50"
+                  disabled={isSaving}
                 >
                   <span className="w-4 h-4">{icons.plus}</span>
                   <span>Adicionar medicação</span>
@@ -397,6 +427,7 @@ export default function RecordForm({
                   onChange={(e) => setObservation(e.target.value)}
                   className="w-full p-2 border rounded border-gray-300 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                   rows="2"
+                  disabled={isSaving}
                 ></textarea>
               </div>
             </form>
@@ -407,16 +438,27 @@ export default function RecordForm({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 active:bg-gray-100 font-medium cursor-pointer transition-colors"
+              className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 active:bg-gray-100 font-medium cursor-pointer transition-colors disabled:opacity-50"
+              disabled={isSaving}
             >
               Cancelar
             </button>
             <button
               onClick={handleSubmit}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 active:bg-blue-800 font-medium cursor-pointer flex items-center gap-2"
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 active:bg-blue-800 font-medium cursor-pointer flex items-center justify-center gap-2 disabled:bg-blue-400 disabled:cursor-not-allowed"
+              disabled={isSaving}
             >
-              <span className="w-5 h-5">{icons.check}</span>
-              Salvar Registro
+              {isSaving ? (
+                <>
+                  <SimpleSpinner />
+                  <span>Salvando...</span>
+                </>
+              ) : (
+                <>
+                  <span className="w-5 h-5">{icons.check}</span>
+                  <span>Salvar Registro</span>
+                </>
+              )}
             </button>
           </div>
         </div>
