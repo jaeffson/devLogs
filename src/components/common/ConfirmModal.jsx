@@ -48,7 +48,7 @@ export  function ConfirmModal({
         <button
           type="button"
           onClick={onClose}
-          disabled={isSubmitting}
+          disabled={isSubmitting} // Desabilitado se estiver enviando
           className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 font-medium text-sm transition-colors disabled:opacity-50"
         >
           {cancelText}
@@ -57,7 +57,7 @@ export  function ConfirmModal({
         <button
           type="button"
           onClick={handleConfirmClick}
-          disabled={isSubmitting}
+          disabled={isSubmitting} // Desabilitado se estiver enviando
           className={`
             px-4 py-2 rounded-md font-medium text-sm text-white transition-all shadow-sm flex items-center justify-center gap-2 min-w-[100px]
             ${isDestructive
@@ -66,6 +66,7 @@ export  function ConfirmModal({
             }
           `}
         >
+          {/* Lógica do Spinner com SVG (MANTIDA) */}
           {isSubmitting ? (
             <>
               <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">

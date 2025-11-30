@@ -1,12 +1,11 @@
 // src/components/common/CancelRecordModal.jsx
-// (Este é um NOVO ARQUIVO que você deve criar)
+// (ATUALIZADO: Adicionado ClipLoader e estado de isSubmitting)
 
 import React, { useState } from 'react';
-// --- (INÍCIO DA CORREÇÃO) ---
-// O caminho foi corrigido de ../ para ../../ para "subir"
-// da pasta /common e da pasta /components
-import { icons } from '../../utils/icons'; // Importa seus ícones
-// --- (FIM DA CORREÇÃO) ---
+import { icons } from '../../utils/icons'; 
+// NOVO: Importa o ClipLoader para o spinner
+import { ClipLoader } from 'react-spinners'; 
+
 
 // Este modal recebe:
 // - record: O registro que está sendo cancelado
@@ -20,32 +19,46 @@ export function CancelRecordModal({
   getPatientNameById,
 }) {
   const [reason, setReason] = useState('');
-  const isConfirmDisabled = reason.trim() === '';
+  const [isSubmitting, setIsSubmitting] = useState(false); // NOVO: Estado de envio
+  
+  // O botão de confirmar é desabilitado se não houver motivo OU se estiver enviando
+  const isConfirmDisabled = reason.trim() === '' || isSubmitting; 
 
   // Tenta pegar o nome do paciente, se a função for fornecida
   const patientName = getPatientNameById
     ? getPatientNameById(record.patientId)
     : `ID ${record.patientId}`;
 
-  const handleConfirmClick = () => {
-    if (isConfirmDisabled) return;
-    // Envia o ID do registro E o motivo para a função de API
-    onConfirm(record._id || record.id, reason);
-    onClose(); // Fecha o modal
+  const handleConfirmClick = async () => { // Função assíncrona
+    if (reason.trim() === '') return; // Re-check reason before submitting
+
+    setIsSubmitting(true); // 1. Inicia o carregamento
+
+    try {
+        // 2. Aguarda a conclusão da API (onConfirm)
+        await onConfirm(record._id || record.id, reason); 
+        onClose(); // 3. Fecha o modal SÓ APÓS o sucesso
+    } catch (error) {
+        // Tratar erro (opcional: exibir um toast de erro)
+        console.error("Erro ao cancelar registro:", error);
+    } finally {
+        // 4. Garante que o carregamento seja desativado, independente do resultado
+        setIsSubmitting(false); 
+    }
   };
 
   return (
     // Overlay escuro
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-fade-in"
-      onClick={onClose} // Fecha ao clicar fora
+      onClick={onClose} 
     >
       {/* Conteúdo do Modal */}
       <div
         className="relative bg-white rounded-lg shadow-2xl w-full max-w-lg"
-        onClick={(e) => e.stopPropagation()} // Impede de fechar ao clicar dentro
+        onClick={(e) => e.stopPropagation()} 
       >
-        {/* Header */}
+        {/* Header (MANTIDO) */}
         <div className="flex items-center justify-between p-4 border-b">
           <h3 className="text-lg font-bold text-gray-800">
             Justificar Cancelamento
@@ -54,6 +67,7 @@ export function CancelRecordModal({
             onClick={onClose}
             className="p-1 text-gray-400 rounded-full hover:bg-gray-100 hover:text-gray-600 transition-colors"
             title="Fechar"
+            disabled={isSubmitting} // Desabilita fechar
           >
             <span className="w-5 h-5">
               {icons.close || (
@@ -76,7 +90,7 @@ export function CancelRecordModal({
           </button>
         </div>
 
-        {/* Corpo */}
+        {/* Corpo (MANTIDO) */}
         <div className="p-5 space-y-4">
           <div className="flex items-start gap-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
             <span className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0">
@@ -117,7 +131,8 @@ export function CancelRecordModal({
               placeholder="Ex: Erro de lançamento, falta de medicação, paciente não compareceu..."
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              autoFocus // Foca no campo de texto ao abrir
+              autoFocus 
+              disabled={isSubmitting} // Desabilita o input
             />
           </div>
         </div>
@@ -126,16 +141,25 @@ export function CancelRecordModal({
         <div className="flex justify-end items-center gap-3 p-4 bg-gray-50 border-t rounded-b-lg">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={isSubmitting} // Desabilita o botão Voltar
           >
             Voltar
           </button>
           <button
             onClick={handleConfirmClick}
             disabled={isConfirmDisabled}
-            className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:bg-red-300 disabled:cursor-not-allowed transition-colors"
+            className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:bg-red-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2" // Adicionado classes flex
           >
-            Confirmar Cancelamento
+            {isSubmitting ? (
+                <>
+                    {/* Exibe o ClipLoader */}
+                    <ClipLoader color="#ffffff" size={16} /> 
+                    <span>Cancelando...</span>
+                </>
+            ) : (
+                <span>Confirmar Cancelamento</span>
+            )}
           </button>
         </div>
       </div>

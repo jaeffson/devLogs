@@ -1,23 +1,13 @@
 // src/components/forms/UserForm.jsx
-// (ATUALIZADO: Adicionado isSaving e Spinner no botão)
+// (ATUALIZADO: Usando ClipLoader da react-spinners)
 
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../common/Modal'; // Importa Modal
+// NOVO: Importa o ClipLoader
+import { ClipLoader } from 'react-spinners'; 
 
-// Componente simples de Spinner (CSS Puro)
-const SimpleSpinner = () => (
-  <div
-    style={{
-      border: '4px solid rgba(255, 255, 255, 0.3)',
-      borderTop: '4px solid #fff',
-      borderRadius: '50%',
-      width: '20px',
-      height: '20px',
-      animation: 'spin 1s linear infinite',
-      marginRight: '8px',
-    }}
-  />
-);
+// REMOVIDO: SimpleSpinner (componente manual)
+// REMOVIDO: spinnerKeyframes e useEffect para injetar o CSS
 
 export default function UserForm({ 
     user, 
@@ -29,7 +19,6 @@ export default function UserForm({
     name: '', email: '', role: 'profissional', password: '', status: 'active',
   });
   const [errors, setErrors] = useState({});
-  // NOVO: Estado para controle de salvamento
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -64,7 +53,6 @@ export default function UserForm({
     return newErrors;
   }
 
-  // A função é agora assíncrona
   const handleSubmit = async (e) => {
     e.preventDefault();
     const formErrors = validateForm();
@@ -73,7 +61,6 @@ export default function UserForm({
       return;
     }
     
-    // Inicia o salvamento
     setIsSaving(true);
 
     const dataToSave = { ...formData };
@@ -82,7 +69,6 @@ export default function UserForm({
     }
     
     try {
-        // Assume que onSave é assíncrona (chamada de API)
         await onSave(dataToSave);
 
         if (addToast) {
@@ -92,7 +78,7 @@ export default function UserForm({
             );
         }
         
-        onClose(); // Fecha SÓ APÓS o sucesso
+        onClose(); 
 
     } catch (err) {
         addToast?.('Erro ao salvar usuário. Tente novamente.', 'error');
@@ -165,7 +151,7 @@ export default function UserForm({
           <button 
             type="button" 
             onClick={onClose} 
-            className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50"
+            className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={isSaving}
           >
             Cancelar
@@ -177,7 +163,8 @@ export default function UserForm({
           >
             {isSaving ? (
                 <>
-                    <SimpleSpinner />
+                    {/* NOVO: ClipLoader */}
+                    <ClipLoader color="#ffffff" size={20} />
                     <span>Salvando...</span>
                 </>
             ) : (

@@ -1,23 +1,10 @@
 // src/components/forms/MedicationForm.jsx
-// (ATUALIZADO: Adicionado isSaving e Spinner no botão)
+// (ATUALIZADO: Usando ClipLoader da react-spinners)
 
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../common/Modal';
-
-// Componente simples de Spinner (CSS Puro)
-const SimpleSpinner = () => (
-  <div
-    style={{
-      border: '4px solid rgba(255, 255, 255, 0.3)',
-      borderTop: '4px solid #fff',
-      borderRadius: '50%',
-      width: '20px',
-      height: '20px',
-      animation: 'spin 1s linear infinite',
-      marginRight: '8px',
-    }}
-  />
-);
+// NOVO: Importa o ClipLoader
+import { ClipLoader } from 'react-spinners'; 
 
 export default function MedicationForm({
   medication,
@@ -27,16 +14,14 @@ export default function MedicationForm({
 }) {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
-  // NOVO: Estado para controle de salvamento
-  const [isSaving, setIsSaving] = useState(false);
+  const [isSaving, setIsSaving] = useState(false); 
 
   useEffect(() => {
     setName(medication ? medication.name : '');
-    setError('');
+    setError(''); 
   }, [medication]);
 
-  // A função é agora assíncrona
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e) => { 
     e.preventDefault();
     const trimmedName = name.trim();
     if (!trimmedName) {
@@ -44,11 +29,9 @@ export default function MedicationForm({
       return;
     }
 
-    // Inicia o salvamento
-    setIsSaving(true);
+    setIsSaving(true); 
 
     try {
-        // Assume que onSave é assíncrona (chamada de API)
         await onSave({ id: medication?.id, name: trimmedName });
 
         if (addToast) {
@@ -58,10 +41,9 @@ export default function MedicationForm({
             );
         }
         
-        onClose(); // Fecha SÓ APÓS o sucesso
+        onClose(); 
 
     } catch (err) {
-        setError('Erro ao salvar medicação. Tente novamente.');
         addToast?.('Erro ao salvar medicação.', 'error');
     } finally {
         setIsSaving(false);
@@ -94,28 +76,29 @@ export default function MedicationForm({
             } focus:ring-1 focus:ring-blue-500 focus:border-blue-500`}
             autoFocus
             required
-            disabled={isSaving} // Desabilita o input
+            disabled={isSaving} 
           />
           {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
         </div>
-        {/* Rodapé estilizado */}
+        
         <div className="flex justify-end gap-4 bg-gray-50 -mx-6 -mb-6 px-6 py-4 rounded-b-lg mt-6">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 active:bg-gray-100 font-medium cursor-pointer disabled:opacity-50"
-            disabled={isSaving} // Desabilita o cancelar
+            className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 active:bg-gray-100 font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={isSaving} 
           >
             Cancelar
           </button>
           <button
             type="submit"
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 active:bg-blue-800 font-medium cursor-pointer flex items-center justify-center disabled:bg-blue-400 disabled:cursor-not-allowed"
-            disabled={isSaving} // Desabilita o botão
+            disabled={isSaving} 
           >
             {isSaving ? (
                 <>
-                    <SimpleSpinner />
+                    {/* NOVO: ClipLoader */}
+                    <ClipLoader color="#ffffff" size={20} />
                     <span>Salvando...</span>
                 </>
             ) : (

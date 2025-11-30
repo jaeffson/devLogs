@@ -38,9 +38,6 @@ export function AttendRecordModal({
 
   const handleConfirmClick = () => {
     if (!isSaving && recordId && deliveryDate) { 
-      console.log(
-        `[AttendRecordModal] Confirmando Atendimento para Record ID: ${recordId}, Data: ${deliveryDate}`
-      ); 
       onConfirm(recordId, deliveryDate);
     } else if (!recordId || !deliveryDate) {
       alert('Erro: ID do registro ausente ou data de entrega inválida.');

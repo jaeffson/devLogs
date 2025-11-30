@@ -1,16 +1,15 @@
 // src/pages/MedicationsPage.jsx 
-// (CORRIGIDO: Conexão Local e API Centralizada)
+// (ATUALIZADO: Usando ClipLoader para o estado de loading da página)
 
 import React, { useState, useEffect, useCallback } from 'react'; 
-// CORREÇÃO 1: Importamos a instância 'api' em vez do axios direto
 import api from '../services/api'; 
+// NOVO: Importa o ClipLoader
+import { ClipLoader } from 'react-spinners'; 
 
 // --- Imports de Componentes ---
 import MedicationForm from '../components/forms/MedicationForm';
 import { DestructiveConfirmModal } from '../components/common/DestructiveConfirmModal';
 import { icons } from '../utils/icons';
-
-// CORREÇÃO 2: Removemos a constante API_BASE_URL. O api.js gerencia isso.
 
 // Hook customizado simples para "atrasar" a busca
 function useDebounce(value, delay) {
@@ -55,7 +54,6 @@ export default function MedicationsPage({
     const fetchMedications = useCallback(async () => {
         setIsLoading(true);
         try {
-            // CORREÇÃO 3: Uso de api.get e caminho relativo
             const response = await api.get('/medications', {
                 params: {
                     page: currentPage,
@@ -104,12 +102,10 @@ export default function MedicationsPage({
             const medId = medData._id || medData.id;
             
             if(medId) {
-                // CORREÇÃO 4: api.put com caminho relativo
                 await api.put(`/medications/${medId}`, { name: cleanedName });
                 addToast('Medicação atualizada com sucesso!', 'success');
                 addLog?.(user?.name, `atualizou medicação ${cleanedName} (ID: ${medId})`);
             } else {
-                // CORREÇÃO 5: api.post com caminho relativo
                 await api.post('/medications', { name: cleanedName });
                 addToast('Medicação cadastrada com sucesso!', 'success');
                 addLog?.(user?.name, `cadastrou nova medicação: ${cleanedName}`);
@@ -122,8 +118,6 @@ export default function MedicationsPage({
             const msg = error.response?.data?.message || 'Erro ao salvar dados.';
             addToast(msg, 'error');
         }
-
-        handleCloseModal();
     };
 
     // --- Lógica de exclusão (API) ---
@@ -143,7 +137,6 @@ export default function MedicationsPage({
         const medId = med._id || med.id;
         
         try {
-            // CORREÇÃO 6: api.delete com caminho relativo
             await api.delete(`/medications/${medId}`);
             addToast('Medicação excluída com sucesso!', 'success');
             addLog?.(user?.name, `excluiu medicação ${med?.name || ''} (ID: ${medId})`);
@@ -203,6 +196,7 @@ export default function MedicationsPage({
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="w-full md:w-1/2 lg:w-1/3 p-2 border border-gray-300 rounded-lg pl-10 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
                     aria-label="Buscar medicação"
+                    disabled={isLoading}
                 />
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
                     <span className="w-5 h-5">{icons.search}</span>
@@ -211,7 +205,11 @@ export default function MedicationsPage({
 
             {/* Lista e Estados */}
             {isLoading ? (
-                 <p className="text-center text-gray-500 py-10 text-base">Carregando medicações...</p>
+                // NOVO: Substitui a mensagem de texto pelo ClipLoader
+                <div className="text-center py-10">
+                    <ClipLoader color="#059669" loading={true} size={30} />
+                    <p className="text-gray-500 text-sm mt-3">Carregando medicações...</p>
+                </div>
             ) : !hasMedications && isSearchActive ? (
                  <p className="text-center text-gray-500 py-10 text-base">
                     Nenhuma medicação encontrada para "<strong>{debouncedSearchTerm}</strong>".

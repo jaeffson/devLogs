@@ -1,10 +1,12 @@
 // src/components/forms/RecordForm.jsx
-// (ATUALIZADO: Incluído lógica de 'isSaving' e spinner básico em CSS)
+// (ATUALIZADO: Usando ClipLoader da react-spinners)
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Modal } from '../common/Modal';
 import MedicationForm from './MedicationForm';
 import { icons } from '../../utils/icons';
+// NOVO: Importa o ClipLoader
+import { ClipLoader } from 'react-spinners'; 
 
 // Lista de opções de quantidade
 const quantityOptions = [
@@ -16,28 +18,8 @@ const quantityOptions = [
   '1cx', '2cxs', '1tb'
 ];
 
-// Componente simples de Spinner (CSS Puro)
-const SimpleSpinner = () => (
-  <div
-    style={{
-      border: '4px solid rgba(255, 255, 255, 0.3)',
-      borderTop: '4px solid #fff',
-      borderRadius: '50%',
-      width: '20px',
-      height: '20px',
-      animation: 'spin 1s linear infinite',
-      marginRight: '8px',
-    }}
-  />
-);
-
-// Adicionando a keyframe 'spin' globalmente (pode ser inserido no seu CSS global se preferir)
-const spinnerKeyframes = `
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
-`;
+// REMOVIDO: SimpleSpinner e spinnerKeyframes
+// REMOVIDO: useEffect para injetar o keyframe CSS
 
 export default function RecordForm({
   patient,
@@ -60,18 +42,7 @@ export default function RecordForm({
   const [openMedSelectIndex, setOpenMedSelectIndex] = useState(null);
   const [medSearchTerm, setMedSearchTerm] = useState('');
   const medSelectRef = useRef(null);
-  // NOVO: Estado para controlar o carregamento/salvamento
   const [isSaving, setIsSaving] = useState(false); 
-
-  // Insere o keyframe CSS para o spinner. (Idealmente, estaria em um arquivo CSS)
-  useEffect(() => {
-    if (!document.getElementById('simple-spinner-style')) {
-      const style = document.createElement('style');
-      style.id = 'simple-spinner-style';
-      style.textContent = spinnerKeyframes;
-      document.head.appendChild(style);
-    }
-  }, []);
 
   const getLocalDateString = (date = new Date()) => {
     const year = date.getFullYear();
@@ -188,7 +159,7 @@ export default function RecordForm({
     return newErrors;
   };
 
-  const handleSubmit = async (e) => { // Tornada assíncrona para melhor UX com onSave
+  const handleSubmit = async (e) => { 
     e.preventDefault();
     const formErrors = validateRecordForm();
     if (Object.keys(formErrors).length > 0) {
@@ -197,7 +168,6 @@ export default function RecordForm({
       return;
     }
     
-    // Inicia o estado de salvamento
     setIsSaving(true); 
 
     const validMedications = medications
@@ -223,14 +193,11 @@ export default function RecordForm({
     };
 
     try {
-      // Espera a conclusão do salvamento (chamada de API)
       await onSave(recordData); 
-      onClose(); // Fecha o modal SÓ APÓS o salvamento
+      onClose(); 
     } catch (error) {
         addToast?.('Erro ao salvar registro. Tente novamente.', 'error');
-        // Você pode querer logar o erro aqui: console.error(error);
     } finally {
-        // Garante que o estado de salvamento é desativado
         setIsSaving(false); 
     }
   };
@@ -313,6 +280,7 @@ export default function RecordForm({
                                   ? 'border-red-500'
                                   : 'border-gray-300'
                               } bg-white`}
+                              disabled={isSaving}
                             />
 
                             {/* Dropdown */}
@@ -368,6 +336,7 @@ export default function RecordForm({
                             }
                             className="w-full p-2 border-0 ring-1 ring-gray-200 rounded bg-white text-sm h-10 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             list={`quantity-options-${index}`}
+                            disabled={isSaving}
                           />
                           <datalist id={`quantity-options-${index}`}>
                             {quantityOptions.map(opt => (
@@ -387,6 +356,7 @@ export default function RecordForm({
                             className="w-full p-2 border-0 ring-1 ring-gray-200 rounded text-sm h-10 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             step="0.01"
                             min="0"
+                            disabled={isSaving}
                           />
                         </div>
 
@@ -450,7 +420,8 @@ export default function RecordForm({
             >
               {isSaving ? (
                 <>
-                  <SimpleSpinner />
+                  {/* NOVO: ClipLoader */}
+                  <ClipLoader color="#ffffff" size={20} />
                   <span>Salvando...</span>
                 </>
               ) : (
