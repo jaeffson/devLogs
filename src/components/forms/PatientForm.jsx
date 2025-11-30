@@ -1,11 +1,35 @@
 // src/components/forms/PatientForm.jsx
-// (ATUALIZADO: Adicionado 'cursor-pointer' e cores/foco padronizados nos botões)
+// (ATUALIZADO: Adicionado isSaving e Spinner no botão)
 
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../common/Modal'; // Importa Modal da pasta common
 
+// Componente simples de Spinner (CSS Puro)
+const SimpleSpinner = () => (
+  <div
+    style={{
+      border: '4px solid rgba(255, 255, 255, 0.3)',
+      borderTop: '4px solid #fff',
+      borderRadius: '50%',
+      width: '20px',
+      height: '20px',
+      animation: 'spin 1s linear infinite',
+      marginRight: '8px',
+    }}
+  />
+);
+
+// Keyframe CSS para o spinner (Idealmente, estaria em um arquivo CSS global)
+const spinnerKeyframes = `
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+`;
+
 // Funções utilitárias (formatCPF, capitalizeName)
 const formatCPF = (cpf) => {
+// ... (mantenha a função original)
   if (!cpf) return '';
   const cleaned = String(cpf).replace(/\D/g, '');
   const match = cleaned.match(/^(\d{0,3})(\d{0,3})(\d{0,3})(\d{0,2})$/);
@@ -18,6 +42,7 @@ const formatCPF = (cpf) => {
 };
 
 const capitalizeName = (name) => {
+// ... (mantenha a função original)
   if (!name) return '';
   const exceptions = ['de', 'da', 'do', 'dos', 'das'];
   return String(name)
@@ -35,11 +60,11 @@ const capitalizeName = (name) => {
 
 // Exportação Default
 export default function PatientForm({
-    patient, // Paciente a ser editado (null se for novo)
-    onSave, // Função chamada ao salvar (recebe dados do form)
-    onClose, // Função para fechar o modal
-    checkDuplicate, // Prop de validação
-    addToast // Prop para notificações
+    patient, 
+    onSave, 
+    onClose, 
+    checkDuplicate, 
+    addToast 
 }) {
     // --- Estado do Formulário ---
     const [formData, setFormData] = useState({
@@ -51,6 +76,18 @@ export default function PatientForm({
         status: 'Ativo', 
     });
     const [errors, setErrors] = useState({}); 
+    // NOVO: Estado para controle de salvamento
+    const [isSaving, setIsSaving] = useState(false);
+
+    // Efeito para injetar o keyframe CSS
+    useEffect(() => {
+        if (!document.getElementById('simple-spinner-style')) {
+            const style = document.createElement('style');
+            style.id = 'simple-spinner-style';
+            style.textContent = spinnerKeyframes;
+            document.head.appendChild(style);
+        }
+    }, []);
 
     // --- Efeito para Carregar Dados ou Resetar ---
     useEffect(() => {
@@ -62,7 +99,6 @@ export default function PatientForm({
                observations: patient.observations || '',
                generalNotes: patient.generalNotes || '',
                status: patient.status || 'Ativo',
-               // 🚨 CORREÇÃO: Captura o _id do MongoDB
                id: patient._id || patient.id 
             });
         } else {
@@ -100,8 +136,8 @@ export default function PatientForm({
         return newErrors;
     }
 
-    // --- Manipulador de Submissão ---
-    const handleSubmit = (e) => {
+    // --- Manipulador de Submissão (Tornada Assíncrona) ---
+    const handleSubmit = async (e) => {
         e.preventDefault();
         setErrors({});
 
@@ -140,17 +176,21 @@ export default function PatientForm({
         dataToSave.cpf = dataToSave.cpf || null; 
         dataToSave.susCard = dataToSave.susCard || null;
 
-        // 🚨 MUDANÇA: Passa o _id (se for edição)
         if (patient?._id) {
             dataToSave._id = patient._id;
         }
 
-        onSave(dataToSave);
-        
-        // 🚨 REMOVIDO: O Toast de sucesso agora é mostrado pelo ProfessionalDashboardPage
-        // if (addToast) { ... }
-        
-        onClose();
+        // NOVO: Inicia o salvamento
+        setIsSaving(true);
+        try {
+            // Assume que onSave é assíncrona (chamada de API)
+            await onSave(dataToSave); 
+            onClose(); // Fecha SÓ APÓS o sucesso
+        } catch (error) {
+             addToast?.('Erro ao salvar o paciente.', 'error');
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     // --- Renderização do Componente ---
@@ -158,6 +198,9 @@ export default function PatientForm({
         <Modal onClose={onClose}>
             <h2 className="text-2xl font-bold mb-6">{patient ? 'Editar Paciente' : 'Cadastrar Novo Paciente'}</h2>
             <form onSubmit={handleSubmit} noValidate>
+
+                {/* Campos de Input (Adicionar disabled={isSaving}) */}
+                {/* ... (campos name, cpf, susCard, observations, generalNotes, status) ... */}
 
                 {/* Campo Nome */}
                 <div className="mb-4">
@@ -170,6 +213,7 @@ export default function PatientForm({
                         onChange={handleChange}
                         className={`w-full p-2 border rounded ${errors.name ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'} focus:outline-none focus:ring-2 focus:ring-blue-500`}
                         required
+                        disabled={isSaving}
                     />
                     {errors.name && <p className="text-red-600 text-xs mt-1">{errors.name}</p>}
                 </div>
@@ -187,6 +231,7 @@ export default function PatientForm({
                             maxLength="14"
                             placeholder="000.000.000-00"
                             className={`w-full p-2 border rounded ${errors.cpf ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'} focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                            disabled={isSaving}
                         />
                     </div>
                     <div>
@@ -200,6 +245,7 @@ export default function PatientForm({
                             maxLength="15"
                             placeholder="000 0000 0000 0000"
                             className={`w-full p-2 border rounded ${errors.cpf ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'} focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                            disabled={isSaving}
                         />
                     </div>
                 </div>
@@ -217,6 +263,7 @@ export default function PatientForm({
                         className="w-full p-2 border rounded border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         rows="3"
                         placeholder=""
+                        disabled={isSaving}
                     ></textarea>
                 </div>
 
@@ -231,6 +278,7 @@ export default function PatientForm({
                         className="w-full p-2 border rounded border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         rows="3"
                         placeholder="Informações adicionais, contato, etc."
+                        disabled={isSaving}
                     ></textarea>
                 </div>
 
@@ -244,6 +292,7 @@ export default function PatientForm({
                             value={formData.status}
                             onChange={handleChange}
                             className="w-full p-2 border rounded border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            disabled={isSaving}
                         >
                             <option value="Ativo">Ativo</option>
                             <option value="Inativo">Inativo</option>
@@ -253,23 +302,30 @@ export default function PatientForm({
                 )}
 
                 {/* Botões de Ação */}
-                {/* --- (INÍCIO DA MUDANÇA) --- */}
                 <div className="flex justify-end gap-4 pt-4 border-t mt-6">
                     <button 
                         type="button" 
                         onClick={onClose} 
-                        className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 active:bg-gray-100 font-medium cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                        className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 active:bg-gray-100 font-medium cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+                        disabled={isSaving} // Desabilita o cancelar durante o salvamento
                     >
                         Cancelar
                     </button>
                     <button 
                         type="submit" 
-                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 active:bg-blue-800 font-medium cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 active:bg-blue-800 font-medium cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center justify-center gap-2 disabled:bg-blue-400 disabled:cursor-not-allowed"
+                        disabled={isSaving} // Desabilita o botão
                     >
-                        Salvar Paciente
+                        {isSaving ? (
+                            <>
+                                <SimpleSpinner />
+                                <span>Salvando...</span>
+                            </>
+                        ) : (
+                            <span>Salvar Paciente</span>
+                        )}
                     </button>
                 </div>
-                {/* --- (FIM DA MUDANÇA) --- */}
             </form>
         </Modal>
     );

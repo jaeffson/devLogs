@@ -1,24 +1,42 @@
 // src/components/forms/MedicationForm.jsx
+// (ATUALIZADO: Adicionado isSaving e Spinner no botão)
+
 import React, { useState, useEffect } from 'react';
-// Certifique-se de que o caminho para Modal está correto
 import { Modal } from '../common/Modal';
+
+// Componente simples de Spinner (CSS Puro)
+const SimpleSpinner = () => (
+  <div
+    style={{
+      border: '4px solid rgba(255, 255, 255, 0.3)',
+      borderTop: '4px solid #fff',
+      borderRadius: '50%',
+      width: '20px',
+      height: '20px',
+      animation: 'spin 1s linear infinite',
+      marginRight: '8px',
+    }}
+  />
+);
 
 export default function MedicationForm({
   medication,
   onSave,
   onClose,
-  // Recebe addToast se quiser mostrar mensagem de sucesso daqui
   addToast
 }) {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
+  // NOVO: Estado para controle de salvamento
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     setName(medication ? medication.name : '');
-    setError(''); // Limpa erro ao abrir/trocar medicação
+    setError('');
   }, [medication]);
 
-  const handleSubmit = (e) => {
+  // A função é agora assíncrona
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const trimmedName = name.trim();
     if (!trimmedName) {
@@ -26,28 +44,31 @@ export default function MedicationForm({
       return;
     }
 
-    // --- Validação de Duplicidade (Idealmente feita via prop/backend) ---
-    // Exemplo:
-    // const isDuplicate = checkDuplicateMed({ name: trimmedName, currentId: medication?.id });
-    // if (isDuplicate) {
-    //   setError('Esta medicação já existe.');
-    //   return;
-    // }
+    // Inicia o salvamento
+    setIsSaving(true);
 
-    onSave({ id: medication?.id, name: trimmedName });
+    try {
+        // Assume que onSave é assíncrona (chamada de API)
+        await onSave({ id: medication?.id, name: trimmedName });
 
-    if (addToast) {
-        addToast(
-            medication ? 'Medicação atualizada!' : 'Nova medicação cadastrada!',
-            'success'
-        );
+        if (addToast) {
+            addToast(
+                medication ? 'Medicação atualizada!' : 'Nova medicação cadastrada!',
+                'success'
+            );
+        }
+        
+        onClose(); // Fecha SÓ APÓS o sucesso
+
+    } catch (err) {
+        setError('Erro ao salvar medicação. Tente novamente.');
+        addToast?.('Erro ao salvar medicação.', 'error');
+    } finally {
+        setIsSaving(false);
     }
-
-    onClose(); // Fecha o modal
   };
 
   return (
-    // (ALTERADO) Largura aumentada para max-w-2xl
     <Modal onClose={onClose} modalClasses="max-w-2xl">
       <h2 className="text-2xl font-bold mb-4">
         {medication ? 'Editar Medicação' : 'Nova Medicação'}
@@ -73,6 +94,7 @@ export default function MedicationForm({
             } focus:ring-1 focus:ring-blue-500 focus:border-blue-500`}
             autoFocus
             required
+            disabled={isSaving} // Desabilita o input
           />
           {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
         </div>
@@ -81,15 +103,24 @@ export default function MedicationForm({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 active:bg-gray-100 font-medium cursor-pointer"
+            className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 active:bg-gray-100 font-medium cursor-pointer disabled:opacity-50"
+            disabled={isSaving} // Desabilita o cancelar
           >
             Cancelar
           </button>
           <button
             type="submit"
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 active:bg-blue-800 font-medium cursor-pointer"
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 active:bg-blue-800 font-medium cursor-pointer flex items-center justify-center disabled:bg-blue-400 disabled:cursor-not-allowed"
+            disabled={isSaving} // Desabilita o botão
           >
-            Salvar
+            {isSaving ? (
+                <>
+                    <SimpleSpinner />
+                    <span>Salvando...</span>
+                </>
+            ) : (
+                <span>Salvar</span>
+            )}
           </button>
         </div>
       </form>
