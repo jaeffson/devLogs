@@ -23,3 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 .env
+src/main.jsx
+src/services/api.js
+src/services/api.js
