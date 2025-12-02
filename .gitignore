@@ -26,3 +26,6 @@ dist-ssr
 src/main.jsx
 src/services/api.js
 src/services/api.js
+package-lock.json
+package.json
+README.md
