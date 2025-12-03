@@ -520,8 +520,13 @@ export default function ProfessionalDashboardPage({
       const msg = error.response?.data?.message || 'Erro ao salvar registro. Verifique os dados.';
       addToast(msg, 'error');
     } finally {
-      setIsRecordModalOpen(false);
-      setEditingRecord(null);
+      // Não fecha o modal automaticamente ao criar um novo registro
+      // Fecha apenas quando estávamos editando um registro existente
+      const wasEditing = !!(recordData && (recordData._id || recordData.id));
+      if (wasEditing) {
+        setIsRecordModalOpen(false);
+        setEditingRecord(null);
+      }
       setQuickAddPatientId('');
       setSelectedPatientName('');
       setQuickSearchTerm('');
@@ -1584,11 +1589,14 @@ export default function ProfessionalDashboardPage({
           addToast={addToast}
         />
       )}
-      {isRecordModalOpen && selectedPatient && (
+      {isRecordModalOpen && (
         <RecordForm
           patient={selectedPatient}
+          patients={patients}
+          records={records}
           profissionalId={user?._id || user?.id}
           record={editingRecord}
+          recentRecord={selectedPatient ? findRecentRecord(selectedPatient?._id || selectedPatient?.id, editingRecord?._id || editingRecord?.id || null) : null}
           onSave={handleSaveRecord}
           onClose={() => {
             setIsRecordModalOpen(false);

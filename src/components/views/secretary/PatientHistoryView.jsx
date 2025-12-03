@@ -1,12 +1,10 @@
 // src/components/views/secretary/PatientHistoryView.jsx
 
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { PatientRecordsTable } from '../../common/PatientRecordsTable';
-import { icons } from '../../../utils/icons';
+import { icons } from '../../../utils/icons'; 
 import useDebounce from '../../../hooks/useDebounce';
 
-// 1. RECEBER A NOVA PROP 'onViewReason'
 export function PatientHistoryView({
   patients = [],
   records = [],
@@ -14,178 +12,221 @@ export function PatientHistoryView({
   getMedicationName, 
   initialPatient, 
   onHistoryViewed, 
-  onViewReason, // <-- PROP ADICIONADA
+  onViewReason, 
 }) {
   
-  // --- Estados (Movidos para cá) ---
+  // --- Estados ---
   const [searchTermPatient, setSearchTermPatient] = useState('');
   const [selectedPatient, setSelectedPatient] = useState(initialPatient || null); 
-  
+  const [sortOrder, setSortOrder] = useState('asc'); 
+
+  // Estado de controle visual para Mobile
+  const [showMobileList, setShowMobileList] = useState(!initialPatient);
+
   const debouncedSearchTermPatient = useDebounce(searchTermPatient, 300);
   const isSearchingPatient = searchTermPatient !== debouncedSearchTermPatient;
 
-  // Efeito para sincronizar e limpar o 'initialPatient' no controlador
+  // --- Efeitos ---
   useEffect(() => {
     if (initialPatient) {
       setSelectedPatient(initialPatient);
-      // Removida a chamada onHistoryViewed() daqui para evitar loops
+      setShowMobileList(false); // Força ir para os detalhes
     }
   }, [initialPatient]);
 
-  // Efeito para limpar a seleção se a busca for limpa
-  useEffect(() => {
-    if (!searchTermPatient) {
-      setSelectedPatient(null);
-    }
-  }, [searchTermPatient]);
+  // --- Memos ---
+  const filteredPatientsForSearch = useMemo(() => {
+    if (!Array.isArray(patients)) return [];
 
+    let filtered = patients.filter((p) =>
+      (p.name?.toLowerCase() || '').includes(debouncedSearchTermPatient.toLowerCase()) ||
+      (p.cpf && String(p.cpf).includes(debouncedSearchTermPatient)) ||
+      (p.susCard && String(p.susCard).includes(debouncedSearchTermPatient))
+    );
 
-  // --- Memos (Movidos para cá) ---
-  const filteredPatientsForSearch = useMemo(
-    () =>
-      Array.isArray(patients)
-        ? patients
-            .filter(
-              (p) =>
-                (p.name?.toLowerCase() || '').includes(
-                  debouncedSearchTermPatient.toLowerCase()
-                ) ||
-                (p.cpf && String(p.cpf).includes(debouncedSearchTermPatient)) ||
-                (p.susCard &&
-                  String(p.susCard).includes(debouncedSearchTermPatient))
-            )
-            .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-        : [],
-    [patients, debouncedSearchTermPatient]
-  );
+    return filtered.sort((a, b) => {
+        const nameA = a.name || '';
+        const nameB = b.name || '';
+        return sortOrder === 'asc' 
+            ? nameA.localeCompare(nameB) 
+            : nameB.localeCompare(nameA);
+    });
+  }, [patients, debouncedSearchTermPatient, sortOrder]);
 
   const selectedPatientRecords = useMemo(() => {
     if (!selectedPatient || !Array.isArray(records)) return [];
-    // (CORREÇÃO) Garante que p.id ou p._id sejam usados
     const patientId = selectedPatient.id || selectedPatient._id;
     return records
       .filter((r) => r.patientId === patientId)
       .sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate));
   }, [selectedPatient, records]);
 
-  // --- Renderização ---
+  const lastVisitDate = useMemo(() => {
+      if (selectedPatientRecords.length === 0) return 'Nunca';
+      try {
+          return new Date(selectedPatientRecords[0].entryDate).toLocaleDateString('pt-BR');
+      } catch { return 'N/A'; }
+  }, [selectedPatientRecords]);
+
+  // --- Handlers ---
+  const handlePatientSelect = (p) => {
+      setSelectedPatient(p);
+      setShowMobileList(false); // Troca para a tela de detalhes
+  };
+
+  const handleBackToList = () => {
+      setShowMobileList(true); // Volta para a lista
+      setSelectedPatient(null);
+  };
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-6 h-[calc(100vh-8rem)] animate-fade-in">
+    <div className="h-[calc(100vh-8rem)] bg-gray-50/50 rounded-xl overflow-hidden shadow-sm border border-gray-200 animate-fade-in flex flex-col md:flex-row">
       
-      {/* --- SEÇÃO 1: PAINEL DE BUSCA E SELEÇÃO (1/4 da tela) --- */}
-      <div className="lg:col-span-1 bg-white p-4 rounded-lg shadow flex flex-col min-h-0">
-        <h3 className="text-xl font-bold mb-4 text-gray-800 flex items-center gap-2 border-b pb-2">
-            <span className="text-blue-500 w-5 h-5">{icons.users}</span>
-            Buscar Paciente
-        </h3>
-        <div className="relative mb-4">
-          <input
-            type="text"
-            placeholder="Nome, CPF ou SUS..."
-            className="w-full p-2 pl-10 border rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
-            value={searchTermPatient}
-            onChange={(e) => setSearchTermPatient(e.target.value)}
-          />
-          <div className="absolute left-3 top-2.5 text-gray-400 w-4 h-4">
-            {isSearchingPatient ? (
-              <svg
-                className="animate-spin h-4 w-4 text-blue-500"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                ></circle>
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                ></path>
-              </svg>
-            ) : (
-              icons.search
-            )}
-          </div>
+      {/* --- COLUNA 1: LISTA DE PACIENTES (Sidebar) --- */}
+      <div className={`
+        w-full md:w-1/3 xl:w-1/4 bg-white border-r border-gray-200 flex flex-col z-10
+        ${showMobileList ? '' : 'hidden md:flex'} 
+      `}>
+        {/* ^ CORREÇÃO: Removido 'block', agora usa apenas 'hidden md:flex' para esconder */}
+        
+        <div className="p-4 border-b border-gray-100">
+            <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2 mb-3">
+                <span className="bg-blue-100 text-blue-600 p-1.5 rounded-lg">{icons.users}</span>
+                Pacientes
+            </h3>
+            
+            <div className="relative">
+                <input
+                    type="text"
+                    placeholder="Nome, CPF ou SUS..."
+                    className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                    value={searchTermPatient}
+                    onChange={(e) => setSearchTermPatient(e.target.value)}
+                />
+                <div className="absolute left-3 top-2.5 text-gray-400 w-4 h-4">
+                    {isSearchingPatient ? <span className="animate-spin block">↻</span> : icons.search}
+                </div>
+            </div>
+
+            <div className="flex justify-between items-center mt-3">
+                <span className="text-xs text-gray-400 font-medium">
+                    {filteredPatientsForSearch.length} encontrados
+                </span>
+                <button 
+                    onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                    className="text-xs font-medium text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                >
+                    Ordem {sortOrder === 'asc' ? 'A-Z' : 'Z-A'}
+                    <span className="text-xs">{sortOrder === 'asc' ? '↓' : '↑'}</span>
+                </button>
+            </div>
         </div>
-        <div className="overflow-y-auto pr-2 -mr-2 flex-grow min-h-0 divide-y divide-gray-100 border border-gray-200 rounded-lg">
+
+        <div className="overflow-y-auto flex-grow p-2 space-y-1">
           {filteredPatientsForSearch.length > 0 ? (
-            filteredPatientsForSearch.map((p) => (
-              <div
-                key={p.id || p._id} // (CORREÇÃO)
-                className={`p-3 cursor-pointer transition-colors ${
-                  (selectedPatient?.id || selectedPatient?._id) === (p.id || p._id) // (CORREÇÃO)
-                    ? 'bg-blue-50 border-blue-300 shadow-sm'
-                    : 'hover:bg-gray-100'
-                }`}
-                onClick={() => setSelectedPatient(p)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) =>
-                  (e.key === 'Enter' || e.key === ' ') && setSelectedPatient(p)
-                }
-              >
-                <p className="font-semibold text-gray-800 text-sm truncate">
-                  {p.name}
-                </p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  <span className="font-medium text-gray-600">ID:</span> {p.cpf || p.susCard || 'Não especificado'}
-                </p>
-              </div>
-            ))
+            filteredPatientsForSearch.map((p) => {
+                const isActive = (selectedPatient?.id || selectedPatient?._id) === (p.id || p._id);
+                return (
+                  <div
+                    key={p.id || p._id}
+                    onClick={() => handlePatientSelect(p)}
+                    className={`
+                        group p-3 rounded-lg cursor-pointer transition-all border select-none
+                        ${isActive 
+                            ? 'bg-blue-50 border-blue-200 shadow-sm' 
+                            : 'bg-white border-transparent hover:bg-gray-50 hover:border-gray-100'}
+                    `}
+                  >
+                    <div className="flex justify-between items-start">
+                        <p className={`font-semibold text-sm truncate ${isActive ? 'text-blue-800' : 'text-gray-700'}`}>
+                          {p.name}
+                        </p>
+                        {isActive && <span className="text-blue-500 text-xs font-bold">●</span>}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1 flex items-center gap-2">
+                      <span className="truncate max-w-[120px]">
+                        {p.cpf ? `CPF: ${p.cpf}` : (p.susCard ? `SUS: ${p.susCard}` : 'Sem doc')}
+                      </span>
+                    </p>
+                  </div>
+                );
+            })
           ) : (
-            <p className="text-center text-gray-500 py-4 text-sm">
-              Nenhum paciente encontrado.
-            </p>
+            <div className="text-center py-8">
+                <p className="text-gray-400 text-sm">Nenhum paciente encontrado.</p>
+            </div>
           )}
         </div>
       </div>
       
-      {/* --- SEÇÃO 2: DETALHES E HISTÓRICO (3/4 da tela) --- */}
-      <div className="lg:col-span-2 xl:col-span-3 bg-white p-4 md:p-6 rounded-lg shadow flex flex-col min-h-0">
+      {/* --- COLUNA 2: DETALHES (Main Content) --- */}
+      <div className={`
+         w-full md:w-2/3 xl:w-3/4 bg-gray-50/30 flex flex-col min-h-0
+         ${!showMobileList ? '' : 'hidden md:flex'}
+      `}>
+        {/* ^ CORREÇÃO: Mantém o display: flex padrão da classe estática */}
         
         {selectedPatient ? (
           <>
-            <div className="mb-4 p-4 border border-blue-200 bg-blue-50 rounded-lg shadow-sm">
-                <h3 className="text-lg md:text-xl font-bold text-gray-800 mb-2">
-                    Histórico de: <span className="text-blue-700">{selectedPatient.name}</span>
-                </h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                        <p className="text-xs font-semibold text-blue-800 uppercase">CPF</p>
-                        <p className="font-medium text-gray-800">{selectedPatient.cpf || 'N/A'}</p>
+            {/* Header Mobile com Botão Voltar */}
+            <div className="bg-white border-b border-gray-200 p-4 shadow-sm z-0 flex-shrink-0">
+                <button 
+                    onClick={handleBackToList}
+                    className="md:hidden mb-3 text-gray-500 hover:text-gray-800 flex items-center gap-1 text-sm font-medium p-1 -ml-1"
+                >
+                    {icons.arrowLeft || '←'} Voltar
+                </button>
+
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-100 to-blue-200 text-blue-600 flex items-center justify-center font-bold text-xl border border-blue-200 shrink-0">
+                            {selectedPatient.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                            <h2 className="text-xl font-bold text-gray-800 leading-tight truncate">{selectedPatient.name}</h2>
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-sm text-gray-500">
+                                <span className="whitespace-nowrap"><span className="font-medium text-gray-400">CPF:</span> {selectedPatient.cpf || '-'}</span>
+                                <span className="hidden sm:inline text-gray-300">|</span>
+                                <span className="whitespace-nowrap"><span className="font-medium text-gray-400">SUS:</span> {selectedPatient.susCard || '-'}</span>
+                            </div>
+                        </div>
                     </div>
-                    <div>
-                        <p className="text-xs font-semibold text-blue-800 uppercase">Cartão SUS</p>
-                        <p className="font-medium text-gray-800">{selectedPatient.susCard || 'N/A'}</p>
+
+                    <div className="flex gap-3 mt-2 md:mt-0">
+                        <div className="flex-1 md:flex-none bg-blue-50 px-4 py-2 rounded-lg border border-blue-100 text-center">
+                            <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wide">Registros</p>
+                            <p className="text-lg font-bold text-blue-700 leading-none">{selectedPatientRecords.length}</p>
+                        </div>
+                        <div className="flex-1 md:flex-none bg-gray-50 px-4 py-2 rounded-lg border border-gray-100 text-center">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Último</p>
+                            <p className="text-sm font-bold text-gray-700 mt-0.5 leading-tight">{lastVisitDate}</p>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <h4 className="text-lg font-semibold text-gray-700 mb-3 border-b pb-2">Registros de Entrada/Entrega ({selectedPatientRecords.length})</h4>
-            
-            <div className="flex-grow min-h-0 overflow-y-auto -mx-4 md:-mx-6 px-4 md:px-6 border border-gray-200 rounded-lg">
-                {/* --- 2. (INÍCIO DA MUDANÇA) --- */}
-                <PatientRecordsTable
-                    records={selectedPatientRecords}
-                    medications={medications}
-                    getMedicationName={getMedicationName} 
-                    onViewReason={onViewReason} // <-- PROP ADICIONADA
-                />
-                {/* --- (FIM DA MUDANÇA) --- */}
+            {/* Container da Tabela com Flex-Grow corrigido */}
+            <div className="flex-grow p-4 md:p-6 overflow-hidden flex flex-col relative">
+                 <div className="flex-grow border border-gray-200 rounded-xl bg-white shadow-sm overflow-hidden relative">
+                    <div className="absolute inset-0 overflow-auto">
+                        <PatientRecordsTable
+                            records={selectedPatientRecords}
+                            medications={medications}
+                            getMedicationName={getMedicationName} 
+                            onViewReason={onViewReason}
+                        />
+                    </div>
+                </div>
             </div>
           </>
         ) : (
-          <div className="flex flex-col items-center justify-center h-full text-center text-gray-500">
-            <div className="mb-4 text-gray-300 w-16 h-16">{icons.clipboard}</div>
-            <h2 className="text-xl font-semibold">Selecione um Paciente</h2>
-            <p className="text-sm">
-              Escolha um paciente na lista ao lado para ver seu histórico.
+          <div className="flex flex-col items-center justify-center h-full text-center p-6 animate-fade-in">
+            <div className="bg-white p-6 rounded-full shadow-sm border border-gray-100 mb-6">
+                 <span className="text-blue-200 text-4xl block opacity-50">{icons.users}</span>
+            </div>
+            <h2 className="text-xl font-bold text-gray-800 mb-2">Selecione um Paciente</h2>
+            <p className="text-gray-500 text-sm max-w-xs mx-auto">
+              Toque em um paciente na lista para visualizar o histórico completo de entregas.
             </p>
           </div>
         )}

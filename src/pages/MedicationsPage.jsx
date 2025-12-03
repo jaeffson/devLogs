@@ -1,328 +1,368 @@
-// src/pages/MedicationsPage.jsx 
-// (ATUALIZADO: Usando ClipLoader para o estado de loading da página)
-
-import React, { useState, useEffect, useCallback } from 'react'; 
-import api from '../services/api'; 
-// NOVO: Importa o ClipLoader
-import { ClipLoader } from 'react-spinners'; 
+// src/pages/MedicationsPage.jsx
+import React, { useState, useEffect, useCallback } from 'react';
+import api from '../services/api';
+import { ClipLoader } from 'react-spinners';
 
 // --- Imports de Componentes ---
 import MedicationForm from '../components/forms/MedicationForm';
 import { DestructiveConfirmModal } from '../components/common/DestructiveConfirmModal';
-import { icons } from '../utils/icons';
+import { icons } from '../utils/icons'; // Assumindo que icons.refresh, icons.chevronDown, etc existem. Se não, use ícones padrão.
 
-// Hook customizado simples para "atrasar" a busca
+// Hook customizado para atrasar a busca
 function useDebounce(value, delay) {
     const [debouncedValue, setDebouncedValue] = useState(value);
     useEffect(() => {
         const handler = setTimeout(() => {
             setDebouncedValue(value);
         }, delay);
-        return () => {
-            clearTimeout(handler);
-        };
+        return () => { clearTimeout(handler); };
     }, [value, delay]);
     return debouncedValue;
 }
 
-export default function MedicationsPage({
-    addToast,
-    addLog,
-    user
-}) {
-    
-    // --- Estados de Paginação e Dados ---
-    const [medicationData, setMedicationData] = useState({ data: [], totalPages: 0 });
+export default function MedicationsPage({ addToast, addLog, user }) {
+
+    // --- Estados de Dados e Configuração ---
+    const [medicationData, setMedicationData] = useState({ data: [], totalPages: 0, totalItems: 0 });
     const [currentPage, setCurrentPage] = useState(1);
-    
-    // --- Estados Internos ---
+    const [itemsPerPage, setItemsPerPage] = useState(10); // CONFIGURAÇÃO: Itens por página
+    const [sortConfig, setSortConfig] = useState({ key: 'createdAt', direction: 'desc' }); // CONFIGURAÇÃO: Ordenação
+
+    // --- Estados de UI ---
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingMedication, setEditingMedication] = useState(null);
     const [deleteConfirmation, setDeleteConfirmation] = useState({ isOpen: false, medication: null });
     const [searchTerm, setSearchTerm] = useState('');
-    const [isLoading, setIsLoading] = useState(false); 
+    const [isLoading, setIsLoading] = useState(false);
 
     // --- Debounce ---
     const debouncedSearchTerm = useDebounce(searchTerm, 400);
 
-    // --- Helper de Permissão ---
+    // --- Permissões ---
     const isAdmin = user?.role === 'admin';
     const isProfissional = user?.role === 'profissional' || user?.role === 'Profissional';
     const canCreateOrEdit = isAdmin || isProfissional;
 
-    // --- Lógica de Busca (API) ---
+    // --- Busca de Dados (API) ---
     const fetchMedications = useCallback(async () => {
         setIsLoading(true);
         try {
+            // Nota: O backend precisa suportar 'limit', 'sortBy' e 'order' para isso funcionar plenamente.
             const response = await api.get('/medications', {
                 params: {
                     page: currentPage,
-                    search: debouncedSearchTerm
+                    limit: itemsPerPage, // Passando limite
+                    search: debouncedSearchTerm,
+                    sortBy: sortConfig.key, // Passando ordenação
+                    order: sortConfig.direction
                 }
             });
-            setMedicationData(response.data); 
+            setMedicationData(response.data);
         } catch (error) {
             console.error('Erro ao buscar medicações:', error);
-            addToast('Falha ao carregar medicações do servidor.', 'error');
+            addToast('Falha ao carregar medicações.', 'error');
         } finally {
             setIsLoading(false);
         }
-    }, [addToast, currentPage, debouncedSearchTerm]); 
+    }, [addToast, currentPage, itemsPerPage, debouncedSearchTerm, sortConfig]);
 
-    // Carregamento inicial
+    // Carregamento inicial e quando dependências mudam
     useEffect(() => {
         fetchMedications();
     }, [fetchMedications]);
-    
-    // Reseta página na busca
+
+    // Resetar página ao buscar
     useEffect(() => {
         setCurrentPage(1);
-    }, [debouncedSearchTerm]);
-    
-    // --- Funções UI ---
+    }, [debouncedSearchTerm, itemsPerPage]);
+
+    // --- Handlers UI ---
     const handleOpenModal = (medication = null) => {
         if (!medication && !canCreateOrEdit) {
-            addToast('Você não tem permissão para criar novas medicações.', 'error');
+            addToast('Sem permissão para criar.', 'error');
             return;
         }
         setEditingMedication(medication);
         setIsModalOpen(true);
     };
 
-    const handleCloseModal = () => {
-        setIsModalOpen(false);
-        setEditingMedication(null);
+    const handleSort = (key) => {
+        setSortConfig(current => ({
+            key,
+            direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc'
+        }));
     };
 
-    // --- Lógica de salvamento (API) ---
+    const handleRefresh = () => {
+        fetchMedications();
+        addToast('Lista atualizada.', 'info');
+    };
+
+    // --- CRUD Handlers ---
     const handleSaveMedication = async (medData) => {
         const cleanedName = medData.name.trim();
-
         try {
             const medId = medData._id || medData.id;
-            
-            if(medId) {
+            if (medId) {
                 await api.put(`/medications/${medId}`, { name: cleanedName });
-                addToast('Medicação atualizada com sucesso!', 'success');
-                addLog?.(user?.name, `atualizou medicação ${cleanedName} (ID: ${medId})`);
+                addToast('Medicação atualizada!', 'success');
+                addLog?.(user?.name, `atualizou: ${cleanedName}`);
             } else {
                 await api.post('/medications', { name: cleanedName });
-                addToast('Medicação cadastrada com sucesso!', 'success');
-                addLog?.(user?.name, `cadastrou nova medicação: ${cleanedName}`);
+                addToast('Medicação criada!', 'success');
+                addLog?.(user?.name, `criou: ${cleanedName}`);
             }
-            
-            await fetchMedications(); 
-
+            fetchMedications();
         } catch (error) {
-            console.error("Erro ao salvar medicação:", error);
-            const msg = error.response?.data?.message || 'Erro ao salvar dados.';
+            const msg = error.response?.data?.message || 'Erro ao salvar.';
             addToast(msg, 'error');
         }
-    };
-
-    // --- Lógica de exclusão (API) ---
-    const handleDeleteClick = (medication) => {
-        if (!isAdmin) {
-            addToast('Apenas administradores podem excluir medicações.', 'error');
-            return;
-        }
-        setDeleteConfirmation({
-            isOpen: true,
-            medication: medication
-        });
     };
 
     const handleDeleteConfirm = async () => {
         const med = deleteConfirmation.medication;
         const medId = med._id || med.id;
-        
         try {
             await api.delete(`/medications/${medId}`);
-            addToast('Medicação excluída com sucesso!', 'success');
-            addLog?.(user?.name, `excluiu medicação ${med?.name || ''} (ID: ${medId})`);
+            addToast('Excluído com sucesso!', 'success');
+            addLog?.(user?.name, `excluiu: ${med?.name}`);
             
+            // Lógica inteligente de paginação após exclusão
             if (medicationData.data.length === 1 && currentPage > 1) {
-                setCurrentPage(currentPage - 1);
+                setCurrentPage(prev => prev - 1);
             } else {
-                await fetchMedications();
+                fetchMedications();
             }
         } catch (error) {
-            console.error("Erro ao excluir medicação:", error);
-            const msg = error.response?.data?.message || 'Falha ao excluir medicação. Tente novamente.';
-            addToast(msg, 'error');
+            addToast('Erro ao excluir.', 'error');
         }
-        
         setDeleteConfirmation({ isOpen: false, medication: null });
     };
 
+    // --- Renderização Auxiliar ---
     const formatDate = (isoDate) => {
-        if (!isoDate) return '---';
-        try {
-            return new Date(isoDate).toLocaleDateString('pt-BR');
-        } catch {
-            return 'Data inválida';
-        }
-    }
-    
-    // Variáveis auxiliares
-    const hasMedications = medicationData.data.length > 0;
-    const isSearchActive = debouncedSearchTerm.length > 0;
+        if (!isoDate) return '-';
+        return new Date(isoDate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute:'2-digit' });
+    };
+
+    // Ícone de ordenação dinâmico
+    const SortIcon = ({ columnKey }) => {
+        if (sortConfig.key !== columnKey) return <span className="text-gray-300 ml-1">⇅</span>;
+        return sortConfig.direction === 'asc' ? <span className="text-emerald-600 ml-1">↑</span> : <span className="text-emerald-600 ml-1">↓</span>;
+    };
 
     return (
-        <div className="bg-white rounded-lg shadow p-4 md:p-6 animate-fade-in">
-            {/* Header da Página */}
-            <div className="flex flex-col md:flex-row justify-between items-center mb-4 border-b border-gray-200 pb-4">
-                <h2 className="text-xl md:text-2xl font-bold text-gray-800 mb-3 md:mb-0">
-                    Gerenciar Medicações
-                </h2>
+        <div className="space-y-6 animate-fade-in">
+            {/* --- Cabeçalho Moderno --- */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Gerenciar Medicações</h2>
+                    <p className="text-sm text-gray-500 mt-1">Visualize e configure o catálogo de medicamentos do sistema.</p>
+                </div>
                 
-                {canCreateOrEdit && (
-                  <button
-                      onClick={() => handleOpenModal()}
-                      className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium w-full md:w-auto transition-all duration-150 ease-in-out cursor-pointer shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed"
-                      disabled={isLoading}
-                  >
-                      <span className="w-4 h-4">{icons.plus}</span> Nova Medicação
-                  </button>
-                )}
-            </div>
+                <div className="flex items-center gap-3 w-full md:w-auto">
+                    {/* Botão de Refresh */}
+                    <button 
+                        onClick={handleRefresh}
+                        className="p-2 text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:text-emerald-600 transition-colors shadow-sm"
+                        title="Atualizar lista"
+                    >
+                        <span className="w-5 h-5 block">{icons.refresh || 'R'}</span>
+                    </button>
 
-            {/* Campo de Busca */}
-            <div className="mb-4 relative">
-                <input
-                    type="text"
-                    placeholder="Buscar medicação..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full md:w-1/2 lg:w-1/3 p-2 border border-gray-300 rounded-lg pl-10 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
-                    aria-label="Buscar medicação"
-                    disabled={isLoading}
-                />
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
-                    <span className="w-5 h-5">{icons.search}</span>
-                </div>
-            </div>
-
-            {/* Lista e Estados */}
-            {isLoading ? (
-                // NOVO: Substitui a mensagem de texto pelo ClipLoader
-                <div className="text-center py-10">
-                    <ClipLoader color="#059669" loading={true} size={30} />
-                    <p className="text-gray-500 text-sm mt-3">Carregando medicações...</p>
-                </div>
-            ) : !hasMedications && isSearchActive ? (
-                 <p className="text-center text-gray-500 py-10 text-base">
-                    Nenhuma medicação encontrada para "<strong>{debouncedSearchTerm}</strong>".
-                </p>
-            ) : !hasMedications && !isSearchActive ? (
-                <div className="text-center text-gray-500 py-16 px-6">
-                    <div className="mb-4 text-gray-300 w-16 h-16 mx-auto">{icons.pill || icons.alert}</div> 
-                    <h3 className="font-semibold text-lg text-gray-700 mb-1">Nenhuma Medicação Cadastrada</h3>
-                    <p className="text-sm mb-4">Comece cadastrando a primeira medicação no sistema.</p>
-                    
                     {canCreateOrEdit && (
-                      <button 
-                          onClick={() => handleOpenModal()} 
-                          className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium mx-auto cursor-pointer shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transition-all duration-150 ease-in-out"
-                      >
-                          <span className="w-4 h-4">{icons.plus}</span> Cadastrar Medicação
-                      </button>
+                        <button
+                            onClick={() => handleOpenModal()}
+                            className="flex-1 md:flex-none flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 active:bg-emerald-800 text-sm font-medium shadow-sm hover:shadow transition-all"
+                        >
+                            <span className="w-4 h-4">{icons.plus}</span> Novo
+                        </button>
                     )}
                 </div>
-            ) : (
-                <>
-                    <div className="overflow-x-auto border border-gray-200 rounded-lg">
-                        <table className="min-w-full bg-white text-sm table-auto">
-                            <thead className="bg-gray-50 sticky top-0 z-10">
+            </div>
+
+            {/* --- Barra de Ferramentas (Busca e Configuração) --- */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col md:flex-row justify-between items-center gap-4">
+                
+                {/* Busca */}
+                <div className="relative w-full md:w-96">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                        <span className="w-5 h-5">{icons.search}</span>
+                    </div>
+                    <input
+                        type="text"
+                        placeholder="Buscar por nome..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                    />
+                </div>
+
+                {/* Configurações de Visualização */}
+                <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+                    <label className="text-xs font-medium text-gray-500">Exibir:</label>
+                    <select
+                        value={itemsPerPage}
+                        onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                        className="bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block p-2 cursor-pointer outline-none"
+                    >
+                        <option value={5}>5</option>
+                        <option value={10}>10</option>
+                        <option value={20}>20</option>
+                        <option value={50}>50</option>
+                    </select>
+                </div>
+            </div>
+
+            {/* --- Tabela de Dados --- */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                {isLoading ? (
+                    <div className="flex flex-col items-center justify-center py-20">
+                        <ClipLoader color="#059669" size={40} />
+                        <p className="text-gray-400 text-sm mt-4 animate-pulse">Sincronizando dados...</p>
+                    </div>
+                ) : medicationData.data.length === 0 ? (
+                    <div className="text-center py-20 px-4">
+                        <div className="bg-gray-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <span className="text-gray-400 text-2xl">{icons.pill || icons.alert}</span>
+                        </div>
+                        <h3 className="text-lg font-medium text-gray-900">Nenhuma medicação encontrada</h3>
+                        <p className="text-gray-500 text-sm mt-1 max-w-sm mx-auto">
+                            {searchTerm ? `Não encontramos resultados para "${searchTerm}".` : "O catálogo está vazio no momento."}
+                        </p>
+                        {!searchTerm && canCreateOrEdit && (
+                            <button onClick={() => handleOpenModal()} className="mt-4 text-emerald-600 font-medium text-sm hover:underline">
+                                Cadastrar primeira medicação
+                            </button>
+                        )}
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50/50">
                                 <tr>
-                                    <th className="w-24 text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th> 
-                                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Nome da Medicação</th>
-                                    <th className="w-36 text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Data Cadastro</th>
-                                    
+                                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-24">
+                                        ID
+                                    </th>
+                                    <th 
+                                        onClick={() => handleSort('name')}
+                                        className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors group select-none"
+                                    >
+                                        <div className="flex items-center">
+                                            Nome da Medicação
+                                            <SortIcon columnKey="name" />
+                                        </div>
+                                    </th>
+                                    <th 
+                                        onClick={() => handleSort('createdAt')}
+                                        className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors group select-none w-48"
+                                    >
+                                        <div className="flex items-center">
+                                            Cadastro
+                                            <SortIcon columnKey="createdAt" />
+                                        </div>
+                                    </th>
                                     {canCreateOrEdit && (
-                                      <th className="w-28 text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                                        <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-32">
+                                            Ações
+                                        </th>
                                     )}
                                 </tr>
                             </thead>
-                            
-                            <tbody className="divide-y divide-gray-200">
-                                {medicationData.data.map(med => {
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {medicationData.data.map((med) => {
                                     const medId = med._id || med.id;
                                     return (
-                                    <tr key={medId} className="hover:bg-gray-50 transition-colors duration-150">
-                                        <td className="py-3 px-4 text-gray-500 text-xs font-mono whitespace-nowrap">{String(medId).slice(-4)}</td>
-                                        <td className="py-3 px-4 font-medium text-gray-800 break-words">{med.name}</td>
-                                        <td className="py-3 px-4 text-gray-600 whitespace-nowrap">{formatDate(med.createdAt)}</td> 
-                                        
-                                        {canCreateOrEdit && (
-                                          <td className="py-2.5 px-4 whitespace-nowrap">
-                                              <div className="flex items-center gap-2">
-                                                  
-                                                  <button
-                                                      onClick={() => handleOpenModal(med)}
-                                                      className="p-1.5 rounded-md text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 transition-colors duration-150 cursor-pointer"
-                                                      title="Editar Medicação"
-                                                  >
-                                                      <span className="w-5 h-5 block">{icons.edit}</span>
-                                                  </button>
-                                                  
-                                                  {isAdmin && (
-                                                    <button
-                                                        onClick={() => handleDeleteClick(med)}
-                                                        className="p-1.5 rounded-md text-red-600 hover:text-red-800 hover:bg-red-50 transition-colors duration-150 cursor-pointer"
-                                                        title="Excluir Medicação"
-                                                    >
-                                                        <span className="w-5 h-5 block">{icons.trash}</span>
-                                                    </button>
-                                                  )}
-                                              </div>
-                                          </td>
-                                        )}
-                                    </tr>
-                                )})}
+                                        <tr key={medId} className="hover:bg-gray-50/80 transition-colors group">
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 font-mono">
+                                                    #{String(medId).slice(-4)}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="text-sm font-medium text-gray-900">{med.name}</div>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                {formatDate(med.createdAt)}
+                                            </td>
+                                            {canCreateOrEdit && (
+                                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                                    <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <button
+                                                            onClick={() => handleOpenModal(med)}
+                                                            className="text-emerald-600 hover:text-emerald-900 p-1 rounded hover:bg-emerald-50 transition-colors"
+                                                            title="Editar"
+                                                        >
+                                                            <span className="w-5 h-5 block">{icons.edit}</span>
+                                                        </button>
+                                                        {isAdmin && (
+                                                            <button
+                                                                onClick={() => {
+                                                                    setDeleteConfirmation({ isOpen: true, medication: med });
+                                                                }}
+                                                                className="text-red-400 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors"
+                                                                title="Excluir"
+                                                            >
+                                                                <span className="w-5 h-5 block">{icons.trash}</span>
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            )}
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
-
-                    {medicationData.totalPages > 1 && (
-                        <div className="flex justify-between items-center mt-4 text-sm">
+                )}
+                
+                {/* --- Paginação Estilizada --- */}
+                {medicationData.totalPages > 1 && (
+                    <div className="px-6 py-4 border-t border-gray-200 bg-gray-50/50 flex items-center justify-between">
+                        <p className="text-sm text-gray-500 hidden md:block">
+                            Mostrando página <span className="font-medium">{currentPage}</span> de <span className="font-medium">{medicationData.totalPages}</span>
+                        </p>
+                        
+                        <div className="flex gap-2 mx-auto md:mx-0">
                             <button
-                                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                                 disabled={currentPage === 1 || isLoading}
-                                className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                className="px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
                             >
                                 Anterior
                             </button>
-                            
-                            <span className="text-gray-600 font-medium">
-                                Página {currentPage} de {medicationData.totalPages}
-                            </span>
-                            
                             <button
-                                onClick={() => setCurrentPage(prev => Math.min(prev + 1, medicationData.totalPages))}
+                                onClick={() => setCurrentPage(p => Math.min(medicationData.totalPages, p + 1))}
                                 disabled={currentPage === medicationData.totalPages || isLoading}
-                                className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                className="px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
                             >
                                 Próxima
                             </button>
                         </div>
-                    )}
-                </>
-            )}
+                    </div>
+                )}
+            </div>
 
+            {/* Modais permanecem os mesmos */}
             {isModalOpen && (
                 <MedicationForm
-                    medication={editingMedication} 
+                    medication={editingMedication}
                     onSave={handleSaveMedication}
-                    onClose={handleCloseModal}
+                    onClose={() => { setIsModalOpen(false); setEditingMedication(null); }}
                     addToast={addToast}
                 />
             )}
-            
+
             {deleteConfirmation.isOpen && (
                 <DestructiveConfirmModal
-                    message={`Excluir permanentemente a medicação "${deleteConfirmation.medication.name}"? Esta ação não pode ser desfeita.`}
-                    confirmText="EXCLUIR"
+                    message={
+                        <span>
+                            Tem certeza que deseja excluir <strong>{deleteConfirmation.medication?.name}</strong>?
+                            <br/><span className="text-sm text-gray-500">Essa ação não pode ser desfeita.</span>
+                        </span>
+                    }
+                    confirmText="Sim, excluir"
                     onConfirm={handleDeleteConfirm}
                     onClose={() => setDeleteConfirmation({ isOpen: false, medication: null })}
                 />

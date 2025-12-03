@@ -23,8 +23,11 @@ const quantityOptions = [
 
 export default function RecordForm({
   patient,
+  patients = [],
   profissionalId,
+  records = [],
   record,
+  recentRecord = null,
   onSave,
   onClose,
   medicationsList = [],
@@ -36,13 +39,41 @@ export default function RecordForm({
   const [medications, setMedications] = useState([
     { medicationId: '', quantity: quantityOptions[0], value: '', tempId: Date.now() }, 
   ]);
+  const [localPatient, setLocalPatient] = useState(patient || null);
+  const [patientSearchTerm, setPatientSearchTerm] = useState('');
+  const [isPatientSelectOpen, setIsPatientSelectOpen] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   const [isMedicationModalOpen, setIsMedicationModalOpen] = useState(false);
   const [addingMedicationIndex, setAddingMedicationIndex] = useState(null);
   const [errors, setErrors] = useState({});
   const [openMedSelectIndex, setOpenMedSelectIndex] = useState(null);
   const [medSearchTerm, setMedSearchTerm] = useState('');
   const medSelectRef = useRef(null);
+  const patientSelectRef = useRef(null);
   const [isSaving, setIsSaving] = useState(false); 
+  const [medsLocked, setMedsLocked] = useState(false);
+
+  const localRecentRecord = useMemo(() => {
+    // Only accept external recentRecord if it matches the currently selected patient
+    if (
+      recentRecord &&
+      localPatient &&
+      (recentRecord.patientId === (localPatient._id || localPatient.id) ||
+        (recentRecord.patient && (recentRecord.patient._id === (localPatient._id || localPatient.id))))
+    ) {
+      return recentRecord;
+    }
+    if (!localPatient || !Array.isArray(records)) return null;
+    const MS_IN_20_DAYS = 20 * 24 * 60 * 60 * 1000;
+    const patientRecords = records
+      .filter((r) => r.patientId === (localPatient._id || localPatient.id) && r.status !== 'Cancelado')
+      .sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate));
+    if (patientRecords.length === 0) return null;
+    const mostRecent = patientRecords[0];
+    const mostRecentTime = new Date(mostRecent.entryDate).getTime();
+    if (Date.now() - mostRecentTime < MS_IN_20_DAYS) return mostRecent;
+    return null;
+  }, [recentRecord, localPatient, records]);
 
   const getLocalDateString = (date = new Date()) => {
     const year = date.getFullYear();
@@ -85,13 +116,46 @@ export default function RecordForm({
       setMedications([{ medicationId: '', quantity: quantityOptions[0], value: '', tempId: Date.now() }]);
     }
     setErrors({});
+    setLocalPatient(patient || null);
   }, [record]);
+
+  const clearForm = () => {
+    setMedications([{ medicationId: '', quantity: quantityOptions[0], value: '', tempId: Date.now() }]);
+    setObservation('');
+    setReferenceDate(getLocalDateString());
+    setErrors({});
+    setSuccessMessage('');
+  };
+
+  useEffect(() => {
+    setLocalPatient(patient || null);
+  }, [patient]);
+
+  // track previous patient to clear form when switching patients
+  const prevPatientRef = useRef(null);
+  useEffect(() => {
+    const prevId = prevPatientRef.current;
+    const curId = localPatient?._id || localPatient?.id || null;
+    // If switched to a different patient, clear form and lock meds if recent record exists
+    if (prevId && curId && prevId !== curId) {
+      clearForm();
+      if (localRecentRecord && !record) setMedsLocked(true);
+    }
+    // If selecting a patient for the first time (prevId null -> curId set), lock when recent
+    if (!prevId && curId) {
+      if (localRecentRecord && !record) setMedsLocked(true);
+    }
+    prevPatientRef.current = curId;
+  }, [localPatient, localRecentRecord, record]);
 
   useEffect(() => {
     function handleClickOutside(event) {
       if (medSelectRef.current && !medSelectRef.current.contains(event.target)) {
         setOpenMedSelectIndex(null);
         setMedSearchTerm('');
+      }
+      if (patientSelectRef.current && !patientSelectRef.current.contains(event.target)) {
+        setIsPatientSelectOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -105,6 +169,12 @@ export default function RecordForm({
       med.name.toLowerCase().includes(medSearchTerm.toLowerCase())
     );
   }, [medicationsList, medSearchTerm, openMedSelectIndex]);
+
+  const filteredPatients = useMemo(() => {
+    if (!Array.isArray(patients)) return [];
+    if (!patientSearchTerm) return patients.slice(0, 50);
+    return patients.filter((p) => (p.name || '').toLowerCase().includes(patientSearchTerm.toLowerCase()) || String(p.cpf || '').includes(patientSearchTerm));
+  }, [patients, patientSearchTerm]);
 
   const handleMedicationChange = (index, field, value) => {
     if (field === 'medicationId' && value === 'new') {
@@ -148,6 +218,7 @@ export default function RecordForm({
   const validateRecordForm = () => {
     const newErrors = {};
     if (!referenceDate) newErrors.referenceDate = 'Data de referência é obrigatória.';
+    if (!localPatient || !(localPatient._id || localPatient.id)) newErrors.patient = 'Selecione um paciente.';
     const validMeds = medications.filter((m) => m.medicationId);
     if (medications.length === 0 || validMeds.length === 0) { 
         newErrors['medications[0].medicationId'] = 'É obrigatório adicionar pelo menos uma medicação.';
@@ -181,7 +252,7 @@ export default function RecordForm({
     const totalValue = validMedications.reduce((sum, med) => sum + med.value, 0);
     const recordData = {
       _id: record?._id || record?.id, 
-      patientId: patient._id || patient.id, 
+      patientId: localPatient?._id || localPatient?.id, 
       profissionalId,
       referenceDate,
       observation: observation.trim(),
@@ -194,7 +265,17 @@ export default function RecordForm({
 
     try {
       await onSave(recordData); 
-      onClose(); 
+      // Ao salvar um novo registro, não fechamos automaticamente o modal.
+      // Exibe mensagem de sucesso e prepara o formulário para próximo paciente.
+      setSuccessMessage('Registro inserido');
+      addToast?.('Registro inserido', 'success');
+      // Limpa seleção de paciente para permitir adicionar para outro paciente
+      setLocalPatient(null);
+      setPatientSearchTerm('');
+      // Reseta a lista de medicações para novo cadastro
+      setMedications([{ medicationId: '', quantity: quantityOptions[0], value: '', tempId: Date.now() }]);
+      // Limpa mensagem após 3s
+      setTimeout(() => setSuccessMessage(''), 3000);
     } catch (error) {
         addToast?.('Erro ao salvar registro. Tente novamente.', 'error');
     } finally {
@@ -209,15 +290,101 @@ export default function RecordForm({
         <div className="flex flex-col h-[90vh]">
           {/* Cabeçalho */}
           <div className="flex-shrink-0 flex items-center gap-3">
-            <span className="w-8 h-8 text-blue-600 flex-shrink-0">
-                {icons.clipboard}
-            </span>
-            <h2 className="text-2xl font-bold">
-              {record ? `Editar Registro` : 'Novo Registro para'}{' '}
-              <span className="text-blue-700 font-semibold">
-                {patient?.name || 'Paciente'}
-              </span>
-            </h2>
+            <span className="w-8 h-8 text-blue-600 flex-shrink-0">{icons.clipboard}</span>
+            <div className="flex flex-col">
+              <h2 className="text-2xl font-bold">
+                {record ? `Editar Registro` : 'Novo Registro'}
+              </h2>
+              <div className="mt-1">
+                {localPatient ? (
+                  <div className="text-sm text-blue-700 font-semibold">{localPatient.name}</div>
+                ) : (
+                  <div className="relative" ref={patientSelectRef}>
+                    <input
+                      type="text"
+                      placeholder="Buscar paciente por nome, CPF ou cartão SUS..."
+                      value={patientSearchTerm}
+                      onChange={(e) => setPatientSearchTerm(e.target.value)}
+                      onFocus={() => setIsPatientSelectOpen(true)}
+                      className="w-96 p-2 border rounded text-sm h-10 border-gray-300 bg-white"
+                          disabled={isSaving || medsLocked}
+                    />
+                    {isPatientSelectOpen && (
+                      <div className="absolute z-20 w-full bg-white border border-gray-300 rounded-lg shadow-lg mt-1 max-h-60 overflow-auto">
+                        {filteredPatients.map((p) => (
+                          <div
+                            key={p._id || p.id}
+                            className="p-2 text-sm text-gray-800 hover:bg-blue-50 cursor-pointer"
+                            onMouseDown={(e) => { e.preventDefault(); setLocalPatient(p); setIsPatientSelectOpen(false); setPatientSearchTerm(''); }}
+                          >
+                            <div className="font-medium">{p.name}</div>
+                            <div className="text-xs text-gray-500">{p.cpf || ''} {p.susCard ? `• ${p.susCard}` : ''}</div>
+                          </div>
+                        ))}
+                        {filteredPatients.length === 0 && (
+                          <p className="p-2 text-sm text-gray-500 text-center">Nenhum paciente encontrado.</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {errors.patient && (
+                  <p className="text-red-600 text-sm mt-1">{errors.patient}</p>
+                )}
+                {localPatient && (
+                  <div className="mt-2 flex items-center gap-3 text-sm">
+                    {localRecentRecord ? (
+                      <>
+                        <div className="text-yellow-800">Paciente possui registro em {new Date(localRecentRecord.entryDate).toLocaleDateString('pt-BR')} (status: {localRecentRecord.status})</div>
+                        {medsLocked ? (
+                          <button
+                            type="button"
+                            onClick={() => setMedsLocked(false)}
+                            className="px-2 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 flex items-center gap-2"
+                          >
+                            <span className="w-4 h-4">{icons.arrowPath || icons.spinner}</span>
+                            <span>Continuar</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!localRecentRecord || !Array.isArray(localRecentRecord.medications)) return;
+                              const copied = localRecentRecord.medications.map((m, i) => ({
+                                medicationId: m.medicationId || m.id || m._id,
+                                quantity: m.quantity || quantityOptions[0],
+                                value: m.value || '',
+                                tempId: Date.now() + i,
+                              }));
+                              setMedications(copied.length > 0 ? copied : [{ medicationId: '', quantity: quantityOptions[0], value: '', tempId: Date.now() }]);
+                              addToast?.('Medicações copiadas do último registro.', 'info');
+                            }}
+                            className="px-2 py-1 bg-yellow-600 text-white rounded text-sm hover:bg-yellow-700 flex items-center gap-2"
+                          >
+                            <span className="w-4 h-4">{icons.duplicate}</span>
+                            <span>Copiar medicações</span>
+                          </button>
+                        )}
+                      </>
+                    ) : (
+                      <div className="text-green-700">Nenhum registro nos últimos 20 dias</div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={clearForm}
+                      className="px-2 py-1 bg-gray-100 text-gray-800 rounded text-sm hover:bg-gray-200 flex items-center gap-2 ml-2"
+                    >
+                      <span className="w-4 h-4">{icons.trash}</span>
+                      <span>Limpar formulário</span>
+                    </button>
+                  </div>
+                )}
+                {/* space for potential future flags */}
+              </div>
+            </div>
+            {successMessage && (
+              <div className="ml-auto text-sm text-green-600 font-semibold">{successMessage}</div>
+            )}
           </div>
 
           {/* Conteúdo com rolagem (A barra de rolagem principal do modal) */}
@@ -240,6 +407,8 @@ export default function RecordForm({
                          {errors['medications[0].medicationId']}
                      </p>
                 )}
+
+                {/* (removido: banner grande). O aviso agora aparece apenas na área do paciente acima e controla o bloqueio via `medsLocked`. */}
 
                 <div
                   className="space-y-3 border border-gray-200 rounded-lg"
@@ -272,9 +441,11 @@ export default function RecordForm({
                               value={openMedSelectIndex === index ? medSearchTerm : selectedMedName}
                               onChange={(e) => setMedSearchTerm(e.target.value)}
                               onFocus={() => {
-                                setOpenMedSelectIndex(index);
-                                setMedSearchTerm(''); 
-                              }}
+                                  if (!medsLocked) {
+                                    setOpenMedSelectIndex(index);
+                                    setMedSearchTerm('');
+                                  }
+                                }}
                               className={`w-full p-2 border rounded text-sm h-10 ${ 
                                 errors[`medications[${index}].medicationId`] || errors['medications[0].medicationId']
                                   ? 'border-red-500'
@@ -336,7 +507,7 @@ export default function RecordForm({
                             }
                             className="w-full p-2 border-0 ring-1 ring-gray-200 rounded bg-white text-sm h-10 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             list={`quantity-options-${index}`}
-                            disabled={isSaving}
+                            disabled={isSaving || medsLocked}
                           />
                           <datalist id={`quantity-options-${index}`}>
                             {quantityOptions.map(opt => (
@@ -356,7 +527,7 @@ export default function RecordForm({
                             className="w-full p-2 border-0 ring-1 ring-gray-200 rounded text-sm h-10 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             step="0.01"
                             min="0"
-                            disabled={isSaving}
+                            disabled={isSaving || medsLocked}
                           />
                         </div>
 
@@ -366,7 +537,7 @@ export default function RecordForm({
                             type="button"
                             onClick={() => removeMedicationField(index)}
                             className="h-10 w-full flex items-center justify-center text-red-600 rounded-md font-medium hover:bg-red-100 active:bg-red-200 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-                            disabled={medications.length <= 1 || isSaving}
+                            disabled={medications.length <= 1 || isSaving || medsLocked}
                             title="Remover medicação"
                           >
                             <span className="w-5 h-5">{icons.trash}</span>
@@ -382,7 +553,7 @@ export default function RecordForm({
                   type="button"
                   onClick={addMedicationField}
                   className="mt-3 flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-100 text-blue-700 rounded-md font-semibold hover:bg-blue-200 active:bg-blue-300 cursor-pointer disabled:opacity-50"
-                  disabled={isSaving}
+                  disabled={isSaving || medsLocked}
                 >
                   <span className="w-4 h-4">{icons.plus}</span>
                   <span>Adicionar medicação</span>
@@ -416,18 +587,17 @@ export default function RecordForm({
             <button
               onClick={handleSubmit}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 active:bg-blue-800 font-medium cursor-pointer flex items-center justify-center gap-2 disabled:bg-blue-400 disabled:cursor-not-allowed"
-              disabled={isSaving}
+              disabled={isSaving || !localPatient || medsLocked}
             >
               {isSaving ? (
                 <>
-                  {/* NOVO: ClipLoader */}
                   <ClipLoader color="#ffffff" size={20} />
-                  <span>Salvando...</span>
+                  <span>Adicionando...</span>
                 </>
               ) : (
                 <>
                   <span className="w-5 h-5">{icons.check}</span>
-                  <span>Salvar Registro</span>
+                  <span>Adicionar Registro</span>
                 </>
               )}
             </button>

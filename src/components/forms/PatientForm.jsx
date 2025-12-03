@@ -171,7 +171,66 @@ export default function PatientForm({
                     />
                     {errors.name && <p className="text-red-600 text-xs mt-1">{errors.name}</p>}
                 </div>
-                {/* ... (outros inputs desabilitados por {isSaving} - omitidos para brevidade) ... */}
+               {/* Campo CPF */}
+<div className="mb-4">
+    <label className="block text-gray-700 font-medium mb-1" htmlFor={`patient-cpf-${patient?.id || 'new'}`}>CPF</label>
+    <input
+        type="text"
+        id={`patient-cpf-${patient?.id || 'new'}`}
+        name="cpf"
+        value={formData.cpf}
+        onChange={handleChange}
+        className={`w-full p-2 border rounded ${errors.cpf ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'} focus:outline-none focus:ring-2 focus:ring-blue-500`}
+        placeholder="000.000.000-00"
+        disabled={isSaving}
+    />
+    {errors.cpf && <p className="text-red-600 text-xs mt-1">{errors.cpf}</p>}
+</div>
+
+{/* Campo Cartão SUS */}
+<div className="mb-4">
+    <label className="block text-gray-700 font-medium mb-1" htmlFor={`patient-sus-${patient?.id || 'new'}`}>Cartão SUS</label>
+    <input
+        type="text"
+        id={`patient-sus-${patient?.id || 'new'}`}
+        name="susCard"
+        value={formData.susCard}
+        onChange={handleChange}
+        className={`w-full p-2 border rounded ${errors.cpf ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'} focus:outline-none focus:ring-2 focus:ring-blue-500`}
+        placeholder="000000000000000"
+        disabled={isSaving}
+    />
+</div>
+
+{/* Campo Observações */}
+<div className="mb-4">
+    <label className="block text-gray-700 font-medium mb-1" htmlFor={`patient-observations-${patient?.id || 'new'}`}>Observações</label>
+    <textarea
+        id={`patient-observations-${patient?.id || 'new'}`}
+        name="observations"
+        value={formData.observations}
+        onChange={handleChange}
+        className="w-full p-2 border rounded border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        rows="3"
+        placeholder="Observações clínicas relevantes..."
+        disabled={isSaving}
+    />
+</div>
+
+{/* Campo Notas Gerais */}
+<div className="mb-4">
+    <label className="block text-gray-700 font-medium mb-1" htmlFor={`patient-notes-${patient?.id || 'new'}`}>Notas Gerais</label>
+    <textarea
+        id={`patient-notes-${patient?.id || 'new'}`}
+        name="generalNotes"
+        value={formData.generalNotes}
+        onChange={handleChange}
+        className="w-full p-2 border rounded border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        rows="3"
+        placeholder="alguma informação adicional sobre o paciente..."
+        disabled={isSaving}
+    />
+</div>
 
                 {/* Status */}
                  {patient && (
