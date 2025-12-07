@@ -1,6 +1,5 @@
 // src/pages/ProfessionalDashboardPage.jsx
-// (COMPLETO - ATUALIZADO: Adicionada verificação de registro recente < 20 dias)
-// (COMPLETO - ATUALIZADO: Adicionada funcionalidade "Repetir Registro" - Clonar)
+// (COMPLETO - ATUALIZADO: Correção do fluxo de confirmação e spinner no modal de atendimento)
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -15,19 +14,15 @@ import { AttendRecordModal } from '../components/common/AttendRecordModal';
 import { CancelRecordModal } from '../components/common/CancelRecordModal';
 import { PatientRecordsTable } from '../components/common/PatientRecordsTable';
 import MedicationForm from '../components/forms/MedicationForm';
-// --- (NOVA IMPORTAÇÃO) ---
-import MedicationsPage from './MedicationsPage'; // Importa a página de medicações
-// ---
+import MedicationsPage from './MedicationsPage'; 
 import { icons } from '../utils/icons';
 import { getMedicationName } from '../utils/helpers';
 import { useDebounce } from '../hooks/useDebounce';
 
-
-
-// --- (NOVO) Constante de 30 dias ---
+// --- Constante de 30 dias ---
 const MS_IN_30_DAYS = 30 * 24 * 60 * 60 * 1000;
 
-// --- (NOVO) Constante de 20 dias ---
+// --- Constante de 20 dias ---
 const MS_IN_20_DAYS = 20 * 24 * 60 * 60 * 1000;
 
 // --- Componente da Página Principal ---
@@ -41,11 +36,10 @@ export default function ProfessionalDashboardPage({
   setMedications,
   addToast,
   addLog,
-  activeTabForced, // Esta prop vem da URL (via MainLayout)
+  activeTabForced,
 }) {
-  const navigate = useNavigate(); // Hook para mudar a URL
+  const navigate = useNavigate();
 
-  // O currentView agora é um "espelho" do activeTabForced (URL)
   const [currentView, setCurrentView] = useState('dashboard');
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -55,7 +49,6 @@ export default function ProfessionalDashboardPage({
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
 
-  // --- (ESTADO ATUALIZADO) ---
   const [confirmation, setConfirmation] = useState({
     isOpen: false,
     message: '',
@@ -67,11 +60,11 @@ export default function ProfessionalDashboardPage({
   });
 
   const [attendingRecord, setAttendingRecord] = useState(null);
+  // --- (NOVO) Estado de Loading para o Atendimento ---
+  const [isAttendingLoading, setIsAttendingLoading] = useState(false);
 
-  // Novo estado para controlar o modal de cancelamento
   const [cancelingRecord, setCancelingRecord] = useState(null);
 
-  // --- (NOVO) Estado do Alerta de Vencidos ---
   const [isOverdueAlertVisible, setIsOverdueAlertVisible] = useState(true);
 
   // --- Estados do 'Select com Busca' (Histórico) ---
@@ -81,31 +74,26 @@ export default function ProfessionalDashboardPage({
   const [selectedPatientName, setSelectedPatientName] = useState('');
   const quickSelectRef = useRef(null);
 
-  // --- (NOVO) Estados do 'Select com Busca' (Dashboard) ---
+  // --- Estados do 'Select com Busca' (Dashboard) ---
   const [dashQuickPatientId, setDashQuickPatientId] = useState('');
   const [dashQuickSearch, setDashQuickSearch] = useState('');
   const [isDashQuickOpen, setIsDashQuickOpen] = useState(false);
   const [dashQuickPatientName, setDashQuickPatientName] = useState('');
   const dashQuickRef = useRef(null);
 
-  // --- Estado do Filtro de Histórico ---
   const [statusFilter, setStatusFilter] = useState('Todos');
 
-  // --- Estados de Paginação ---
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(20);
 
-  // --- Debounce ---
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const debouncedQuickSearchTerm = useDebounce(quickSearchTerm, 300);
   const debouncedDashQuickSearch = useDebounce(dashQuickSearch, 300);
 
-  // --- (CORREÇÃO) useEffect agora é a ÚNICA fonte da verdade para 'currentView' ---
   useEffect(() => {
     setCurrentView(activeTabForced || 'dashboard');
   }, [activeTabForced]);
 
-  // Effect para fechar o select customizado (Histórico)
   useEffect(() => {
     function handleClickOutside(event) {
       if (
@@ -121,7 +109,6 @@ export default function ProfessionalDashboardPage({
     };
   }, [quickSelectRef]);
 
-  // (NOVO) Effect para fechar o select customizado (Dashboard)
   useEffect(() => {
     function handleClickOutside(event) {
       if (
@@ -137,12 +124,10 @@ export default function ProfessionalDashboardPage({
     };
   }, [dashQuickRef]);
 
-  // Effect para Paginação
   useEffect(() => {
     setCurrentPage(1);
   }, [statusFilter]);
 
-  // --- Função de Sincronização de Estado (CRUCIAL) ---
   const syncGlobalState = async (refetchFunction, errorMsg) => {
     if (typeof refetchFunction === 'function') {
       await refetchFunction();
@@ -150,9 +135,7 @@ export default function ProfessionalDashboardPage({
       console.error(`Função de recarga não encontrada para ${errorMsg}.`);
     }
   };
-  // --- FIM FUNÇÃO SINCRONAÇÃO ---
 
-  // --- Função de Validação de Duplicidade (Manter como UX) ---
   const checkDuplicatePatient = ({ cpf, susCard, currentId }) => {
     const isDuplicate =
       Array.isArray(patients) &&
@@ -172,7 +155,6 @@ export default function ProfessionalDashboardPage({
     return isDuplicate;
   };
 
-  // --- (HELPER ATUALIZADO) ---
   const closeConfirmation = () =>
     setConfirmation({
       isOpen: false,
@@ -190,92 +172,77 @@ export default function ProfessionalDashboardPage({
         'Desconhecido'
       : 'Desconhecido';
 
-  // 🚨 FUNÇÃO CORRIGIDA PARA FLICKERING E ESCOPO
   const handleEditPatient = (patient) => {
     setEditingPatient(patient ? JSON.parse(JSON.stringify(patient)) : null);
     setIsPatientModalOpen(true);
   };
 
-  // --- (NOVA FUNÇÃO HELPER 1) ---
-  // Verifica se o paciente tem um registro (Pendente ou Atendido) nos últimos 20 dias
   const findRecentRecord = (patientId, recordToExcludeId = null) => {
     if (!patientId || !Array.isArray(records)) return null;
 
     const now = new Date().getTime();
 
-    // Filtra registros para o paciente, excluindo o registro que estamos editando/clonando
     const patientRecords = records
       .filter((r) => {
         const recordId = r._id || r.id;
-        // Ignora registros cancelados e o próprio registro (se estiver editando/clonando)
         return (
           r.patientId === patientId &&
           r.status !== 'Cancelado' &&
           recordId !== recordToExcludeId
         );
       })
-      .sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate)); // Pega o mais recente
+      .sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate));
 
     if (patientRecords.length === 0) {
-      return null; // Nenhum outro registro encontrado
+      return null;
     }
 
     const mostRecentRecord = patientRecords[0];
     const mostRecentEntryTime = new Date(mostRecentRecord.entryDate).getTime();
 
-    // Verifica se a data de *entrada* mais recente está dentro da janela de 20 dias
     if (now - mostRecentEntryTime < MS_IN_20_DAYS) {
-      return mostRecentRecord; // ENCONTRADO!
+      return mostRecentRecord;
     }
 
-    return null; // O registro mais recente é mais antigo que 20 dias
+    return null;
   };
 
-  // --- (NOVA FUNÇÃO HELPER 2) ---
-  // Esta função "portão" (gatekeeper) decide se abre o modal de registro ou o de aviso
   const openRecordModalWithCheck = (patient, recordData = null) => {
     const patientId = patient?._id || patient?.id;
 
-    // Verifica por registros recentes, excluindo o ID do registro que podemos estar clonando/editando
     const recentRecord = findRecentRecord(
       patientId,
       recordData?._id || recordData?.id || null
     );
 
-    // SÓ AVISA SE:
-    // 1. Estamos criando um NOVO registro (recordData === null)
-    // 2. E um registro recente FOI ENCONTRADO (recentRecord !== null)
     if (recordData === null && recentRecord) {
       const lastEntryDate = new Date(recentRecord.entryDate).toLocaleDateString(
         'pt-BR'
       );
       const status = recentRecord.status;
 
-      // Mostra o modal de confirmação com a MENSAGEM DE AVISO
       setConfirmation({
         isOpen: true,
         title: 'Aviso de Registro Recente',
         message: `Este paciente já possui um registro recente (Status: ${status}, Data: ${lastEntryDate}). Deseja criar uma nova entrada mesmo assim?`,
         onConfirm: () => {
-          // O usuário clicou "Sim", então abrimos o formulário
           setSelectedPatient(patient);
-          setEditingRecord(null); // É um novo registro
+          setEditingRecord(null);
           setIsRecordModalOpen(true);
-          closeConfirmation(); // Fecha o aviso
+          closeConfirmation();
         },
         data: null,
         confirmText: 'Sim, Criar Mesmo Assim',
-        isDestructive: false, // Não é uma ação destrutiva
+        isDestructive: false,
       });
     } else {
-      // Caso contrário (sem registro recente, ou estamos editando/clonando), abre o modal direto
       setSelectedPatient(patient);
-      setEditingRecord(recordData); // Será null (novo), ou terá dados (edição/clone)
+      setEditingRecord(recordData);
       setIsRecordModalOpen(true);
     }
   };
 
-  // --- Memos (Mantidos) ---
+  // --- Memos ---
   const filteredPatients = useMemo(
     () =>
       Array.isArray(patients)
@@ -409,7 +376,8 @@ export default function ProfessionalDashboardPage({
         return dateB - dateA;
       });
   }, [records]);
-// --- Ações de API (CORRIGIDAS) ---
+
+  // --- Ações de API ---
   const handleSavePatient = async (patientData) => {
     try {
       let response;
@@ -428,12 +396,10 @@ export default function ProfessionalDashboardPage({
       };
 
       if (patientId && patientId !== 'new') {
-        // CORREÇÃO: Usando api.put e caminho relativo
         response = await api.put(`/patients/${patientId}`, payload);
         addToast('Paciente atualizado com sucesso!', 'success');
         addLog?.(user?.name, `atualizou dados do paciente ${patientName}`);
       } else {
-        // CORREÇÃO: Usando api.post
         response = await api.post('/patients', payload);
         addToast('Paciente cadastrado com sucesso!', 'success');
         addLog?.(user?.name, `cadastrou novo paciente ${patientName}`);
@@ -455,7 +421,6 @@ export default function ProfessionalDashboardPage({
   const handleDeletePatient = async (patientId) => {
     const patient = patients.find((p) => (p._id || p.id) === patientId);
     try {
-      // CORREÇÃO: Usando api.delete
       await api.delete(`/patients/${patientId}`);
       addToast('Paciente excluído!', 'success');
       addLog?.(user?.name, `excluiu o paciente ${patient?.name}`);
@@ -504,12 +469,10 @@ export default function ProfessionalDashboardPage({
       };
 
       if (recordId && recordId !== 'new') {
-        // CORREÇÃO: api.put
         response = await api.put(`/records/${recordId}`, payload);
         addToast('Registro atualizado!', 'success');
         addLog?.(user?.name, `atualizou registro para ${patientName}`);
       } else {
-        // CORREÇÃO: api.post
         response = await api.post('/records', payload);
         addToast('Registro salvo!', 'success');
         addLog?.(user?.name, `criou registro para ${patientName}`);
@@ -520,8 +483,6 @@ export default function ProfessionalDashboardPage({
       const msg = error.response?.data?.message || 'Erro ao salvar registro. Verifique os dados.';
       addToast(msg, 'error');
     } finally {
-      // Não fecha o modal automaticamente ao criar um novo registro
-      // Fecha apenas quando estávamos editando um registro existente
       const wasEditing = !!(recordData && (recordData._id || recordData.id));
       if (wasEditing) {
         setIsRecordModalOpen(false);
@@ -539,7 +500,6 @@ export default function ProfessionalDashboardPage({
   const handleDeleteRecord = async (recordId) => {
     const record = records.find((r) => (r._id || r.id) === recordId);
     try {
-      // CORREÇÃO: api.delete
       await api.delete(`/records/${recordId}`);
       addToast('Registro excluído!', 'success');
       addLog?.(user?.name, `excluiu registro de ${getPatientNameById(record?.patientId)}`);
@@ -552,7 +512,6 @@ export default function ProfessionalDashboardPage({
 
   const handleAddNewMedication = async (medData) => {
     try {
-      // CORREÇÃO: api.post
       const response = await api.post('/medications', { name: medData.name.trim() });
       const newMed = response.data;
       addToast('Medicação cadastrada!', 'success');
@@ -567,31 +526,44 @@ export default function ProfessionalDashboardPage({
     }
   };
 
+  // --- (CORRIGIDO) Função de Atualizar Status (Atender) ---
   const handleUpdateRecordStatus = async (recordId, deliveryDateStr) => {
     if (!deliveryDateStr) {
       addToast('Selecione uma data.', 'error');
       return;
     }
+
+    // 1. Ativa o loading (Spinner)
+    setIsAttendingLoading(true);
+
     try {
-      // CORREÇÃO: api.patch
       await api.patch(`/records/${recordId}/status`, {
         status: 'Atendido',
         deliveryDate: deliveryDateStr,
       });
+
+      // 2. Aguarda a atualização global
+      await syncGlobalState(setRecords, 'registros');
+      
+      // 3. Exibe sucesso
       addToast('Registro Atendido!', 'success');
       addLog?.(user?.name, `marcou registro (ID: ${recordId}) como Atendido`);
-      await syncGlobalState(setRecords, 'registros');
+
+      // 4. Fecha o modal (só fecha se deu tudo certo)
+      setAttendingRecord(null);
+
     } catch (error) {
       console.error('[API Error] Atualizar Status:', error);
       addToast('Falha ao atualizar status. Tente novamente.', 'error');
+      // Obs: Não fechamos o modal no erro para permitir nova tentativa
     } finally {
-      setAttendingRecord(null);
+      // 5. Desativa o loading
+      setIsAttendingLoading(false);
     }
   };
 
   const handleCancelRecordStatus = async (recordId, cancelReason) => {
     try {
-      // CORREÇÃO: api.patch
       await api.patch(`/records/${recordId}/status`, {
         status: 'Cancelado',
         deliveryDate: null,
@@ -671,7 +643,6 @@ export default function ProfessionalDashboardPage({
     navigate('/history');
   };
 
-  // --- Renderização Condicional (O Corpo Principal) ---
   const renderCurrentView = () => {
     switch (currentView) {
       case 'dashboard':
@@ -1112,15 +1083,15 @@ export default function ProfessionalDashboardPage({
                             onClick={() =>
                               setConfirmation({
                                 isOpen: true,
-                                title: 'Confirmar Exclusão', // Título
+                                title: 'Confirmar Exclusão', 
                                 message: `Tem certeza? Excluir ${selectedPatient?.name} é uma ação PERMANENTE e não pode ser desfeita.`,
                                 onConfirm: () =>
                                   handleDeletePatient(
                                     selectedPatient._id || selectedPatient.id
                                   ),
                                 data: selectedPatient._id || selectedPatient.id,
-                                confirmText: 'Sim, Excluir', // Texto
-                                isDestructive: true, // Cor vermelha
+                                confirmText: 'Sim, Excluir', 
+                                isDestructive: true, 
                               })
                             }
                             className="p-2 text-gray-600 hover:text-red-600 hover:bg-gray-100 rounded-md cursor-pointer transition-colors"
@@ -1135,7 +1106,6 @@ export default function ProfessionalDashboardPage({
                     <h3 className="text-lg font-semibold text-gray-700">
                       Histórico de Registros
                     </h3>
-                    {/* --- ATUALIZADO --- */}
                     <button
                       onClick={() =>
                         openRecordModalWithCheck(selectedPatient, null)
@@ -1180,7 +1150,6 @@ export default function ProfessionalDashboardPage({
               Histórico Geral de Entradas
             </h2>
 
-            {/* --- ATUALIZADO --- */}
             <div className="bg-blue-50 p-4 rounded-lg mb-4 border border-blue-200 shadow-sm">
               <h4 className="flex items-center gap-2 font-semibold mb-3 text-blue-800 text-base">
                 <span className="w-5 h-5 text-blue-600">{icons.plus}</span>
@@ -1608,7 +1577,7 @@ export default function ProfessionalDashboardPage({
         />
       )}
 
-      {/* O Modal de Confirmação  */}
+      {/* Modal de Confirmação */}
       {confirmation.isOpen && (
         <ConfirmModal
           title={confirmation.title}
@@ -1624,14 +1593,17 @@ export default function ProfessionalDashboardPage({
         />
       )}
 
+      {/* (CORRIGIDO) Modal de Atendimento com Loading */}
       {attendingRecord && (
         <AttendRecordModal
           record={attendingRecord}
           onConfirm={handleUpdateRecordStatus}
-          onClose={() => setAttendingRecord(null)}
+          // Só permite fechar o modal se NÃO estiver carregando
+          onClose={() => !isAttendingLoading && setAttendingRecord(null)}
           getPatientName={getPatientNameById}
           medications={medications}
           getMedicationName={getMedicationName}
+          isSaving={isAttendingLoading} 
         />
       )}
 

@@ -1,59 +1,3 @@
-  // Função para exportar para Excel (CSV)
-  const handleExportExcel = () => {
-    if (!Array.isArray(filteredRecordsForReport) || filteredRecordsForReport.length === 0) {
-      addToast?.('Não há dados para exportar com os filtros selecionados.', 'error');
-      return;
-    }
-    try {
-      let csvContent = 'Relatório Geral de Entradas\n';
-      csvContent += `Gerado em: ${new Date().toLocaleString('pt-BR')}\n`;
-      csvContent += `Filtro de Status: ${statusOptions.find(o => o.value === filterStatus)?.label || 'Todos'}\n`;
-      csvContent += `Período: ${filterPeriod === 'all' ? 'Todos' : `Últimos ${filterPeriod} dias`}\n\n`;
-      
-      csvContent += 'Paciente,Data de Entrada,Data de Entrega,Medicações,Valor Total,Status\n';
-      
-      filteredRecordsForReport.forEach((record) => {
-        const patientName = getPatientNameById(record.patientId) || 'Desconhecido';
-        let entryDateFormatted = 'Inválido';
-        try {
-          entryDateFormatted = new Date(record.entryDate).toLocaleDateString('pt-BR');
-        } catch (e) {
-          entryDateFormatted = 'Inválido';
-        }
-        
-        let deliveryDateFormatted = '-';
-        if (record.deliveryDate)
-          try {
-            deliveryDateFormatted = new Date(record.deliveryDate).toLocaleDateString('pt-BR');
-          } catch (e) {
-            deliveryDateFormatted = 'Inválido';
-          }
-
-        const medsList = Array.isArray(record.medications)
-          ? record.medications.map(m => `${getMedicationName(m.medicationId, medications) || '?'} (${m.quantity || 'N/A'})`).join('; ')
-          : '';
-        const totalValue = !isNaN(record.totalValue) ? `R$ ${Number(record.totalValue).toFixed(2).replace('.', ',')}` : 'R$ 0,00';
-        
-        csvContent += `"${patientName}","${entryDateFormatted}","${deliveryDateFormatted}","${medsList}","${totalValue}","${record.status || 'N/A'}"\n`;
-      });
-
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', `relatorio_entradas_${new Date().getTime()}.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      addToast?.('Relatório exportado para Excel com sucesso!', 'success');
-    } catch (err) {
-      console.error('Erro ao exportar Excel: ', err);
-      addToast?.(`Erro ao exportar: ${err.message}`, 'error');
-    }
-  };
-
 // src/components/views/secretary/GeneralReportView.jsx
 // (ATUALIZADO: Adicionado botão "Ver Motivo" para status "Cancelado")
 
@@ -322,24 +266,18 @@ export function GeneralReportView({
         <h2 className="text-xl md:text-2xl font-bold text-gray-800">
           Relatório Geral de Entradas
         </h2>
-        <div className="flex gap-2 w-full md:w-auto">
-          <button
-            onClick={handleExportPDF}
-            disabled={!Array.isArray(filteredRecordsForReport) || filteredRecordsForReport.length === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-1 md:flex-none cursor-pointer"
-            title="Exportar em formato PDF"
-          >
-            <span className="w-4 h-4">{icons.download}</span> PDF
-          </button>
-          <button
-            onClick={handleExportExcel}
-            disabled={!Array.isArray(filteredRecordsForReport) || filteredRecordsForReport.length === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-1 md:flex-none cursor-pointer"
-            title="Exportar em formato Excel (CSV)"
-          >
-            <span className="w-4 h-4">{icons.download}</span> Excel
-          </button>
-        </div>
+        <button
+          onClick={handleExportPDF}
+          disabled={
+            !Array.isArray(filteredRecordsForReport) ||
+            filteredRecordsForReport.length === 0
+          }
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors w-full md:w-auto cursor-pointer"
+          title="Abrir PDF em nova aba para imprimir ou salvar"
+        >
+          <span className="w-4 h-4">{icons.download}</span> Exportar para
+          PDF
+        </button>
       </div>
       {/* Filtros */}
       <div className="flex flex-col md:flex-row flex-wrap gap-4 items-end mb-4 p-4 bg-gray-50 rounded-lg border">
