@@ -1,14 +1,12 @@
 // src/components/forms/RecordForm.jsx
-// (ATUALIZADO: Usando ClipLoader da react-spinners)
+
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Modal } from '../common/Modal';
 import MedicationForm from './MedicationForm';
 import { icons } from '../../utils/icons';
-// NOVO: Importa o ClipLoader
-import { ClipLoader } from 'react-spinners'; 
+import { ClipLoader } from 'react-spinners';
 
-// Lista de opções de quantidade
 const quantityOptions = [
   '1cx (30cp)', '1cx (60cp)',
   '2cxs (total 60cp)', '2cxs (total 120cp)',
@@ -17,9 +15,6 @@ const quantityOptions = [
   '1 Bisnaga', '2 Bisnagas', '1 Ampola', '1 Seringa',
   '1cx', '2cxs', '1tb'
 ];
-
-// REMOVIDO: SimpleSpinner e spinnerKeyframes
-// REMOVIDO: useEffect para injetar o keyframe CSS
 
 export default function RecordForm({
   patient,
@@ -34,584 +29,512 @@ export default function RecordForm({
   onNewMedication,
   addToast,
 }) {
+  // --- Estados do Formulário ---
+  const [localPatient, setLocalPatient] = useState(patient || null);
   const [referenceDate, setReferenceDate] = useState('');
   const [observation, setObservation] = useState('');
   const [medications, setMedications] = useState([
-    { medicationId: '', quantity: quantityOptions[0], value: '', tempId: Date.now() }, 
+    { medicationId: '', quantity: quantityOptions[0], value: '', tempId: Date.now() },
   ]);
-  const [localPatient, setLocalPatient] = useState(patient || null);
+  
+  // --- Estados de Busca e UI ---
   const [patientSearchTerm, setPatientSearchTerm] = useState('');
-  const [isPatientSelectOpen, setIsPatientSelectOpen] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
+  const [showPatientList, setShowPatientList] = useState(false);
+  const [medSearchTerm, setMedSearchTerm] = useState('');
+  const [openMedSelectIndex, setOpenMedSelectIndex] = useState(null);
+  
+  // --- Estados de Controle ---
+  const [isSaving, setIsSaving] = useState(false);
   const [isMedicationModalOpen, setIsMedicationModalOpen] = useState(false);
   const [addingMedicationIndex, setAddingMedicationIndex] = useState(null);
   const [errors, setErrors] = useState({});
-  const [openMedSelectIndex, setOpenMedSelectIndex] = useState(null);
-  const [medSearchTerm, setMedSearchTerm] = useState('');
-  const medSelectRef = useRef(null);
-  const patientSelectRef = useRef(null);
-  const [isSaving, setIsSaving] = useState(false); 
-  const [medsLocked, setMedsLocked] = useState(false);
+  const [autoFilled, setAutoFilled] = useState(false);
 
-  const localRecentRecord = useMemo(() => {
-    // Only accept external recentRecord if it matches the currently selected patient
-    if (
-      recentRecord &&
-      localPatient &&
-      (recentRecord.patientId === (localPatient._id || localPatient.id) ||
-        (recentRecord.patient && (recentRecord.patient._id === (localPatient._id || localPatient.id))))
-    ) {
-      return recentRecord;
-    }
-    if (!localPatient || !Array.isArray(records)) return null;
-    const MS_IN_20_DAYS = 20 * 24 * 60 * 60 * 1000;
-    const patientRecords = records
-      .filter((r) => r.patientId === (localPatient._id || localPatient.id) && r.status !== 'Cancelado')
-      .sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate));
-    if (patientRecords.length === 0) return null;
-    const mostRecent = patientRecords[0];
-    const mostRecentTime = new Date(mostRecent.entryDate).getTime();
-    if (Date.now() - mostRecentTime < MS_IN_20_DAYS) return mostRecent;
-    return null;
-  }, [recentRecord, localPatient, records]);
+  // Refs
+  const patientInputRef = useRef(null);
+  const listRef = useRef(null);
+  const medDropdownRef = useRef(null);
 
+  // --- Inicialização ---
   const getLocalDateString = (date = new Date()) => {
     const year = date.getFullYear();
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
     const day = date.getDate().toString().padStart(2, '0');
     return `${year}-${month}-${day}`;
   };
-  
-  const formattedDate = (dateString) => {
-    if (!dateString) return 'Data inválida';
-    const isoDatePart = dateString.slice(0, 10);
-    const parts = isoDatePart.split('-');
-    if (parts.length === 3) {
-        return `${parts[2]}/${parts[1]}/${parts[0]}`;
-    }
-    return 'Data Inválida';
-  };
 
   useEffect(() => {
     const today = getLocalDateString();
-
+    
     if (record) {
+      // MODO EDIÇÃO
       setReferenceDate(record.referenceDate ? new Date(record.referenceDate).toISOString().slice(0, 10) : today);
       setObservation(record.observation || '');
-      const existingMeds =
-        record.medications?.map((m, i) => ({
-          medicationId: m.medicationId || '', 
+      setLocalPatient(patient || null);
+      
+      const existingMeds = record.medications?.map((m, i) => ({
+          medicationId: m.medicationId || '',
           quantity: m.quantity || quantityOptions[0],
           value: m.value || '',
-          tempId: m.recordMedId || m.id || `edit-${i}`, 
-        })) || [];
-      setMedications(
-        existingMeds.length > 0
-          ? existingMeds
-          : [{ medicationId: '', quantity: quantityOptions[0], value: '', tempId: Date.now() }]
-      );
+          tempId: m.recordMedId || m.id || `edit-${i}`,
+      })) || [];
+      
+      setMedications(existingMeds.length > 0 ? existingMeds : [{ medicationId: '', quantity: quantityOptions[0], value: '', tempId: Date.now() }]);
     } else {
-      setReferenceDate(today);
-      setObservation('');
-      setMedications([{ medicationId: '', quantity: quantityOptions[0], value: '', tempId: Date.now() }]);
+      // MODO NOVO REGISTRO
+      if (!referenceDate) setReferenceDate(today);
+      if (patient) setLocalPatient(patient);
     }
-    setErrors({});
-    setLocalPatient(patient || null);
-  }, [record]);
+  }, [record, patient]);
 
-  const clearForm = () => {
-    setMedications([{ medicationId: '', quantity: quantityOptions[0], value: '', tempId: Date.now() }]);
-    setObservation('');
-    setReferenceDate(getLocalDateString());
-    setErrors({});
-    setSuccessMessage('');
-  };
-
-  useEffect(() => {
-    setLocalPatient(patient || null);
-  }, [patient]);
-
-  // track previous patient to clear form when switching patients
-  const prevPatientRef = useRef(null);
-  useEffect(() => {
-    const prevId = prevPatientRef.current;
-    const curId = localPatient?._id || localPatient?.id || null;
-    // If switched to a different patient, clear form and lock meds if recent record exists
-    if (prevId && curId && prevId !== curId) {
-      clearForm();
-      if (localRecentRecord && !record) setMedsLocked(true);
-    }
-    // If selecting a patient for the first time (prevId null -> curId set), lock when recent
-    if (!prevId && curId) {
-      if (localRecentRecord && !record) setMedsLocked(true);
-    }
-    prevPatientRef.current = curId;
-  }, [localPatient, localRecentRecord, record]);
-
+  // Click Outside
   useEffect(() => {
     function handleClickOutside(event) {
-      if (medSelectRef.current && !medSelectRef.current.contains(event.target)) {
-        setOpenMedSelectIndex(null);
-        setMedSearchTerm('');
-      }
-      if (patientSelectRef.current && !patientSelectRef.current.contains(event.target)) {
-        setIsPatientSelectOpen(false);
-      }
+        if (listRef.current && !listRef.current.contains(event.target) && patientInputRef.current && !patientInputRef.current.contains(event.target)) {
+            setShowPatientList(false);
+        }
     }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [setMedSearchTerm, setOpenMedSelectIndex]); 
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
-  const filteredMedicationsList = useMemo(() => {
-    if (openMedSelectIndex === null) return [];
-    if (!medSearchTerm) return medicationsList.slice(0, 50); 
-    return medicationsList.filter((med) =>
-      med.name.toLowerCase().includes(medSearchTerm.toLowerCase())
-    );
-  }, [medicationsList, medSearchTerm, openMedSelectIndex]);
-
-  const filteredPatients = useMemo(() => {
-    if (!Array.isArray(patients)) return [];
-    if (!patientSearchTerm) return patients.slice(0, 50);
-    return patients.filter((p) => (p.name || '').toLowerCase().includes(patientSearchTerm.toLowerCase()) || String(p.cpf || '').includes(patientSearchTerm));
-  }, [patients, patientSearchTerm]);
-
-  const handleMedicationChange = (index, field, value) => {
-    if (field === 'medicationId' && value === 'new') {
-      setAddingMedicationIndex(index);
-      setIsMedicationModalOpen(true);
-      const newMeds = [...medications];
-      newMeds[index][field] = '';
-      setMedications(newMeds);
-      return;
-    }
-    const newMeds = [...medications];
-    newMeds[index][field] = value;
-    if (errors[`medications[${index}].${field}`] || errors['medications[0].medicationId']) {
-      const newErr = { ...errors };
-      delete newErr[`medications[${index}].${field}`];
-      delete newErr['medications[0].medicationId'];
-      setErrors(newErr);
-    }
-    setMedications(newMeds);
-  };
-
-  const addMedicationField = () => {
-    setMedications([...medications, { medicationId: '', quantity: quantityOptions[0], value: '', tempId: Date.now() }]);
-  };
-
-  const removeMedicationField = (index) => {
-    if (medications.length > 1) {
-      setMedications(medications.filter((_, i) => i !== index));
-    }
-  };
-
-  const handleSaveNewMedication = (newMedData) => {
-    const newMed = typeof onNewMedication === 'function' ? onNewMedication(newMedData) : null;
-    if (newMed && addingMedicationIndex !== null) {
-      handleMedicationChange(addingMedicationIndex, 'medicationId', newMed.id || newMed._id); 
-    }
-    setIsMedicationModalOpen(false);
-    setAddingMedicationIndex(null);
-  };
-
-  const validateRecordForm = () => {
-    const newErrors = {};
-    if (!referenceDate) newErrors.referenceDate = 'Data de referência é obrigatória.';
-    if (!localPatient || !(localPatient._id || localPatient.id)) newErrors.patient = 'Selecione um paciente.';
-    const validMeds = medications.filter((m) => m.medicationId);
-    if (medications.length === 0 || validMeds.length === 0) { 
-        newErrors['medications[0].medicationId'] = 'É obrigatório adicionar pelo menos uma medicação.';
-    }
-    validMeds.forEach((med, index) => {
-        if (!med.quantity) newErrors[`medications[${index}].quantity`] = 'Quantidade obrigatória.';
-        if (Number(med.value) < 0) newErrors[`medications[${index}].value`] = 'Valor inválido.';
-    });
-    return newErrors;
-  };
-
-  const handleSubmit = async (e) => { 
-    e.preventDefault();
-    const formErrors = validateRecordForm();
-    if (Object.keys(formErrors).length > 0) {
-      setErrors(formErrors);
-      addToast?.('Preencha os campos obrigatórios.', 'error');
-      return;
+  // --- Lógica de Registro Recente ---
+  const activeRecentRecord = useMemo(() => {
+    if (!localPatient) return null;
+    
+    if (recentRecord && (recentRecord.patientId === (localPatient._id || localPatient.id))) {
+      return recentRecord;
     }
     
-    setIsSaving(true); 
+    if (Array.isArray(records)) {
+      const targetId = localPatient._id || localPatient.id;
+      const patientRecords = records
+        .filter(r => r.patientId === targetId && r.status !== 'Cancelado')
+        .sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate));
+      
+      if (patientRecords.length > 0) {
+        const last = patientRecords[0];
+        const diff = new Date().getTime() - new Date(last.entryDate).getTime();
+        const days = diff / (1000 * 3600 * 24);
+        if (days <= 20) return last;
+      }
+    }
+    return null;
+  }, [localPatient, recentRecord, records]);
 
-    const validMedications = medications
-      .filter((m) => m.medicationId && m.quantity)
-      .map((m) => ({
-        ...m,
-        medicationId: m.medicationId, 
-        value: Number(m.value) || 0,
-        recordMedId: m.recordMedId, 
-      }));
-    const totalValue = validMedications.reduce((sum, med) => sum + med.value, 0);
-    const recordData = {
-      _id: record?._id || record?.id, 
-      patientId: localPatient?._id || localPatient?.id, 
-      profissionalId,
-      referenceDate,
-      observation: observation.trim(),
-      status: record?.status || 'Pendente',
-      entryDate: record?.entryDate || new Date(),
-      deliveryDate: record?.deliveryDate || null,
-      medications: validMedications,
-      totalValue,
-    };
+  // --- Função para Repetir Medicamentos ---
+  const repeatLastPrescription = () => {
+    if (!activeRecentRecord || !activeRecentRecord.medications) return;
+    
+    const copiedMeds = activeRecentRecord.medications.map((m, i) => ({
+      medicationId: m.medicationId || m.id || m._id,
+      quantity: m.quantity || quantityOptions[0],
+      value: m.value || '',
+      tempId: Date.now() + i
+    }));
+
+    setMedications(copiedMeds);
+    setAutoFilled(true);
+    addToast('Medicações carregadas!', 'success');
+  };
+
+  // --- Filtros ---
+  const filteredPatients = useMemo(() => {
+    if (!patientSearchTerm) return patients.slice(0, 20);
+    const lower = patientSearchTerm.toLowerCase();
+    return patients.filter(p => 
+      p.name.toLowerCase().includes(lower) || 
+      String(p.cpf || '').includes(lower) ||
+      String(p.susCard || '').includes(lower)
+    ).slice(0, 50);
+  }, [patients, patientSearchTerm]);
+
+  const filteredMedications = useMemo(() => {
+    if (!medSearchTerm) return medicationsList.slice(0, 50);
+    return medicationsList.filter(m => m.name.toLowerCase().includes(medSearchTerm.toLowerCase()));
+  }, [medicationsList, medSearchTerm]);
+
+  // --- Handlers ---
+  const handleSelectPatient = (p) => {
+    setLocalPatient(p);
+    setPatientSearchTerm('');
+    setShowPatientList(false);
+    setAutoFilled(false);
+    setMedications([{ medicationId: '', quantity: quantityOptions[0], value: '', tempId: Date.now() }]);
+    setErrors({});
+  };
+
+  const handleClearForm = () => {
+    setLocalPatient(null);
+    setMedications([{ medicationId: '', quantity: quantityOptions[0], value: '', tempId: Date.now() }]);
+    setObservation('');
+    setAutoFilled(false);
+    setPatientSearchTerm('');
+    setTimeout(() => {
+       if(patientInputRef.current) patientInputRef.current.focus();
+    }, 100);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const newErrors = {};
+    if (!localPatient) newErrors.patient = "Selecione um paciente!";
+    const validMeds = medications.filter(m => m.medicationId);
+    if (validMeds.length === 0) newErrors.medications = "Adicione pelo menos uma medicação.";
+    validMeds.forEach((m, i) => {
+      if(!m.quantity) newErrors[`qty_${i}`] = "Qtd?";
+    });
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      addToast("Preencha os campos obrigatórios", "error");
+      return;
+    }
+
+    setIsSaving(true);
 
     try {
-      await onSave(recordData); 
-      // Ao salvar um novo registro, não fechamos automaticamente o modal.
-      // Exibe mensagem de sucesso e prepara o formulário para próximo paciente.
-      setSuccessMessage('Registro inserido');
-      addToast?.('Registro inserido', 'success');
-      // Limpa seleção de paciente para permitir adicionar para outro paciente
-      setLocalPatient(null);
-      setPatientSearchTerm('');
-      // Reseta a lista de medicações para novo cadastro
-      setMedications([{ medicationId: '', quantity: quantityOptions[0], value: '', tempId: Date.now() }]);
-      // Limpa mensagem após 3s
-      setTimeout(() => setSuccessMessage(''), 3000);
+        const payload = {
+            _id: record?._id || record?.id,
+            patientId: localPatient._id || localPatient.id,
+            profissionalId,
+            referenceDate,
+            observation,
+            status: record?.status || 'Pendente',
+            entryDate: record?.entryDate || new Date(),
+            medications: validMeds.map(m => ({
+                medicationId: m.medicationId,
+                quantity: m.quantity,
+                value: Number(m.value) || 0
+            })),
+            totalValue: validMeds.reduce((acc, cur) => acc + (Number(cur.value)||0), 0)
+        };
+
+        await onSave(payload);
+        addToast("Registro salvo com sucesso!", "success");
+
+        if (!record) {
+            handleClearForm(); 
+        } else {
+            onClose();
+        }
     } catch (error) {
-        addToast?.('Erro ao salvar registro. Tente novamente.', 'error');
+        console.error(error);
+        addToast("Erro ao salvar.", "error");
     } finally {
-        setIsSaving(false); 
+        setIsSaving(false);
     }
   };
-  
-  // (Render / JSX)
+
   return (
     <>
-      <Modal onClose={onClose} modalClasses="max-w-3xl">
-        <div className="flex flex-col h-[90vh]">
-          {/* Cabeçalho */}
-          <div className="flex-shrink-0 flex items-center gap-3">
-            <span className="w-8 h-8 text-blue-600 flex-shrink-0">{icons.clipboard}</span>
-            <div className="flex flex-col">
-              <h2 className="text-2xl font-bold">
-                {record ? `Editar Registro` : 'Novo Registro'}
-              </h2>
-              <div className="mt-1">
-                {localPatient ? (
-                  <div className="text-sm text-blue-700 font-semibold">{localPatient.name}</div>
-                ) : (
-                  <div className="relative" ref={patientSelectRef}>
-                    <input
-                      type="text"
-                      placeholder="Buscar paciente por nome, CPF ou cartão SUS..."
-                      value={patientSearchTerm}
-                      onChange={(e) => setPatientSearchTerm(e.target.value)}
-                      onFocus={() => setIsPatientSelectOpen(true)}
-                      className="w-96 p-2 border rounded text-sm h-10 border-gray-300 bg-white"
-                          disabled={isSaving || medsLocked}
-                    />
-                    {isPatientSelectOpen && (
-                      <div className="absolute z-20 w-full bg-white border border-gray-300 rounded-lg shadow-lg mt-1 max-h-60 overflow-auto">
-                        {filteredPatients.map((p) => (
-                          <div
-                            key={p._id || p.id}
-                            className="p-2 text-sm text-gray-800 hover:bg-blue-50 cursor-pointer"
-                            onMouseDown={(e) => { e.preventDefault(); setLocalPatient(p); setIsPatientSelectOpen(false); setPatientSearchTerm(''); }}
-                          >
-                            <div className="font-medium">{p.name}</div>
-                            <div className="text-xs text-gray-500">{p.cpf || ''} {p.susCard ? `• ${p.susCard}` : ''}</div>
-                          </div>
-                        ))}
-                        {filteredPatients.length === 0 && (
-                          <p className="p-2 text-sm text-gray-500 text-center">Nenhum paciente encontrado.</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-                {errors.patient && (
-                  <p className="text-red-600 text-sm mt-1">{errors.patient}</p>
-                )}
-                {localPatient && (
-                  <div className="mt-2 flex items-center gap-3 text-sm">
-                    {localRecentRecord ? (
-                      <>
-                        <div className="text-yellow-800">Paciente possui registro em {new Date(localRecentRecord.entryDate).toLocaleDateString('pt-BR')} (status: {localRecentRecord.status})</div>
-                        {medsLocked ? (
-                          <button
-                            type="button"
-                            onClick={() => setMedsLocked(false)}
-                            className="px-2 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 flex items-center gap-2"
-                          >
-                            <span className="w-4 h-4">{icons.arrowPath || icons.spinner}</span>
-                            <span>Continuar</span>
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (!localRecentRecord || !Array.isArray(localRecentRecord.medications)) return;
-                              const copied = localRecentRecord.medications.map((m, i) => ({
-                                medicationId: m.medicationId || m.id || m._id,
-                                quantity: m.quantity || quantityOptions[0],
-                                value: m.value || '',
-                                tempId: Date.now() + i,
-                              }));
-                              setMedications(copied.length > 0 ? copied : [{ medicationId: '', quantity: quantityOptions[0], value: '', tempId: Date.now() }]);
-                              addToast?.('Medicações copiadas do último registro.', 'info');
-                            }}
-                            className="px-2 py-1 bg-yellow-600 text-white rounded text-sm hover:bg-yellow-700 flex items-center gap-2"
-                          >
-                            <span className="w-4 h-4">{icons.duplicate}</span>
-                            <span>Copiar medicações</span>
-                          </button>
-                        )}
-                      </>
-                    ) : (
-                      <div className="text-green-700">Nenhum registro nos últimos 20 dias</div>
-                    )}
-                    <button
-                      type="button"
-                      onClick={clearForm}
-                      className="px-2 py-1 bg-gray-100 text-gray-800 rounded text-sm hover:bg-gray-200 flex items-center gap-2 ml-2"
-                    >
-                      <span className="w-4 h-4">{icons.trash}</span>
-                      <span>Limpar formulário</span>
-                    </button>
-                  </div>
-                )}
-                {/* space for potential future flags */}
-              </div>
-            </div>
-            {successMessage && (
-              <div className="ml-auto text-sm text-green-600 font-semibold">{successMessage}</div>
-            )}
+      <Modal onClose={onClose}>
+        {/* FIX: h-[85vh] trava a altura total para caber na tela */}
+        <div className="flex flex-col h-[85vh] -m-6 rounded-lg overflow-hidden bg-white">
+          
+          {/* HEADER (Fixo) */}
+          <div className="bg-gray-800 text-white px-6 py-4 flex justify-between items-center shadow-md shrink-0">
+             <div className="flex items-center gap-3">
+                 <div className="p-2 bg-gray-700 rounded-lg">{icons.clipboard}</div>
+                 <div>
+                     <h2 className="text-xl font-bold">{record ? 'Editar Atendimento' : 'Novo Atendimento'}</h2>
+                     <p className="text-xs text-gray-300">Preencha os dados abaixo.</p>
+                 </div>
+             </div>
+             <button 
+                  onClick={onClose} 
+                  className="text-gray-400 hover:text-white transition-colors cursor-pointer p-1"
+                  title="Fechar"
+              >
+                 {icons.close || 'X'}
+             </button>
           </div>
 
-          {/* Conteúdo com rolagem (A barra de rolagem principal do modal) */}
-          <div className="flex-grow overflow-y-auto pr-2 my-4">
-            <form onSubmit={handleSubmit} className="space-y-6" noValidate>
-              {/* Data */}
-              <div>
-                <label className="block text-gray-700 font-medium mb-1">Data de Referência</label>
-                <p className="w-full p-2 border rounded border-gray-300 bg-gray-100 text-gray-700 cursor-not-allowed flex items-center">
-                  <span className="font-medium text-gray-800">{formattedDate(referenceDate)}</span>
-                </p>
-              </div>
-
-              {/* Medicações */}
-              <div className="border-t pt-4">
-                <h3 className="text-lg font-semibold mb-3 text-gray-800">Medicações</h3>
-                
-                {errors['medications[0].medicationId'] && (
-                     <p className="text-red-600 text-sm mb-3">
-                         {errors['medications[0].medicationId']}
-                     </p>
-                )}
-
-                {/* (removido: banner grande). O aviso agora aparece apenas na área do paciente acima e controla o bloqueio via `medsLocked`. */}
-
-                <div
-                  className="space-y-3 border border-gray-200 rounded-lg"
-                  ref={medSelectRef}
-                >
-                  {/* Cabeçalho da Tabela (Opcional, mas limpo) */}
-                  <div className="grid grid-cols-12 gap-3 items-center bg-gray-50 p-3 rounded-t-lg">
-                    <div className="col-span-12 md:col-span-6 text-xs font-semibold text-gray-600 uppercase">Medicação</div>
-                    <div className="col-span-4 md:col-span-3 text-xs font-semibold text-gray-600 uppercase">Qtd.</div>
-                    <div className="col-span-4 md:col-span-2 text-xs font-semibold text-gray-600 uppercase">Valor (R$)</div>
-                    <div className="col-span-4 md:col-span-1 text-xs font-semibold text-gray-600 uppercase">Ação</div>
-                  </div>
-
-                  {/* Linhas de Medicação */}
-                  {medications.map((med, index) => {
-                    const selectedMedName =
-                      medicationsList.find((m) => (m.id || m._id) === med.medicationId)?.name || ''; 
-                    
-                    return (
-                      <div
-                        key={med.tempId} 
-                        className="grid grid-cols-12 gap-3 items-start p-3 border-b last:border-b-0"
-                      >
-                        {/* Medicação (COMBOBOX) */}
-                        <div className="col-span-12 md:col-span-6">
-                          <div className="relative">
-                            <input
-                              type="text"
-                              placeholder="Buscar ou selecionar..."
-                              value={openMedSelectIndex === index ? medSearchTerm : selectedMedName}
-                              onChange={(e) => setMedSearchTerm(e.target.value)}
-                              onFocus={() => {
-                                  if (!medsLocked) {
-                                    setOpenMedSelectIndex(index);
-                                    setMedSearchTerm('');
-                                  }
-                                }}
-                              className={`w-full p-2 border rounded text-sm h-10 ${ 
-                                errors[`medications[${index}].medicationId`] || errors['medications[0].medicationId']
-                                  ? 'border-red-500'
-                                  : 'border-gray-300'
-                              } bg-white`}
-                              disabled={isSaving}
-                            />
-
-                            {/* Dropdown */}
-                            {openMedSelectIndex === index && (
+          {/* BODY (Rolagem Interna) - flex-grow garante que ocupe o espaço restante */}
+          <div className="flex-grow overflow-y-auto bg-gray-50 p-6 flex flex-col gap-6">
+              
+              {/* 1. SELEÇÃO DE PACIENTE */}
+              <div className={`transition-all duration-300`}>
+                  {!localPatient ? (
+                      <div className="max-w-2xl mx-auto w-full relative">
+                          <label className="block text-center text-gray-700 font-bold mb-3 text-lg">
+                              Quem será atendido agora?
+                          </label>
+                          <div className="relative group">
+                               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400">
+                                  {icons.search}
+                               </div>
+                               <input
+                                  ref={patientInputRef}
+                                  type="text"
+                                  className="w-full pl-12 pr-4 py-4 text-lg border-2 border-blue-300 rounded-xl shadow-sm focus:border-blue-600 focus:ring-4 focus:ring-blue-100 outline-none transition-all cursor-text"
+                                  placeholder="Digite nome, CPF ou cartão SUS..."
+                                  value={patientSearchTerm}
+                                  onChange={(e) => {
+                                      setPatientSearchTerm(e.target.value);
+                                      setShowPatientList(true);
+                                  }}
+                                  onFocus={() => setShowPatientList(true)}
+                                  autoFocus
+                               />
+                          </div>
+                          
+                          {showPatientList && (
                               <div 
-                                className="absolute z-10 w-full bg-white border border-gray-300 rounded-lg shadow-lg mt-1 max-h-60 flex flex-col"
-                                onMouseDown={(e) => e.preventDefault()} 
+                                  ref={listRef}
+                                  className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden max-h-60 overflow-y-auto"
                               >
-                                <div className="overflow-y-auto">
-                                  {filteredMedicationsList.map((m) => {
-                                    const finalId = m.id || m._id; 
-                                    return (
-                                    <div
-                                      key={finalId} 
-                                      className="p-2 text-sm text-gray-800 hover:bg-blue-50 cursor-pointer"
-                                      onClick={() => {
-                                        handleMedicationChange(index, 'medicationId', finalId); 
-                                        setOpenMedSelectIndex(null);
-                                        setMedSearchTerm('');
-                                      }}
-                                    >
-                                      {m.name}
-                                    </div>
-                                  )})}
-                                  {filteredMedicationsList.length === 0 && (
-                                    <p className="p-2 text-sm text-gray-500 text-center">
-                                      {medSearchTerm ? `Nenhum resultado para "${medSearchTerm}".` : "Digite para buscar..."}
-                                    </p>
+                                  {filteredPatients.length > 0 ? (
+                                      filteredPatients.map(p => (
+                                          <div 
+                                              key={p._id || p.id}
+                                              onClick={() => handleSelectPatient(p)}
+                                              className="px-5 py-4 border-b border-gray-50 hover:bg-blue-50 cursor-pointer transition-colors flex justify-between items-center group"
+                                          >
+                                              <div>
+                                                  <div className="font-bold text-gray-800 text-lg group-hover:text-blue-700">{p.name}</div>
+                                                  <div className="text-sm text-gray-500 flex gap-4">
+                                                      <span>CPF: {p.cpf || '---'}</span>
+                                                      <span>SUS: {p.susCard || '---'}</span>
+                                                  </div>
+                                              </div>
+                                              <div className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                  Selecionar &rarr;
+                                              </div>
+                                          </div>
+                                      ))
+                                  ) : (
+                                      <div className="p-6 text-center text-gray-500">
+                                          Nenhum paciente encontrado.
+                                      </div>
                                   )}
-                                  <div
-                                    className="p-2 text-sm text-blue-600 font-medium hover:bg-blue-50 cursor-pointer border-t border-gray-200 mt-1"
-                                    onClick={() => {
-                                      handleMedicationChange(index, 'medicationId', 'new');
-                                      setOpenMedSelectIndex(null);
-                                      setMedSearchTerm('');
-                                    }}
-                                  >
-                                    + Cadastrar Nova Medicação
-                                  </div>
-                                </div>
                               </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Quantidade (com datalist) */}
-                        <div className="col-span-4 md:col-span-3">
-                          <input
-                            type="text"
-                            value={med.quantity}
-                            onChange={(e) =>
-                              handleMedicationChange(index, 'quantity', e.target.value)
-                            }
-                            className="w-full p-2 border-0 ring-1 ring-gray-200 rounded bg-white text-sm h-10 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            list={`quantity-options-${index}`}
-                            disabled={isSaving || medsLocked}
-                          />
-                          <datalist id={`quantity-options-${index}`}>
-                            {quantityOptions.map(opt => (
-                              <option key={opt} value={opt} />
-                            ))}
-                          </datalist>
-                        </div>
-
-                        {/* Valor */}
-                        <div className="col-span-4 md:col-span-2">
-                          <input
-                            type="number"
-                            value={med.value}
-                            onChange={(e) =>
-                              handleMedicationChange(index, 'value', e.target.value)
-                            }
-                            className="w-full p-2 border-0 ring-1 ring-gray-200 rounded text-sm h-10 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            step="0.01"
-                            min="0"
-                            disabled={isSaving || medsLocked}
-                          />
-                        </div>
-
-                        {/* Botão Remover */}
-                        <div className="col-span-4 md:col-span-1 flex items-center">
-                          <button
-                            type="button"
-                            onClick={() => removeMedicationField(index)}
-                            className="h-10 w-full flex items-center justify-center text-red-600 rounded-md font-medium hover:bg-red-100 active:bg-red-200 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-                            disabled={medications.length <= 1 || isSaving || medsLocked}
-                            title="Remover medicação"
-                          >
-                            <span className="w-5 h-5">{icons.trash}</span>
-                          </button>
-                        </div>
+                          )}
+                          {errors.patient && <p className="text-center text-red-500 mt-2 font-medium">{errors.patient}</p>}
                       </div>
-                    );
-                  })}
-                </div>
+                  ) : (
+                      // CARD PACIENTE SELECIONADO
+                      <div className="bg-white rounded-2xl shadow-sm border border-blue-100 p-6 flex flex-col md:flex-row justify-between items-center gap-6 animate-fade-in relative overflow-hidden">
+                          <div className="absolute top-0 left-0 w-2 h-full bg-blue-500"></div>
+                          
+                          <div className="flex items-center gap-5 z-10">
+                              <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-2xl font-bold border-4 border-white shadow-sm">
+                                  {localPatient.name.charAt(0).toUpperCase()}
+                              </div>
+                              <div>
+                                  <h3 className="text-2xl font-bold text-gray-900">{localPatient.name}</h3>
+                                  <div className="flex gap-3 text-sm text-gray-600 mt-1">
+                                      <span className="bg-gray-100 px-2 py-1 rounded">CPF: {localPatient.cpf || 'N/A'}</span>
+                                      <span className="bg-gray-100 px-2 py-1 rounded">SUS: {localPatient.susCard || 'N/A'}</span>
+                                  </div>
+                              </div>
+                          </div>
 
-
-                <button
-                  type="button"
-                  onClick={addMedicationField}
-                  className="mt-3 flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-100 text-blue-700 rounded-md font-semibold hover:bg-blue-200 active:bg-blue-300 cursor-pointer disabled:opacity-50"
-                  disabled={isSaving || medsLocked}
-                >
-                  <span className="w-4 h-4">{icons.plus}</span>
-                  <span>Adicionar medicação</span>
-                </button>
+                          <div className="flex flex-col items-end gap-2 z-10 w-full md:w-auto">
+                               {activeRecentRecord && !autoFilled && (
+                                   <button
+                                      type="button"
+                                      onClick={repeatLastPrescription}
+                                      className="w-full md:w-auto px-4 py-2 bg-yellow-100 text-yellow-800 border border-yellow-300 rounded-lg hover:bg-yellow-200 transition-colors flex items-center justify-center gap-2 font-semibold shadow-sm animate-pulse cursor-pointer"
+                                   >
+                                       <span>⚡ Repetir Última Receita</span>
+                                   </button>
+                               )}
+                               
+                               <button 
+                                  onClick={handleClearForm}
+                                  className="text-sm text-red-500 hover:text-red-700 underline font-medium cursor-pointer"
+                               >
+                                  Alterar Paciente (Esc)
+                               </button>
+                          </div>
+                      </div>
+                  )}
               </div>
 
-              {/* Observações */}
-              <div>
-                <label className="block text-gray-700 font-medium mb-1">Observações Gerais</label>
-                <textarea
-                  value={observation}
-                  onChange={(e) => setObservation(e.target.value)}
-                  className="w-full p-2 border rounded border-gray-300 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                  rows="2"
-                  disabled={isSaving}
-                ></textarea>
-              </div>
-            </form>
+              {/* 2. ÁREA DE REGISTRO */}
+              {localPatient && (
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex-grow flex flex-col animate-slide-up">
+                      <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center rounded-t-xl">
+                          <h4 className="font-bold text-gray-700 uppercase tracking-wider text-sm flex items-center gap-2">
+                              {icons.clipboard} Detalhes do Atendimento
+                          </h4>
+                          {/* FIX: Data TRAVADA (disabled) */}
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500 font-bold">DATA:</span>
+                            <input 
+                                type="date" 
+                                value={referenceDate}
+                                disabled
+                                className="bg-gray-100 border border-gray-200 rounded px-2 py-1 text-sm text-gray-500 font-medium cursor-not-allowed outline-none"
+                            />
+                          </div>
+                      </div>
+
+                      <div className="p-6 space-y-4">
+                          {medications.map((med, index) => {
+                               const medName = medicationsList.find(m => (m.id || m._id) === med.medicationId)?.name || '';
+                               return (
+                                  <div key={med.tempId} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start bg-white p-3 rounded-lg border border-gray-200 hover:border-blue-300 transition-colors shadow-sm">
+                                      <div className="md:col-span-6 relative">
+                                          <label className="text-xs font-bold text-gray-500 mb-1 block">Medicação</label>
+                                          <input
+                                              type="text"
+                                              placeholder="Buscar medicação..."
+                                              className={`w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-100 transition-all cursor-text ${!med.medicationId && errors.medications ? 'border-red-300' : 'border-gray-300'}`}
+                                              value={openMedSelectIndex === index ? medSearchTerm : medName}
+                                              onChange={e => setMedSearchTerm(e.target.value)}
+                                              onFocus={() => {
+                                                  setOpenMedSelectIndex(index);
+                                                  setMedSearchTerm('');
+                                              }}
+                                          />
+                                          {openMedSelectIndex === index && (
+                                              <div className="absolute z-20 w-full bg-white border border-gray-200 shadow-xl rounded-lg mt-1 max-h-48 overflow-y-auto">
+                                                  {filteredMedications.map(m => (
+                                                      <div 
+                                                          key={m.id || m._id}
+                                                          className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
+                                                          onMouseDown={(e) => {
+                                                              e.preventDefault();
+                                                              const newMeds = [...medications];
+                                                              newMeds[index].medicationId = m.id || m._id;
+                                                              setMedications(newMeds);
+                                                              setOpenMedSelectIndex(null);
+                                                          }}
+                                                      >
+                                                          {m.name}
+                                                      </div>
+                                                  ))}
+                                                  <div 
+                                                      className="px-4 py-2 bg-blue-50 text-blue-700 font-bold cursor-pointer hover:bg-blue-100 text-sm"
+                                                      onMouseDown={(e) => {
+                                                          e.preventDefault();
+                                                          setAddingMedicationIndex(index);
+                                                          setIsMedicationModalOpen(true);
+                                                          setOpenMedSelectIndex(null);
+                                                      }}
+                                                  >
+                                                      + Cadastrar Novo
+                                                  </div>
+                                              </div>
+                                          )}
+                                      </div>
+
+                                      <div className="md:col-span-3">
+                                          <label className="text-xs font-bold text-gray-500 mb-1 block">Qtd.</label>
+                                          <input
+                                              type="text"
+                                              list={`qty-${index}`}
+                                              className={`w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-100 cursor-pointer ${!med.quantity && errors[`qty_${index}`] ? 'border-red-300' : 'border-gray-300'}`}
+                                              value={med.quantity}
+                                              onChange={(e) => {
+                                                  const newMeds = [...medications];
+                                                  newMeds[index].quantity = e.target.value;
+                                                  setMedications(newMeds);
+                                              }}
+                                          />
+                                          <datalist id={`qty-${index}`}>
+                                              {quantityOptions.map(opt => <option key={opt} value={opt} />)}
+                                          </datalist>
+                                      </div>
+
+                                      <div className="md:col-span-2">
+                                          <label className="text-xs font-bold text-gray-500 mb-1 block">Valor (R$)</label>
+                                          <input
+                                              type="number"
+                                              className="w-full p-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-100 cursor-text"
+                                              value={med.value}
+                                              onChange={(e) => {
+                                                  const newMeds = [...medications];
+                                                  newMeds[index].value = e.target.value;
+                                                  setMedications(newMeds);
+                                              }}
+                                              placeholder="0.00"
+                                          />
+                                      </div>
+
+                                      <div className="md:col-span-1 pt-6 flex justify-center">
+                                          <button 
+                                              onClick={() => {
+                                                  if(medications.length > 1) {
+                                                      setMedications(medications.filter((_, i) => i !== index));
+                                                  }
+                                              }}
+                                              className="text-gray-400 hover:text-red-500 p-2 rounded-full hover:bg-red-50 transition-colors cursor-pointer"
+                                              disabled={medications.length === 1}
+                                              title="Remover Item"
+                                          >
+                                              {icons.trash}
+                                          </button>
+                                      </div>
+                                  </div>
+                               );
+                          })}
+
+                          <button 
+                              onClick={() => setMedications([...medications, { medicationId: '', quantity: quantityOptions[0], value: '', tempId: Date.now() }])}
+                              className="w-full py-3 border-2 border-dashed border-blue-200 text-blue-600 font-bold rounded-lg hover:bg-blue-50 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                          >
+                              {icons.plus} Adicionar Outra Medicação
+                          </button>
+
+                          <div className="pt-4">
+                              <label className="text-sm font-bold text-gray-700 mb-1 block">Observações (Opcional)</label>
+                              <textarea 
+                                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-100 outline-none resize-none h-20 cursor-text"
+                                  placeholder="Alguma observação sobre esta entrega?"
+                                  value={observation}
+                                  onChange={e => setObservation(e.target.value)}
+                              />
+                          </div>
+                      </div>
+                  </div>
+              )}
           </div>
 
-          {/* Rodapé fixo */}
-          <div className="flex-shrink-0 flex justify-end gap-4 bg-gray-50 -mx-10 px-8 py-4 rounded-b-lg border-t mt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 active:bg-gray-100 font-medium cursor-pointer transition-colors disabled:opacity-50"
-              disabled={isSaving}
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={handleSubmit}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 active:bg-blue-800 font-medium cursor-pointer flex items-center justify-center gap-2 disabled:bg-blue-400 disabled:cursor-not-allowed"
-              disabled={isSaving || !localPatient || medsLocked}
-            >
-              {isSaving ? (
-                <>
-                  <ClipLoader color="#ffffff" size={20} />
-                  <span>Adicionando...</span>
-                </>
-              ) : (
-                <>
-                  <span className="w-5 h-5">{icons.check}</span>
-                  <span>Adicionar Registro</span>
-                </>
-              )}
-            </button>
+          {/* FOOTER (Fixo) */}
+          <div className="bg-white border-t border-gray-200 px-6 py-4 flex justify-between items-center shrink-0 z-20">
+               <div className="text-sm text-gray-500 hidden md:block">
+                   {localPatient ? 
+                      <span>Total Estimado: <strong className="text-gray-900 text-lg ml-1">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(medications.reduce((acc, cur) => acc + (Number(cur.value)||0), 0))}</strong></span> 
+                      : 'Selecione um paciente para iniciar.'
+                   }
+               </div>
+
+               <div className="flex gap-4 w-full md:w-auto">
+                   <button 
+                      onClick={onClose}
+                      className="flex-1 md:flex-none px-6 py-3 border border-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+                      disabled={isSaving}
+                   >
+                      Cancelar
+                   </button>
+                   <button 
+                      onClick={handleSubmit}
+                      disabled={!localPatient || isSaving}
+                      className="flex-1 md:flex-none px-8 py-3 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 shadow-lg shadow-green-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-transform active:scale-95 cursor-pointer"
+                   >
+                      {isSaving ? <ClipLoader color="#fff" size={20}/> : icons.check}
+                      {isSaving ? 'Salvando...' : 'Confirmar e Próximo'}
+                   </button>
+               </div>
           </div>
         </div>
       </Modal>
 
       {isMedicationModalOpen && (
         <MedicationForm
-          onSave={handleSaveNewMedication}
-          onClose={() => {
-            setIsMedicationModalOpen(false);
-            setAddingMedicationIndex(null);
+          onSave={(newMed) => {
+              const created = onNewMedication ? onNewMedication(newMed) : newMed;
+              if(created && addingMedicationIndex !== null) {
+                  const newMeds = [...medications];
+                  newMeds[addingMedicationIndex].medicationId = created.id || created._id;
+                  setMedications(newMeds);
+              }
+              setIsMedicationModalOpen(false);
           }}
+          onClose={() => setIsMedicationModalOpen(false)}
           addToast={addToast}
         />
       )}
