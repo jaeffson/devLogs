@@ -1,6 +1,6 @@
 // src/components/common/SearchableSelect.jsx
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import icons from '../../utils/icons'; // Ajuste o caminho se necessário
+import { icons } from '../../utils/icons'; 
 
 // Ícone de seta para baixo (exemplo)
 const ChevronDownIcon = (
@@ -9,7 +9,7 @@ const ChevronDownIcon = (
   </svg>
 );
 
-export  function SearchableSelect({
+export function SearchableSelect({
   options = [], // Espera um array de { value: any, label: string }
   value,       // O valor selecionado (ex: patientId)
   onChange,    // Função chamada com o NOVO VALOR selecionado
@@ -101,7 +101,7 @@ export  function SearchableSelect({
                   autoFocus // Foca no campo ao abrir
                 />
                 <div className="absolute left-2.5 top-2 text-gray-400 w-4 h-4 pointer-events-none">
-                    {icons.search} {/* Usa o ícone de busca que você já tem */}
+                    {icons.search || <span>🔍</span>} {/* Fallback caso icons.search falhe */}
                 </div>
             </div>
           </div>

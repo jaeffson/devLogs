@@ -1,7 +1,7 @@
 // src/components/views/secretary/PatientHistoryView.jsx
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { PatientRecordsTable } from '../../common/PatientRecordsTable';
+import { PatientRecordsTable } from '../../common/PatientRecordsTable'; // Trazendo a tabela de volta
 import { icons } from '../../../utils/icons'; 
 import useDebounce from '../../../hooks/useDebounce';
 
@@ -87,7 +87,6 @@ export function PatientHistoryView({
         w-full md:w-1/3 xl:w-1/4 bg-white border-r border-gray-200 flex flex-col z-10
         ${showMobileList ? '' : 'hidden md:flex'} 
       `}>
-        {/* ^ CORREÇÃO: Removido 'block', agora usa apenas 'hidden md:flex' para esconder */}
         
         <div className="p-4 border-b border-gray-100">
             <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2 mb-3">
@@ -164,7 +163,6 @@ export function PatientHistoryView({
          w-full md:w-2/3 xl:w-3/4 bg-gray-50/30 flex flex-col min-h-0
          ${!showMobileList ? '' : 'hidden md:flex'}
       `}>
-        {/* ^ CORREÇÃO: Mantém o display: flex padrão da classe estática */}
         
         {selectedPatient ? (
           <>
@@ -205,10 +203,11 @@ export function PatientHistoryView({
                 </div>
             </div>
 
-            {/* Container da Tabela com Flex-Grow corrigido */}
+            {/* Container da Tabela com SCROLL FIXO */}
             <div className="flex-grow p-4 md:p-6 overflow-hidden flex flex-col relative">
                  <div className="flex-grow border border-gray-200 rounded-xl bg-white shadow-sm overflow-hidden relative">
-                    <div className="absolute inset-0 overflow-auto">
+                    <div className="absolute inset-0 overflow-auto custom-scrollbar">
+                        {/* Chamando a Tabela aqui dentro para ela rolar sem quebrar a tela */}
                         <PatientRecordsTable
                             records={selectedPatientRecords}
                             medications={medications}

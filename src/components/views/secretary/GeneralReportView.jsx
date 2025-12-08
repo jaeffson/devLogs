@@ -1,5 +1,5 @@
 // src/components/views/secretary/GeneralReportView.jsx
-// (ATUALIZADO: Adicionado botão "Ver Motivo" para status "Cancelado")
+// (CORRIGIDO: Lógica de identificação de Farmácia simplificada e modo Debug explícito para rastreamento)
 
 import React, { useState, useMemo, useEffect } from 'react';
 import jsPDF from 'jspdf';
@@ -10,20 +10,43 @@ import useDebounce from '../../../hooks/useDebounce';
 
 const MS_IN_30_DAYS = 30 * 24 * 60 * 60 * 1000;
 
-// 1. RECEBER A NOVA PROP 'onViewReason'
+// --- HELPER CORRIGIDO: Mapeia o campo de localização para um nome de Farmácia (FINAL) ---
+const getFarmaciaName = (record) => {
+    // 1. Pega o valor dos possíveis campos (location, farmacia, origin) e normaliza
+    const loc = String(record?.location || record?.farmacia || record?.origin || '').toLowerCase().trim();
+    
+    // 2. Tenta correspondência direta e parcial (Campina Grande)
+    if (loc.includes('campina grande') || loc.includes('campina') || loc.includes('grande') || loc.includes('farmacia a') || loc === 'a' || loc === 'cg') {
+        return 'Campina Grande';
+    }
+    
+    // 3. Tenta correspondência direta e parcial (João Paulo)
+    if (loc.includes('joao paulo') || loc.includes('joão paulo') || loc.includes('joao') || loc.includes('joão') || loc.includes('paulo') || loc.includes('farmacia b') || loc === 'b' || loc === 'jp') {
+        return 'João Paulo';
+    }
+
+    // 4. MODO DEBUG: Se a localização tiver algum valor (e não for só um espaço), retorna o valor exato.
+    if (loc.length > 0) {
+        // Se você vir "Debug: [CÓDIGO]", este é o valor que precisa ser mapeado no futuro.
+        return `Debug: ${loc.toUpperCase()}`;
+    }
+    
+    return 'Não Identificada';
+};
+
 export function GeneralReportView({
   user,
   records = [],
   medications = [],
   addToast,
-  getPatientNameById,
+  getPatientNameById, // Agora renomeado em helpers.jsx
   getMedicationName,
   initialFilterStatus, 
   onReportViewed,
-  onViewReason, // <-- PROP ADICIONADA
+  onViewReason, 
 }) {
   
-  // --- Estados (Movidos para cá) ---
+  // --- Estados ---
   const [filterPeriod, setFilterPeriod] = useState('all');
   const [filterStatus, setFilterStatus] = useState(initialFilterStatus || 'all');
   const [reportSearchTerm, setReportSearchTerm] = useState('');
@@ -40,13 +63,13 @@ export function GeneralReportView({
     }
   }, [initialFilterStatus, onReportViewed]);
 
-
   // Reseta paginação quando os filtros mudam
   useEffect(() => {
     setCurrentPage(1);
   }, [filterPeriod, filterStatus, debouncedReportSearchTerm]);
 
   
+  // --- Opções de Status ---
   const statusOptions = useMemo(() => {
     const options = [
       { value: 'all', label: 'Todos' },
@@ -61,9 +84,11 @@ export function GeneralReportView({
   }, [initialFilterStatus, filterStatus]);
 
   
-  // --- Memos (Movidos para cá) ---
+  // --- Filtros Principais ---
   const filteredRecordsForReport = useMemo(() => {
     let filtered = Array.isArray(records) ? [...records] : [];
+    
+    // 1. Filtro por Período
     if (filterPeriod !== 'all') {
       const days = parseInt(filterPeriod, 10);
       if (!isNaN(days)) {
@@ -80,6 +105,7 @@ export function GeneralReportView({
       }
     }
 
+    // 2. Filtro por Status
     const now = new Date().getTime();
     if (filterStatus !== 'all') {
       if (filterStatus === 'Vencido') {
@@ -97,14 +123,21 @@ export function GeneralReportView({
       }
     }
 
+    // 3. Filtro por Busca (Paciente OU Farmácia)
     const searchTermLower = debouncedReportSearchTerm.toLowerCase();
     if (searchTermLower) {
       filtered = filtered.filter((r) =>
-        getPatientNameById(r.patientId)
+        // FIX: Usa um fallback string para buscar no nome do paciente
+        (getPatientNameById(r.patientId) || '')
           .toLowerCase()
-          .includes(searchTermLower)
+          .includes(searchTermLower) || 
+        getFarmaciaName(r)
+          .toLowerCase()
+          .includes(searchTermLower) 
       );
     }
+    
+    // Ordenação
     return filtered.length > 0
       ? filtered.sort((a, b) => {
           try {
@@ -134,7 +167,7 @@ export function GeneralReportView({
   }, [filteredRecordsForReport, currentPage, itemsPerPage]);
 
 
-  // --- Funções de Ação (Movidas para cá) ---
+  // --- Funções de Ação ---
   const handleExportPDF = () => {
     if (
       !Array.isArray(filteredRecordsForReport) ||
@@ -167,18 +200,22 @@ export function GeneralReportView({
       doc.setTextColor(120);
       doc.text(generationInfo, 105, 35, { align: 'center' });
 
+      // --- COLUNAS DO PDF (REORDENADAS) ---
       const tableColumn = [
-        'Paciente',
+        'Paciente', 
         'Entrada',
-        'Atendido em',
-        'Medicações',
-        'Valor Total',
-        'Status',
-      ];
+        'Atendido em', 
+        'Medicações (Qtd)', 
+        'Farmácia', // ÚLTIMA COLUNA
+      ]; 
+
       const tableRows = [];
 
       filteredRecordsForReport.forEach((record) => {
-        const patientName = getPatientNameById(record.patientId);
+        const farmacia = getFarmaciaName(record); 
+        // FIX: Garante que o nome do paciente não é nulo/vazio no PDF
+        const patientName = getPatientNameById(record.patientId) || 'Paciente Não Encontrado'; 
+
         let entryDateFormatted = 'Inválido';
         try {
           const dt = new Date(record.entryDate);
@@ -188,6 +225,7 @@ export function GeneralReportView({
               timeStyle: 'short',
             });
         } catch (e) {}
+        
         let deliveryDateFormatted = '---';
         if (record.deliveryDate) {
           try {
@@ -204,6 +242,7 @@ export function GeneralReportView({
             deliveryDateFormatted = 'Inválido';
           }
         }
+        
         const medsList = Array.isArray(record.medications)
           ? record.medications
               .map(
@@ -214,19 +253,13 @@ export function GeneralReportView({
               )
               .join('\n')
           : '';
-        const totalValueFormatted = !isNaN(record.totalValue)
-          ? Number(record.totalValue).toLocaleString('pt-BR', {
-              style: 'currency',
-              currency: 'BRL',
-            })
-          : 'R$ 0,00';
+          
         tableRows.push([
           patientName,
           entryDateFormatted,
           deliveryDateFormatted,
           medsList,
-          totalValueFormatted,
-          record.status || 'N/A',
+          farmacia, // ÚLTIMO ITEM DA LINHA
         ]);
       });
 
@@ -241,13 +274,13 @@ export function GeneralReportView({
           textColor: [255, 255, 255],
           fontStyle: 'bold',
         },
+        // --- ESTILOS DAS COLUNAS PDF (REORDENADOS) ---
         columnStyles: {
-          0: { cellWidth: 35 },
-          1: { cellWidth: 25 },
-          2: { cellWidth: 20 },
-          3: { cellWidth: 'auto' },
-          4: { cellWidth: 20, halign: 'right' },
-          5: { cellWidth: 20 },
+          0: { cellWidth: 35 }, // Paciente
+          1: { cellWidth: 25 }, // Entrada
+          2: { cellWidth: 25 }, // Atendido em
+          3: { cellWidth: 'auto' }, // Medicações
+          4: { cellWidth: 25 }, // Farmácia
         },
       });
 
@@ -261,7 +294,7 @@ export function GeneralReportView({
 
   // --- Renderização ---
   return (
-    <div className="bg-white rounded-lg shadow p-4 md:p-6 animate-fade-in flex flex-col h-[calc(100vh-8rem)]">
+    <div className="bg-white rounded-lg shadow p-4 md:p-6 animate-fade-in flex flex-col h-full md:h-[calc(100vh-8rem)]">
       <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-3 border-b pb-4">
         <h2 className="text-xl md:text-2xl font-bold text-gray-800">
           Relatório Geral de Entradas
@@ -272,7 +305,7 @@ export function GeneralReportView({
             !Array.isArray(filteredRecordsForReport) ||
             filteredRecordsForReport.length === 0
           }
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors w-full md:w-auto cursor-pointer"
+          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors w-full md:w-auto cursor-pointer"
           title="Abrir PDF em nova aba para imprimir ou salvar"
         >
           <span className="w-4 h-4">{icons.download}</span> Exportar para
@@ -286,24 +319,24 @@ export function GeneralReportView({
             className="text-xs font-medium text-gray-700 mb-1 block"
             htmlFor="report-search-all"
           >
-            Buscar por Paciente
+            Buscar (Paciente / Farmácia)
           </label>
           <input
             type="text"
             id="report-search-all"
-            placeholder="Nome do paciente..."
+            placeholder="Nome ou Farmácia..."
             value={reportSearchTerm}
             onChange={(e) => setReportSearchTerm(e.target.value)}
             className={`w-full p-2 border rounded-lg text-sm pr-8 ${
               reportSearchTerm
-                ? 'border-blue-500 ring-1 ring-blue-500'
+                ? 'border-indigo-500 ring-1 ring-indigo-500'
                 : 'border-gray-300'
             }`}
           />
           {isSearchingReport && (
             <div className="absolute right-2 top-7 text-gray-400 w-4 h-4">
               <svg
-                className="animate-spin h-4 w-4 text-blue-500"
+                className="animate-spin h-4 w-4 text-indigo-500"
                 xmlns="http://www.w3.org/2000/svg"
                 fill="none"
                 viewBox="0 0 24 24"
@@ -338,7 +371,7 @@ export function GeneralReportView({
             onChange={(e) => setFilterPeriod(e.target.value)}
             className={`w-full p-2 border rounded-lg text-sm bg-white ${
               filterPeriod !== 'all'
-                ? 'border-blue-500 ring-1 ring-blue-500'
+                ? 'border-indigo-500 ring-1 ring-indigo-500'
                 : 'border-gray-300'
             }`}
           >
@@ -361,7 +394,7 @@ export function GeneralReportView({
             onChange={(e) => setFilterStatus(e.target.value)}
             className={`w-full p-2 border rounded-lg text-sm bg-white ${
               filterStatus !== 'all'
-                ? 'border-blue-500 ring-1 ring-blue-500'
+                ? 'border-indigo-500 ring-1 ring-indigo-500'
                 : 'border-gray-300'
             }`}
           >
@@ -370,8 +403,8 @@ export function GeneralReportView({
             ))}
           </select>
         </div>
-        <div className="text-sm text-gray-600 mt-2 md:mt-0">
-          {filteredRecordsForReport.length} registro(s) encontrado(s).
+        <div className="text-sm text-gray-600 mt-2 md:mt-0 pt-2 md:pt-0">
+          <span className="font-semibold text-gray-800">{filteredRecordsForReport.length}</span> registro(s) encontrado(s).
         </div>
       </div>
 
@@ -393,10 +426,11 @@ export function GeneralReportView({
                 Medicações
               </th>
               <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Valor Total
-              </th>
-              <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Status
+              </th>
+              {/* Coluna Farmácia Movida para o Final */}
+              <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
+                Farmácia
               </th>
             </tr>
           </thead>
@@ -409,12 +443,16 @@ export function GeneralReportView({
           >
             {Array.isArray(currentRecordsForReport) &&
               currentRecordsForReport.map((record) => {
-                const patientName = getPatientNameById(record.patientId);
+                const patientName = getPatientNameById(record.patientId) || 'Paciente Não Encontrado';
+                const farmaciaName = getFarmaciaName(record);
                 const isHighlighted =
                   debouncedReportSearchTerm &&
-                  patientName
+                  (patientName
                     .toLowerCase()
-                    .includes(debouncedReportSearchTerm.toLowerCase());
+                    .includes(debouncedReportSearchTerm.toLowerCase()) || 
+                  farmaciaName
+                    .toLowerCase()
+                    .includes(debouncedReportSearchTerm.toLowerCase()));
 
                 let deliveryDateFormatted = '---';
                 if (record.status === 'Atendido' && record.deliveryDate) {
@@ -434,12 +472,14 @@ export function GeneralReportView({
                   }
                 }
 
+                const isInvalidFarmacia = farmaciaName.includes('Debug:') || farmaciaName.includes('Não Identificada');
+
                 return (
-                  // (CORREÇÃO) Adicionada key única
                   <tr key={record._id || record.id} className="hover:bg-gray-50 transition-colors">
+                    {/* Paciente */}
                     <td
                       className={`py-3 px-4 font-medium text-gray-900 ${
-                        isHighlighted ? 'bg-yellow-100' : ''
+                        isHighlighted ? 'bg-indigo-50' : ''
                       }`}
                     >
                       {patientName}
@@ -457,10 +497,10 @@ export function GeneralReportView({
                       })()}
                     </td>
                     <td
-                      className={`py-3 px-4 ${
+                      className={`py-3 px-4 text-gray-600 ${
                         record.status === 'Atendido'
                           ? 'font-semibold text-gray-800'
-                          : 'text-gray-600'
+                          : ''
                       }`}
                     >
                       {deliveryDateFormatted}
@@ -478,11 +518,7 @@ export function GeneralReportView({
                             .join(', ')
                         : ''}
                     </td>
-                    <td className="py-3 px-4 text-gray-600">{`R$ ${(
-                      Number(record.totalValue) || 0
-                    ).toFixed(2)}`}</td>
                     
-                    {/* --- 2. (INÍCIO DA MUDANÇA) --- */}
                     <td className="py-3 px-4">
                       <StatusBadge status={record.status} />
                       {record.status === 'Cancelado' && (
@@ -496,7 +532,20 @@ export function GeneralReportView({
                         </button>
                       )}
                     </td>
-                    {/* --- (FIM DA MUDANÇA) --- */}
+
+                    {/* Farmácia (ÚLTIMA COLUNA) */}
+                    <td className={`py-3 px-4 font-medium text-gray-600`}>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                        farmaciaName === 'Campina Grande' ? 'bg-blue-100 text-blue-800' : 
+                        farmaciaName === 'João Paulo' ? 'bg-green-100 text-green-800' : 
+                        isInvalidFarmacia ? 'bg-red-100 text-red-800' : 
+                        'bg-gray-100 text-gray-600'
+                      }`}
+                        title={isInvalidFarmacia ? `Valor no Campo: ${farmaciaName}` : farmaciaName}
+                      >
+                        {farmaciaName}
+                      </span>
+                    </td>
 
                   </tr>
                 );

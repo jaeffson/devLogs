@@ -1,31 +1,135 @@
 // src/pages/ProfessionalDashboardPage.jsx
-// (COMPLETO - ATUALIZADO: Correção do fluxo de confirmação e spinner no modal de atendimento)
+// (CORRIGIDO: Fluxo "Confirmar e Próximo" -> Salva Registro -> Fecha -> Abre Busca de Novo)
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 
 import api from '../services/api';
-import { Modal, ConfirmModal } from '../components/common/Modal';
+import { ConfirmModal } from '../components/common/Modal';
 import PatientForm from '../components/forms/PatientForm';
 import RecordForm from '../components/forms/RecordForm';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { AttendRecordModal } from '../components/common/AttendRecordModal';
 import { CancelRecordModal } from '../components/common/CancelRecordModal';
 import { PatientRecordsTable } from '../components/common/PatientRecordsTable';
-import MedicationForm from '../components/forms/MedicationForm';
-import MedicationsPage from './MedicationsPage'; 
+import MedicationsPage from './MedicationsPage';
 import { icons } from '../utils/icons';
 import { getMedicationName } from '../utils/helpers';
 import { useDebounce } from '../hooks/useDebounce';
 
-// --- Constante de 30 dias ---
+// --- Constantes ---
 const MS_IN_30_DAYS = 30 * 24 * 60 * 60 * 1000;
-
-// --- Constante de 20 dias ---
 const MS_IN_20_DAYS = 20 * 24 * 60 * 60 * 1000;
 
-// --- Componente da Página Principal ---
+// --- Subcomponente: Modal de Busca de Paciente ---
+const SearchPatientModal = ({
+  isOpen,
+  onClose,
+  patients,
+  onSelectPatient,
+  onCreateNew,
+}) => {
+  const [term, setTerm] = useState('');
+  const searchInputRef = useRef(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setTerm(''); // Limpa a busca sempre que abre (preparando para o próximo paciente)
+      if (searchInputRef.current) {
+        setTimeout(() => searchInputRef.current.focus(), 100);
+      }
+    }
+  }, [isOpen]);
+
+  const filtered = useMemo(() => {
+    if (!term) return patients.slice(0, 10);
+    const lowerTerm = term.toLowerCase();
+    return patients.filter(
+      (p) =>
+        p.name.toLowerCase().includes(lowerTerm) ||
+        (p.cpf && p.cpf.includes(lowerTerm)) ||
+        (p.susCard && p.susCard.includes(lowerTerm))
+    );
+  }, [patients, term]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+          <h3 className="font-bold text-gray-800 flex items-center gap-2">
+            {icons.search} Buscar Próximo Paciente
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            {icons.close}
+          </button>
+        </div>
+        <div className="p-4 border-b border-gray-100">
+          <input
+            ref={searchInputRef}
+            type="text"
+            className="w-full bg-gray-100 border-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 rounded-xl px-4 py-3 text-base transition-all outline-none"
+            placeholder="Digite nome, CPF ou SUS..."
+            value={term}
+            onChange={(e) => setTerm(e.target.value)}
+          />
+        </div>
+        <div className="flex-grow overflow-y-auto p-2 space-y-1 custom-scrollbar">
+          {filtered.length > 0 ? (
+            filtered.map((p) => (
+              <button
+                key={p._id || p.id}
+                onClick={() => onSelectPatient(p)}
+                className="w-full text-left p-3 hover:bg-blue-50 rounded-xl transition-colors flex items-center justify-between group"
+              >
+                <div className="flex items-center gap-3 overflow-hidden">
+                  <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm flex-shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                    {p.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-semibold text-gray-800 truncate">
+                      {p.name}
+                    </p>
+                    <p className="text-xs text-gray-500 truncate">
+                      {p.cpf || p.susCard || 'Sem documento'}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-gray-400 group-hover:text-blue-600">
+                  {icons.arrowRight || '>'}
+                </div>
+              </button>
+            ))
+          ) : (
+            <div className="text-center py-8 text-gray-400">
+              <p>Nenhum paciente encontrado.</p>
+              <button
+                onClick={onCreateNew}
+                className="mt-3 text-blue-600 hover:underline font-medium text-sm"
+              >
+                + Cadastrar Novo Paciente
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="p-3 bg-gray-50 border-t border-gray-100 text-center">
+          <button
+            onClick={onCreateNew}
+            className="w-full py-2.5 rounded-xl border border-blue-200 text-blue-700 font-semibold hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
+          >
+            {icons.plus} Cadastrar Novo Paciente
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- Componente Principal ---
 export default function ProfessionalDashboardPage({
   user,
   patients = [],
@@ -39,15 +143,23 @@ export default function ProfessionalDashboardPage({
   activeTabForced,
 }) {
   const navigate = useNavigate();
-
   const [currentView, setCurrentView] = useState('dashboard');
 
+  // --- Estados Principais ---
   const [searchTerm, setSearchTerm] = useState('');
+  const [historySearchTerm, setHistorySearchTerm] = useState('');
   const [selectedPatient, setSelectedPatient] = useState(null);
+
+  // Modais
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
   const [editingPatient, setEditingPatient] = useState(null);
+
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
+
+  // Chaves para resetar formulários
+  const [recordFormKey, setRecordFormKey] = useState(0);
 
   const [confirmation, setConfirmation] = useState({
     isOpen: false,
@@ -60,99 +172,46 @@ export default function ProfessionalDashboardPage({
   });
 
   const [attendingRecord, setAttendingRecord] = useState(null);
-  // --- (NOVO) Estado de Loading para o Atendimento ---
   const [isAttendingLoading, setIsAttendingLoading] = useState(false);
-
   const [cancelingRecord, setCancelingRecord] = useState(null);
-
   const [isOverdueAlertVisible, setIsOverdueAlertVisible] = useState(true);
 
-  // --- Estados do 'Select com Busca' (Histórico) ---
-  const [quickAddPatientId, setQuickAddPatientId] = useState('');
-  const [quickSearchTerm, setQuickSearchTerm] = useState('');
-  const [isQuickSelectOpen, setIsQuickSelectOpen] = useState(false);
-  const [selectedPatientName, setSelectedPatientName] = useState('');
-  const quickSelectRef = useRef(null);
-
-  // --- Estados do 'Select com Busca' (Dashboard) ---
-  const [dashQuickPatientId, setDashQuickPatientId] = useState('');
-  const [dashQuickSearch, setDashQuickSearch] = useState('');
-  const [isDashQuickOpen, setIsDashQuickOpen] = useState(false);
-  const [dashQuickPatientName, setDashQuickPatientName] = useState('');
-  const dashQuickRef = useRef(null);
-
+  // Filtros
   const [statusFilter, setStatusFilter] = useState('Todos');
-
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(20);
 
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
-  const debouncedQuickSearchTerm = useDebounce(quickSearchTerm, 300);
-  const debouncedDashQuickSearch = useDebounce(dashQuickSearch, 300);
+  const debouncedHistorySearch = useDebounce(historySearchTerm, 300);
 
   useEffect(() => {
     setCurrentView(activeTabForced || 'dashboard');
   }, [activeTabForced]);
 
   useEffect(() => {
-    function handleClickOutside(event) {
-      if (
-        quickSelectRef.current &&
-        !quickSelectRef.current.contains(event.target)
-      ) {
-        setIsQuickSelectOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [quickSelectRef]);
-
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (
-        dashQuickRef.current &&
-        !dashQuickRef.current.contains(event.target)
-      ) {
-        setIsDashQuickOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [dashQuickRef]);
-
-  useEffect(() => {
     setCurrentPage(1);
-  }, [statusFilter]);
+  }, [statusFilter, debouncedHistorySearch]);
 
+  // --- Helpers ---
   const syncGlobalState = async (refetchFunction, errorMsg) => {
-    if (typeof refetchFunction === 'function') {
-      await refetchFunction();
-    } else {
-      console.error(`Função de recarga não encontrada para ${errorMsg}.`);
-    }
+    if (typeof refetchFunction === 'function') await refetchFunction();
+    else console.error(`Função de recarga não encontrada para ${errorMsg}.`);
   };
 
   const checkDuplicatePatient = ({ cpf, susCard, currentId }) => {
-    const isDuplicate =
+    return (
       Array.isArray(patients) &&
       patients.some((patient) => {
         const currentPatientId = patient._id || patient.id;
-
         if (currentPatientId === currentId) return false;
-
         const patientCPF = String(patient.cpf || '').replace(/\D/g, '');
         const cpfIsMatch = cpf && patientCPF && cpf === patientCPF;
         const patientSusCard = String(patient.susCard || '').replace(/\D/g, '');
         const susIsMatch =
           susCard && patientSusCard && susCard === patientSusCard;
-
         return cpfIsMatch || susIsMatch;
-      });
-    return isDuplicate;
+      })
+    );
   };
 
   const closeConfirmation = () =>
@@ -172,16 +231,9 @@ export default function ProfessionalDashboardPage({
         'Desconhecido'
       : 'Desconhecido';
 
-  const handleEditPatient = (patient) => {
-    setEditingPatient(patient ? JSON.parse(JSON.stringify(patient)) : null);
-    setIsPatientModalOpen(true);
-  };
-
   const findRecentRecord = (patientId, recordToExcludeId = null) => {
     if (!patientId || !Array.isArray(records)) return null;
-
     const now = new Date().getTime();
-
     const patientRecords = records
       .filter((r) => {
         const recordId = r._id || r.id;
@@ -193,52 +245,197 @@ export default function ProfessionalDashboardPage({
       })
       .sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate));
 
-    if (patientRecords.length === 0) {
-      return null;
-    }
-
-    const mostRecentRecord = patientRecords[0];
-    const mostRecentEntryTime = new Date(mostRecentRecord.entryDate).getTime();
-
-    if (now - mostRecentEntryTime < MS_IN_20_DAYS) {
-      return mostRecentRecord;
-    }
-
+    if (patientRecords.length === 0) return null;
+    if (now - new Date(patientRecords[0].entryDate).getTime() < MS_IN_20_DAYS)
+      return patientRecords[0];
     return null;
+  };
+
+  // --- FLUXO DE ATENDIMENTO ---
+
+  // 1. Iniciar Atendimento -> Abre Busca
+  const openSearchModal = () => setIsSearchModalOpen(true);
+
+  // 2. Escolheu Paciente na Busca -> Abre Modal de Registro (Atendimento)
+  const handleSelectPatientFromSearch = (patient) => {
+    setIsSearchModalOpen(false); // Fecha busca
+    openRecordModalWithCheck(patient, null); // Abre registro
   };
 
   const openRecordModalWithCheck = (patient, recordData = null) => {
     const patientId = patient?._id || patient?.id;
-
     const recentRecord = findRecentRecord(
       patientId,
       recordData?._id || recordData?.id || null
     );
 
     if (recordData === null && recentRecord) {
-      const lastEntryDate = new Date(recentRecord.entryDate).toLocaleDateString(
-        'pt-BR'
-      );
-      const status = recentRecord.status;
-
       setConfirmation({
         isOpen: true,
         title: 'Aviso de Registro Recente',
-        message: `Este paciente já possui um registro recente (Status: ${status}, Data: ${lastEntryDate}). Deseja criar uma nova entrada mesmo assim?`,
+        message: `Este paciente já possui um registro recente (${new Date(recentRecord.entryDate).toLocaleDateString('pt-BR')}). Criar novo?`,
         onConfirm: () => {
           setSelectedPatient(patient);
           setEditingRecord(null);
           setIsRecordModalOpen(true);
           closeConfirmation();
         },
-        data: null,
-        confirmText: 'Sim, Criar Mesmo Assim',
+        confirmText: 'Sim, Criar',
         isDestructive: false,
       });
     } else {
       setSelectedPatient(patient);
       setEditingRecord(recordData);
       setIsRecordModalOpen(true);
+    }
+  };
+
+  const handleEditPatient = (patient) => {
+    setEditingPatient(patient ? JSON.parse(JSON.stringify(patient)) : null);
+    setIsPatientModalOpen(true);
+  };
+
+  // --- API Handlers ---
+
+  const handleSavePatient = async (patientData) => {
+    try {
+      let response;
+      const patientId = patientData._id || patientData.id;
+      const payload = { ...patientData };
+      if (payload.cpf) payload.cpf = String(payload.cpf).trim();
+      if (payload.susCard) payload.susCard = String(payload.susCard).trim();
+
+      if (patientId && patientId !== 'new') {
+        response = await api.put(`/patients/${patientId}`, payload);
+        addToast('Paciente atualizado!', 'success');
+        setIsPatientModalOpen(false);
+        setEditingPatient(null);
+      } else {
+        response = await api.post('/patients', payload);
+        addToast('Paciente cadastrado!', 'success');
+
+        // Se cadastrou um novo no fluxo de busca, já seleciona ele e abre o atendimento
+        setIsPatientModalOpen(false);
+        setEditingPatient(null);
+        openRecordModalWithCheck(response.data, null);
+      }
+      await syncGlobalState(setPatients, 'pacientes');
+    } catch (error) {
+      addToast(
+        error.response?.data?.message || 'Erro ao salvar paciente.',
+        'error'
+      );
+    }
+  };
+
+  // === AQUI ESTÁ A LÓGICA DO "CONFIRMAR E PRÓXIMO" ===
+  const handleSaveRecord = async (recordData) => {
+    try {
+      const recordId = recordData._id || recordData.id;
+      const payload = {
+        patientId: recordData.patientId,
+        profissionalId: user?._id || user?.id,
+        medications: (recordData.medications || [])
+          .map((m) => ({
+            medicationId:
+              typeof m === 'object' && m.id
+                ? String(m.id)
+                : m.medicationId || String(m),
+            quantity: m.quantity || 'N/A',
+          }))
+          .filter((m) => m.medicationId),
+        referenceDate: recordData.referenceDate,
+        observation: recordData.observation,
+        totalValue: recordData.totalValue,
+        status: recordData.status || 'Pendente',
+      };
+
+      if (recordId && recordId !== 'new') {
+        // Se for EDIÇÃO de um registro antigo, apenas salva e fecha normal
+        await api.put(`/records/${recordId}`, payload);
+        addToast('Registro atualizado!', 'success');
+        setIsRecordModalOpen(false);
+        setEditingRecord(null);
+      } else {
+        // Se for NOVO REGISTRO (Atendimento do dia)
+        await api.post('/records', payload);
+        addToast('Atendimento salvo! Selecione o próximo paciente.', 'success');
+
+        // 1. Fecha o Modal de Atendimento (Registro)
+        setIsRecordModalOpen(false);
+
+        // 2. Limpa o Paciente Selecionado (para não travar no atual)
+        setSelectedPatient(null);
+        setEditingRecord(null);
+
+        // 3. Abre o Modal de BUSCA imediatamente para o próximo
+        setTimeout(() => {
+          setIsSearchModalOpen(true);
+        }, 200);
+      }
+      await syncGlobalState(setRecords, 'registros');
+    } catch {
+      addToast('Erro ao salvar registro.', 'error');
+    }
+  };
+
+  // Handlers auxiliares
+  const handleDeletePatient = async (id) => {
+    try {
+      await api.delete(`/patients/${id}`);
+      addToast('Paciente excluído!', 'success');
+      await syncGlobalState(setPatients, 'pacientes');
+      setSelectedPatient(null);
+    } catch {
+      addToast('Erro ao excluir.', 'error');
+    }
+  };
+  const handleDeleteRecord = async (id) => {
+    try {
+      await api.delete(`/records/${id}`);
+      addToast('Registro excluído!', 'success');
+      await syncGlobalState(setRecords, 'registros');
+    } catch {
+      addToast('Erro ao excluir.', 'error');
+    }
+  };
+  const handleAddNewMedication = async (medData) => {
+    try {
+      const res = await api.post('/medications', { name: medData.name.trim() });
+      addToast('Medicação cadastrada!', 'success');
+      await syncGlobalState(setMedications, 'medicações');
+      return res.data;
+    } catch {
+      addToast('Erro ao cadastrar medicação.', 'error');
+      return null;
+    }
+  };
+  const handleUpdateRecordStatus = async (id, date) => {
+    setIsAttendingLoading(true);
+    try {
+      await api.patch(`/records/${id}/status`, {
+        status: 'Atendido',
+        deliveryDate: date,
+      });
+      await syncGlobalState(setRecords, 'registros');
+      addToast('Atendido!', 'success');
+      setAttendingRecord(null);
+    } catch {
+      addToast('Erro ao atualizar.', 'error');
+    } finally {
+      setIsAttendingLoading(false);
+    }
+  };
+  const handleCancelRecordStatus = async (id, reason) => {
+    try {
+      await api.patch(`/records/${id}/status`, {
+        status: 'Cancelado',
+        cancelReason: reason,
+      });
+      addToast('Cancelado.', 'info');
+      await syncGlobalState(setRecords, 'registros');
+    } catch {
+      addToast('Erro ao cancelar.', 'error');
     }
   };
 
@@ -263,7 +460,6 @@ export default function ProfessionalDashboardPage({
   const patientRecords = useMemo(() => {
     const targetId = selectedPatient?._id || selectedPatient?.id;
     if (!targetId || !Array.isArray(records)) return [];
-
     return records
       .filter((r) => r.patientId === targetId)
       .sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate));
@@ -272,652 +468,236 @@ export default function ProfessionalDashboardPage({
   const pendingRecords = useMemo(
     () =>
       Array.isArray(records)
-        ? records
-            .filter((r) => r.status === 'Pendente')
-            .sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate))
+        ? records.filter((r) => r.status === 'Pendente')
         : [],
     [records]
   );
-
-  const quickFilteredPatients = useMemo(
-    () =>
-      Array.isArray(patients)
-        ? patients
-            .filter((p) =>
-              p.name
-                ?.toLowerCase()
-                .includes(debouncedQuickSearchTerm.toLowerCase())
-            )
-            .sort((a, b) => a.name.localeCompare(b.name))
-        : [],
-    [patients, debouncedQuickSearchTerm]
-  );
-
-  const dashQuickFilteredPatients = useMemo(
-    () =>
-      Array.isArray(patients)
-        ? patients
-            .filter((p) =>
-              p.name
-                ?.toLowerCase()
-                .includes(debouncedDashQuickSearch.toLowerCase())
-            )
-            .sort((a, b) => a.name.localeCompare(b.name))
-        : [],
-    [patients, debouncedDashQuickSearch]
-  );
-
   const overduePendingRecords = useMemo(() => {
     if (!Array.isArray(records)) return [];
     const now = new Date().getTime();
-
-    return records.filter((r) => {
-      if (r.status !== 'Pendente' || !r.entryDate) return false;
-
-      try {
-        const entryTime = new Date(r.entryDate).getTime();
-        return now - entryTime > MS_IN_30_DAYS;
-      } catch (e) {
-        return false;
-      }
-    });
+    return records.filter(
+      (r) =>
+        r.status === 'Pendente' &&
+        r.entryDate &&
+        now - new Date(r.entryDate).getTime() > MS_IN_30_DAYS
+    );
   }, [records]);
 
   const filteredRecords = useMemo(() => {
-    const sorted = records.sort(
+    let result = records.sort(
       (a, b) => new Date(b.entryDate) - new Date(a.entryDate)
     );
-    if (statusFilter === 'Todos') {
-      return sorted;
+    if (statusFilter !== 'Todos') {
+      result = result.filter((r) => r.status === statusFilter);
     }
-    return sorted.filter((r) => r.status === statusFilter);
-  }, [records, statusFilter]);
+    if (debouncedHistorySearch) {
+      const lowerSearch = debouncedHistorySearch.toLowerCase();
+      result = result.filter((r) => {
+        const pName = getPatientNameById(r.patientId).toLowerCase();
+        return pName.includes(lowerSearch);
+      });
+    }
+    return result;
+  }, [records, statusFilter, debouncedHistorySearch, patients]);
 
-  const totalPages = useMemo(() => {
-    return Math.ceil(filteredRecords.length / itemsPerPage);
-  }, [filteredRecords, itemsPerPage]);
-
-  const currentRecords = useMemo(() => {
-    const indexOfLastItem = currentPage * itemsPerPage;
-    const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-    return filteredRecords.slice(indexOfFirstItem, indexOfLastItem);
-  }, [filteredRecords, currentPage, itemsPerPage]);
+  const totalPages = useMemo(
+    () => Math.ceil(filteredRecords.length / itemsPerPage),
+    [filteredRecords, itemsPerPage]
+  );
+  const currentRecords = useMemo(
+    () =>
+      filteredRecords.slice(
+        (currentPage - 1) * itemsPerPage,
+        currentPage * itemsPerPage
+      ),
+    [filteredRecords, currentPage, itemsPerPage]
+  );
 
   const recentDeliveries = useMemo(() => {
-    const parseDateAsUTC = (dateString) => {
-      if (!dateString || !/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
-        return null;
-      }
-      const [year, month, day] = dateString.split('-').map(Number);
-      return new Date(Date.UTC(year, month - 1, day));
-    };
-
-    const todayUTC = new Date();
-    todayUTC.setUTCHours(0, 0, 0, 0);
-
-    const oneWeekAgoUTC = new Date(todayUTC);
-    oneWeekAgoUTC.setUTCDate(todayUTC.getUTCDate() - 7);
-
-    if (!Array.isArray(records)) {
-      return [];
-    }
-
+    if (!Array.isArray(records)) return [];
+    const now = new Date();
     return records
       .filter((r) => {
-        if (r.status !== 'Atendido' || !r.deliveryDate) {
-          return false;
-        }
-        const deliveryDateUTC = parseDateAsUTC(r.deliveryDate);
-        return deliveryDateUTC && deliveryDateUTC >= oneWeekAgoUTC;
+        if (r.status !== 'Atendido' || !r.deliveryDate) return false;
+        const dDate = new Date(r.deliveryDate);
+        if (isNaN(dDate.getTime())) return false;
+        const diffDays = (now.getTime() - dDate.getTime()) / (1000 * 3600 * 24);
+        return diffDays <= 7 && diffDays >= 0;
       })
-      .sort((a, b) => {
-        const dateA = parseDateAsUTC(a.deliveryDate);
-        const dateB = parseDateAsUTC(b.deliveryDate);
-        return dateB - dateA;
-      });
+      .sort((a, b) => new Date(b.deliveryDate) - new Date(a.deliveryDate));
   }, [records]);
 
-  // --- Ações de API ---
-  const handleSavePatient = async (patientData) => {
-    try {
-      let response;
-      const patientId = patientData._id || patientData.id;
-      const patientName = patientData.name;
-      const cleanedCPF = patientData.cpf ? String(patientData.cpf).trim() : null;
-      const cleanedSusCard = patientData.susCard ? String(patientData.susCard).trim() : null;
-
-      const payload = {
-        name: patientName,
-        cpf: cleanedCPF,
-        susCard: cleanedSusCard,
-        observations: patientData.observations,
-        generalNotes: patientData.generalNotes,
-        status: patientData.status,
-      };
-
-      if (patientId && patientId !== 'new') {
-        response = await api.put(`/patients/${patientId}`, payload);
-        addToast('Paciente atualizado com sucesso!', 'success');
-        addLog?.(user?.name, `atualizou dados do paciente ${patientName}`);
-      } else {
-        response = await api.post('/patients', payload);
-        addToast('Paciente cadastrado com sucesso!', 'success');
-        addLog?.(user?.name, `cadastrou novo paciente ${patientName}`);
-      }
-
-      await syncGlobalState(setPatients, 'pacientes');
-      const updatedPatient = response.data;
-      setSelectedPatient(updatedPatient);
-    } catch (error) {
-      console.error('[API Error] Salvar Paciente:', error.response?.data || error);
-      const msg = error.response?.data?.message || 'Erro ao salvar paciente. Tente novamente.';
-      addToast(msg, 'error');
-    } finally {
-      setIsPatientModalOpen(false);
-      setEditingPatient(null);
-    }
-  };
-
-  const handleDeletePatient = async (patientId) => {
-    const patient = patients.find((p) => (p._id || p.id) === patientId);
-    try {
-      await api.delete(`/patients/${patientId}`);
-      addToast('Paciente excluído!', 'success');
-      addLog?.(user?.name, `excluiu o paciente ${patient?.name}`);
-      await syncGlobalState(setPatients, 'pacientes');
-      setSelectedPatient(null);
-    } catch (error) {
-      console.error('[API Error] Excluir Paciente:', error);
-      addToast('Falha ao excluir paciente. Pode haver registros associados.', 'error');
-    }
-  };
-
-  const handleSaveRecord = async (recordData) => {
-    try {
-      let response;
-      const recordId = recordData._id || recordData.id;
-      const patientName = getPatientNameById(recordData.patientId);
-      const profissionalIdentifier = user?._id || user?.id;
-      if (!profissionalIdentifier) {
-        addToast('Erro crítico: ID do profissional não encontrado. Faça login novamente.', 'error');
-        throw new Error('ID do profissional não encontrado.');
-      }
-
-      const cleanedMedications = (recordData.medications || [])
-        .map((med) => {
-          const id = med._id || med.id || med.medicationId;
-          const finalMedicationId = typeof id === 'object' && id !== null ? id._id || id.id : id;
-          if (!finalMedicationId) {
-            console.warn('Item de medicação inválido descartado (sem ID):', med);
-            return null;
-          }
-          return {
-            medicationId: String(finalMedicationId),
-            quantity: med.quantity || 'N/A',
-          };
-        })
-        .filter((med) => med !== null);
-
-      const payload = {
-        patientId: recordData.patientId,
-        profissionalId: profissionalIdentifier,
-        medications: cleanedMedications,
-        referenceDate: recordData.referenceDate,
-        observation: recordData.observation,
-        totalValue: recordData.totalValue,
-        status: recordData.status || 'Pendente',
-      };
-
-      if (recordId && recordId !== 'new') {
-        response = await api.put(`/records/${recordId}`, payload);
-        addToast('Registro atualizado!', 'success');
-        addLog?.(user?.name, `atualizou registro para ${patientName}`);
-      } else {
-        response = await api.post('/records', payload);
-        addToast('Registro salvo!', 'success');
-        addLog?.(user?.name, `criou registro para ${patientName}`);
-      }
-      await syncGlobalState(setRecords, 'registros');
-    } catch (error) {
-      console.error('[API Error] Salvar Registro:', error.response?.data || error.message);
-      const msg = error.response?.data?.message || 'Erro ao salvar registro. Verifique os dados.';
-      addToast(msg, 'error');
-    } finally {
-      const wasEditing = !!(recordData && (recordData._id || recordData.id));
-      if (wasEditing) {
-        setIsRecordModalOpen(false);
-        setEditingRecord(null);
-      }
-      setQuickAddPatientId('');
-      setSelectedPatientName('');
-      setQuickSearchTerm('');
-      setDashQuickPatientId('');
-      setDashQuickPatientName('');
-      setDashQuickSearch('');
-    }
-  };
-
-  const handleDeleteRecord = async (recordId) => {
-    const record = records.find((r) => (r._id || r.id) === recordId);
-    try {
-      await api.delete(`/records/${recordId}`);
-      addToast('Registro excluído!', 'success');
-      addLog?.(user?.name, `excluiu registro de ${getPatientNameById(record?.patientId)}`);
-      await syncGlobalState(setRecords, 'registros');
-    } catch (error) {
-      console.error('[API Error] Excluir Registro:', error);
-      addToast('Falha ao excluir registro. Tente novamente.', 'error');
-    }
-  };
-
-  const handleAddNewMedication = async (medData) => {
-    try {
-      const response = await api.post('/medications', { name: medData.name.trim() });
-      const newMed = response.data;
-      addToast('Medicação cadastrada!', 'success');
-      addLog?.(user?.name, `cadastrou medicação: ${newMed.name}`);
-      await syncGlobalState(setMedications, 'medicações');
-      return newMed;
-    } catch (error) {
-      console.error('[API Error] Nova Medicação:', error);
-      const msg = error.response?.data?.message || 'Erro ao cadastrar medicação.';
-      addToast(msg, 'error');
-      return null;
-    }
-  };
-
-  // --- (CORRIGIDO) Função de Atualizar Status (Atender) ---
-  const handleUpdateRecordStatus = async (recordId, deliveryDateStr) => {
-    if (!deliveryDateStr) {
-      addToast('Selecione uma data.', 'error');
-      return;
-    }
-
-    // 1. Ativa o loading (Spinner)
-    setIsAttendingLoading(true);
-
-    try {
-      await api.patch(`/records/${recordId}/status`, {
-        status: 'Atendido',
-        deliveryDate: deliveryDateStr,
-      });
-
-      // 2. Aguarda a atualização global
-      await syncGlobalState(setRecords, 'registros');
-      
-      // 3. Exibe sucesso
-      addToast('Registro Atendido!', 'success');
-      addLog?.(user?.name, `marcou registro (ID: ${recordId}) como Atendido`);
-
-      // 4. Fecha o modal (só fecha se deu tudo certo)
-      setAttendingRecord(null);
-
-    } catch (error) {
-      console.error('[API Error] Atualizar Status:', error);
-      addToast('Falha ao atualizar status. Tente novamente.', 'error');
-      // Obs: Não fechamos o modal no erro para permitir nova tentativa
-    } finally {
-      // 5. Desativa o loading
-      setIsAttendingLoading(false);
-    }
-  };
-
-  const handleCancelRecordStatus = async (recordId, cancelReason) => {
-    try {
-      await api.patch(`/records/${recordId}/status`, {
-        status: 'Cancelado',
-        deliveryDate: null,
-        cancelReason: cancelReason,
-      });
-      addToast('Registro Cancelado.', 'info');
-      addLog?.(user?.name, `cancelou registro (ID: ${recordId}). Motivo: ${cancelReason}`);
-      await syncGlobalState(setRecords, 'registros');
-    } catch (error) {
-      console.error('[API Error] Cancelar Status:', error);
-      addToast('Falha ao cancelar status. Tente novamente.', 'error');
-    }
-  };
-
-  const handleCloneRecord = (recordToClone) => {
-    const patientForRecord = Array.isArray(patients)
-      ? patients.find((p) => (p._id || p.id) === recordToClone.patientId)
-      : null;
-    if (!patientForRecord) {
-      addToast('Paciente deste registro não foi encontrado.', 'error');
-      return;
-    }
-    const clonedData = JSON.parse(JSON.stringify(recordToClone));
-    const finalClonedData = {
-      ...clonedData,
-      _id: null, 
-      id: null, 
-      status: 'Pendente',
-      referenceDate: new Date().toISOString().slice(0, 10), 
-      entryDate: new Date().toISOString(),
-      deliveryDate: null,
-      cancelReason: null,
-    };
-    openRecordModalWithCheck(patientForRecord, finalClonedData);
-  };
-
-  const handleQuickAddRecord = (e, patient) => {
-    e.stopPropagation();
-    openRecordModalWithCheck(patient, null); 
-  };
-
-  const openQuickAddModal = () => {
-    if (quickAddPatientId) {
-      const patient = Array.isArray(patients)
-        ? patients.find((p) => (p._id || p.id) === quickAddPatientId)
-        : null;
-      if (patient) {
-        openRecordModalWithCheck(patient, null); 
-      } else {
-        addToast('Paciente não encontrado.', 'error');
-      }
-    } else {
-      addToast('Selecione um paciente.', 'error');
-    }
-  };
-
-  const openDashQuickAddModal = () => {
-    if (dashQuickPatientId) {
-      const patient = Array.isArray(patients)
-        ? patients.find((p) => (p._id || p.id) === dashQuickPatientId)
-        : null;
-      if (patient) {
-        openRecordModalWithCheck(patient, null); 
-        setDashQuickPatientId('');
-        setDashQuickPatientName('');
-        setDashQuickSearch('');
-      } else {
-        addToast('Paciente não encontrado.', 'error');
-      }
-    } else {
-      addToast('Selecione um paciente.', 'error');
-    }
-  };
-
-  const handleNavigateWithFilter = (status) => {
-    setStatusFilter(status);
-    navigate('/history');
-  };
-
+  // --- RENDER ---
   const renderCurrentView = () => {
     switch (currentView) {
       case 'dashboard':
         return (
-          <div className="space-y-8 animate-fade-in">
-            <h2 className="text-2xl md:text-3xl font-bold text-gray-800">
-              Dashboard Profissional
-            </h2>
-
-            {overduePendingRecords.length > 0 && isOverdueAlertVisible && (
-              <div
-                className="bg-white border-l-8 border-red-600 p-4 rounded-lg shadow-lg flex items-start gap-3"
-                role="alert"
-              >
-                <div className="flex-shrink-0 text-red-500 mt-1">
-                  <span className="w-6 h-6">
-                    {icons.exclamation || (
-                      <svg
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                        xmlns="http://www.w3.org/2000/svg"
-                        strokeWidth={1.5}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
-                        />
-                      </svg>
-                    )}
+          <div className="space-y-8 animate-fade-in max-w-7xl mx-auto">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+              <div>
+                <h2 className="text-3xl font-bold text-gray-800 tracking-tight">
+                  Olá,{' '}
+                  <span className="text-blue-600">
+                    {user?.name?.split(' ')[0] || 'Profissional'}
                   </span>
-                </div>
+                </h2>
+                <p className="text-gray-500 mt-1 font-medium">
+                  Dashboard Geral
+                </p>
+              </div>
 
+              {/* BOTÃO PRINCIPAL: INICIA O FLUXO */}
+              <button
+                onClick={openSearchModal}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl shadow-lg shadow-blue-200 font-semibold flex items-center gap-2 transition-all transform hover:-translate-y-1 active:scale-95 cursor-pointer"
+              >
+                <span className="text-xl">{icons.plus}</span>
+                <span>Iniciar Atendimento</span>
+              </button>
+            </div>
+
+            {/* Alertas e Cards (Mantido igual) */}
+            {overduePendingRecords.length > 0 && isOverdueAlertVisible && (
+              <div className="bg-red-50 border border-red-100 p-4 rounded-xl flex items-start gap-4 shadow-sm relative overflow-hidden">
+                <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-500"></div>
+                <div className="text-red-500 mt-1 flex-shrink-0 bg-red-100 p-2 rounded-full">
+                  {icons.exclamation}
+                </div>
                 <div className="flex-grow">
-                  <p className="font-bold text-gray-800">Atenção!</p>
-                  <p className="text-sm text-gray-700">
-                    Existem {overduePendingRecords.length}{' '}
-                    {overduePendingRecords.length === 1
-                      ? 'registro pendente'
-                      : 'registros pendentes'}{' '}
-                    há mais de 30 dias.
+                  <p className="font-bold text-red-800 text-sm uppercase">
+                    Pendências Antigas
                   </p>
-                  <button
-                    onClick={() => handleNavigateWithFilter('Pendente')}
-                    className="text-sm text-indigo-600 hover:text-indigo-800 hover:underline font-medium mt-1 cursor-pointer transition-colors"
-                  >
-                    Ver registros pendentes
-                  </button>
+                  <p className="text-gray-700 mt-1">
+                    Você tem{' '}
+                    <strong className="text-red-600">
+                      {overduePendingRecords.length} registros
+                    </strong>{' '}
+                    pendentes há mais de 30 dias.
+                  </p>
                 </div>
-
                 <button
                   onClick={() => setIsOverdueAlertVisible(false)}
-                  className="p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 rounded-full cursor-pointer transition-colors"
-                  title="Dispensar"
+                  className="text-gray-400 hover:text-gray-600 p-1 cursor-pointer"
                 >
-                  <span className="w-5 h-5">
-                    {icons.close || (
-                      <svg
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                        xmlns="http://www.w3.org/2000/svg"
-                        strokeWidth={2}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M6 18L18 6M6 6l12 12"
-                        />
-                      </svg>
-                    )}
-                  </span>
+                  {icons.close}
                 </button>
               </div>
             )}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div
-                className="bg-yellow-100 text-yellow-900 p-5 rounded-lg shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer"
+                className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all cursor-pointer group"
                 onClick={() => navigate('/history')}
               >
-                <div className="flex items-center gap-3">
-                  <span className="text-yellow-500 bg-white p-2 rounded-full">
-                    {icons.clipboard || <span></span>}
-                  </span>
-                  <h3 className="text-lg font-semibold">Entradas Pendentes</h3>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="text-sm font-medium text-gray-500 uppercase">
+                      Pendentes
+                    </p>
+                    <h3 className="text-4xl font-bold text-gray-800 mt-2">
+                      {pendingRecords.length}
+                    </h3>
+                  </div>
+                  <div className="p-3 bg-yellow-50 text-yellow-600 rounded-xl group-hover:scale-110 transition-transform">
+                    {icons.clipboard}
+                  </div>
                 </div>
-                <p className="text-4xl font-bold mt-3 text-yellow-800">
-                  {pendingRecords.length}
-                </p>
-                <p className="text-sm text-yellow-700 hover:underline mt-2">
-                  Ver Entradas
-                </p>
+                <div className="mt-4 flex items-center gap-1 text-xs font-medium text-yellow-600 bg-yellow-50 w-fit px-2 py-1 rounded-md">
+                  <span>Aguardando ação</span>
+                </div>
               </div>
-
               <div
-                className="bg-blue-100 text-blue-900 p-5 rounded-lg shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer"
+                className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all cursor-pointer group"
                 onClick={() => navigate('/patients')}
               >
-                <div className="flex items-center gap-3">
-                  <span className="text-blue-500 bg-white p-2 rounded-full">
-                    {icons.users || <span></span>}
-                  </span>
-                  <h3 className="text-lg font-semibold">Total de Pacientes</h3>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="text-sm font-medium text-gray-500 uppercase">
+                      Pacientes
+                    </p>
+                    <h3 className="text-4xl font-bold text-gray-800 mt-2">
+                      {patients.length}
+                    </h3>
+                  </div>
+                  <div className="p-3 bg-blue-50 text-blue-600 rounded-xl group-hover:scale-110 transition-transform">
+                    {icons.users}
+                  </div>
                 </div>
-                <p className="text-4xl font-bold mt-3 text-blue-800">
-                  {patients.length}
-                </p>
-                <p className="text-sm text-blue-700 hover:underline mt-2">
-                  Gerenciar Pacientes
-                </p>
+                <div className="mt-4 flex items-center gap-1 text-xs font-medium text-blue-600 bg-blue-50 w-fit px-2 py-1 rounded-md">
+                  <span>Cadastrados</span>
+                </div>
               </div>
-
               <div
-                className="bg-green-100 text-green-900 p-5 rounded-lg shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer"
+                className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all cursor-pointer group"
                 onClick={() => navigate('/deliveries')}
               >
-                <div className="flex items-center gap-3">
-                  <span className="text-green-500 bg-white p-2 rounded-full">
-                    {icons.check || <span></span>}
-                  </span>
-                  <h3 className="text-lg font-semibold">Entregas da Semana</h3>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="text-sm font-medium text-gray-500 uppercase">
+                      Entregas (7d)
+                    </p>
+                    <h3 className="text-4xl font-bold text-gray-800 mt-2">
+                      {recentDeliveries.length}
+                    </h3>
+                  </div>
+                  <div className="p-3 bg-green-50 text-green-600 rounded-xl group-hover:scale-110 transition-transform">
+                    {icons.check}
+                  </div>
                 </div>
-                <p className="text-4xl font-bold mt-3 text-green-800">
-                  {recentDeliveries.length}
-                </p>
-                <p className="text-sm text-green-700 hover:underline mt-2">
-                  Ver Entregas
-                </p>
-              </div>
-
-              <div
-                className="bg-white p-5 rounded-lg shadow-lg hover:shadow-xl border-l-8 border-indigo-500 transition-all duration-300 flex flex-col justify-center gap-3"
-                ref={dashQuickRef}
-              >
-                <h3 className="text-lg font-semibold text-indigo-800 mb-1">
-                  Registro Rápido
-                </h3>
-
-                <div className="relative flex-grow w-full">
-                  <button
-                    type="button"
-                    onClick={() => setIsDashQuickOpen((prev) => !prev)}
-                    className="w-full p-2 pl-3 pr-10 border rounded-lg text-sm bg-gray-50 text-left flex justify-between items-center cursor-pointer hover:border-indigo-500 transition-colors"
-                  >
-                    <span
-                      className={
-                        dashQuickPatientId ? 'text-gray-900' : 'text-gray-500'
-                      }
-                    >
-                      {dashQuickPatientName || 'Selecione um paciente...'}
-                    </span>
-                    <span className="absolute right-3 top-2.5 text-gray-400 text-xs">
-                      &#9660;
-                    </span>
-                  </button>
-
-                  {isDashQuickOpen && (
-                    <div className="absolute z-10 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-60 flex flex-col">
-                      <div className="p-2 border-b sticky top-0 bg-white">
-                        <input
-                          type="text"
-                          placeholder="Buscar paciente..."
-                          className="w-full p-2 border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                          value={dashQuickSearch}
-                          onChange={(e) => setDashQuickSearch(e.target.value)}
-                          autoFocus
-                        />
-                      </div>
-
-                      <div className="overflow-y-auto">
-                        <div
-                          className="p-2 text-sm text-gray-500 hover:bg-indigo-50 cursor-pointer transition-colors"
-                          onClick={() => {
-                            setDashQuickPatientId('');
-                            setDashQuickPatientName('Selecione um paciente...');
-                            setIsDashQuickOpen(false);
-                            setDashQuickSearch('');
-                          }}
-                        >
-                          -- Limpar seleção --
-                        </div>
-
-                        {dashQuickFilteredPatients.length > 0 ? (
-                          dashQuickFilteredPatients.map((p) => (
-                            <div
-                              key={p._id || p.id}
-                              className="p-2 text-sm hover:bg-indigo-50 cursor-pointer transition-colors"
-                              onClick={() => {
-                                setDashQuickPatientId(String(p._id || p.id));
-                                setDashQuickPatientName(p.name);
-                                setIsDashQuickOpen(false);
-                                setDashQuickSearch('');
-                              }}
-                            >
-                              {p.name}
-                            </div>
-                          ))
-                        ) : (
-                          <p className="p-2 text-sm text-gray-500 text-center">
-                            Nenhum paciente encontrado.
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  )}
+                <div className="mt-4 flex items-center gap-1 text-xs font-medium text-green-600 bg-green-50 w-fit px-2 py-1 rounded-md">
+                  <span>Na última semana</span>
                 </div>
-
-                <button
-                  onClick={openDashQuickAddModal}
-                  disabled={!dashQuickPatientId}
-                  className="w-full flex items-center justify-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 text-sm font-medium cursor-pointer transition-colors"
-                >
-                  <span className="w-4 h-4">{icons.plus}</span> Adicionar
-                  Registro
-                </button>
               </div>
             </div>
-
-            <div className="pt-6 border-t">
-              <h3 className="text-xl font-semibold text-gray-700 mb-4">
-                Atalhos Rápidos
+            <div className="pt-6 border-t border-gray-100">
+              <h3 className="text-lg font-bold text-gray-800 mb-4">
+                Acesso Rápido
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <button
-                  onClick={() => navigate('/patients')}
-                  className="p-5 bg-white rounded-lg shadow-lg hover:shadow-xl hover:bg-gray-50 transition-all duration-300 flex items-center gap-4 text-left cursor-pointer"
-                >
-                  <span className="p-3 bg-blue-100 text-blue-600 rounded-full">
-                    {icons.users || <span></span>}
-                  </span>
-                  <div>
-                    <p className="text-base font-semibold text-gray-900">
-                      Gerenciar Pacientes
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      Ver lista e editar pacientes
-                    </p>
-                  </div>
-                </button>
-
-                <button
-                  onClick={() => navigate('/history')}
-                  className="p-5 bg-white rounded-lg shadow-lg hover:shadow-xl hover:bg-gray-50 transition-all duration-300 flex items-center gap-4 text-left cursor-pointer"
-                >
-                  <span className="p-3 bg-purple-100 text-purple-600 rounded-full">
-                    {icons.history || <span></span>}
-                  </span>
-                  <div>
-                    <p className="text-base font-semibold text-gray-900">
-                      Histórico Geral
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      Ver todos os registros
-                    </p>
-                  </div>
-                </button>
-
-                <button
-                  onClick={() => navigate('/history')}
-                  className="p-5 bg-white rounded-lg shadow-lg hover:shadow-xl hover:bg-gray-50 transition-all duration-300 flex items-center gap-4 text-left cursor-pointer"
-                >
-                  <span className="p-3 bg-indigo-100 text-indigo-600 rounded-full">
-                    {icons.clipboard || <span></span>}
-                  </span>
-                  <div>
-                    <p className="text-base font-semibold text-gray-900">
-                      Registro Rápido
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      Adicionar um novo registro
-                    </p>
-                  </div>
-                </button>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                  {
+                    label: 'Pacientes',
+                    icon: icons.users,
+                    path: '/patients',
+                    color: 'text-blue-600',
+                    bg: 'bg-blue-50',
+                  },
+                  {
+                    label: 'Histórico',
+                    icon: icons.history,
+                    path: '/history',
+                    color: 'text-purple-600',
+                    bg: 'bg-purple-50',
+                  },
+                  {
+                    label: 'Entregas',
+                    icon: icons.check,
+                    path: '/deliveries',
+                    color: 'text-green-600',
+                    bg: 'bg-green-50',
+                  },
+                  {
+                    label: 'Medicações',
+                    icon: icons.pill,
+                    path: '/medications',
+                    color: 'text-pink-600',
+                    bg: 'bg-pink-50',
+                  },
+                ].map((item, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => navigate(item.path)}
+                    className="flex flex-col items-center justify-center p-4 bg-white border border-gray-100 rounded-xl hover:border-gray-300 hover:shadow-sm transition-all group cursor-pointer"
+                  >
+                    <div
+                      className={`p-3 rounded-full mb-2 ${item.bg} ${item.color} group-hover:scale-110 transition-transform`}
+                    >
+                      {item.icon}
+                    </div>
+                    <span className="font-semibold text-gray-700 text-sm">
+                      {item.label}
+                    </span>
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -925,217 +705,176 @@ export default function ProfessionalDashboardPage({
 
       case 'patients':
         return (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-8rem)] animate-fade-in">
-            {/* Coluna da Esquerda (Lista) */}
-            <div className="lg:col-span-1 bg-white rounded-lg shadow-md p-4 flex flex-col min-h-0">
-              <h2 className="text-xl font-bold mb-4 text-gray-800">
-                Pacientes
-              </h2>
-              <div className="relative mb-4">
-                <input
-                  type="text"
-                  placeholder="Buscar por nome, CPF ou SUS..."
-                  className="w-full p-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-600 focus:border-blue-600 text-sm"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-                <div className="absolute left-3 top-2.5 text-gray-400 w-4 h-4">
-                  {icons.search}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-8rem)] animate-fade-in max-w-7xl mx-auto">
+            {/* Lista Lateral de Pacientes */}
+            <div className="lg:col-span-4 bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col overflow-hidden">
+              <div className="p-5 border-b border-gray-100 bg-gray-50/50">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                    {icons.users} Pacientes
+                  </h2>
+                  <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded-full">
+                    {patients.length}
+                  </span>
                 </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Buscar paciente..."
+                    className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                  <div className="absolute left-3 top-2.5 text-gray-400">
+                    {icons.search}
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleEditPatient(null)}
+                  className="mt-3 w-full py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {icons.plus} Novo Cadastro
+                </button>
               </div>
-              <button
-                onClick={() => handleEditPatient(null)} // Novo Paciente (null)
-                className="w-full flex items-center justify-center gap-2 mb-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm cursor-pointer transition-colors"
-              >
-                <span className="w-4 h-4">{icons.plus}</span> Novo Paciente
-              </button>
-
-              <div className="flex-grow min-h-0 overflow-y-auto pr-2 -mr-2">
-                {patients.length === 0 ? (
-                  <div className="text-center text-gray-500 py-10 px-4 bg-gray-50 rounded-lg">
-                    <div className="mb-4 text-gray-300 w-16 h-16 mx-auto">
-                      {icons.users}
-                    </div>
-                    <h3 className="font-semibold text-lg mb-1">
-                      Sem pacientes
-                    </h3>
-                    <p className="text-sm mb-4">
-                      Parece que você ainda não cadastrou nenhum paciente.
-                    </p>
-                    <button
-                      onClick={() => handleEditPatient(null)} // Novo Paciente
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium cursor-pointer transition-colors"
-                    >
-                      Cadastrar primeiro paciente
-                    </button>
-                  </div>
-                ) : filteredPatients.length === 0 ? (
-                  <div className="text-center text-gray-500 py-10 px-4 bg-gray-50 rounded-lg">
-                    <div className="mb-4 text-gray-300 w-16 h-16 mx-auto">
-                      {icons.search}
-                    </div>
-                    <h3 className="font-semibold text-lg mb-1">
-                      Nenhum resultado
-                    </h3>
-                    <p className="text-sm">
-                      Não encontramos pacientes para a busca{' '}
-                      <strong className="text-gray-700">
-                        "{debouncedSearchTerm}"
-                      </strong>
-                      .
-                    </p>
-                  </div>
-                ) : (
-                  filteredPatients.map((patient) => (
-                    <div
-                      key={patient._id || patient.id}
-                      className={`p-3 rounded-lg cursor-pointer mb-2 border transition-colors ${
-                        (selectedPatient?._id || selectedPatient?.id) ===
-                        (patient._id || patient.id)
-                          ? 'bg-blue-100 border-blue-400'
-                          : 'hover:bg-blue-50 border-gray-200'
-                      }`}
-                      onClick={() => setSelectedPatient(patient)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) =>
-                        (e.key === 'Enter' || e.key === ' ') &&
-                        setSelectedPatient(patient)
-                      }
-                    >
-                      <div className="flex justify-between items-center">
-                        <p
-                          className={`text-sm truncate ${selectedPatient?._id === patient._id ? 'font-semibold text-blue-900' : 'font-medium text-gray-800'}`}
+              <div className="flex-grow overflow-y-auto p-2 space-y-1">
+                {filteredPatients.length > 0 ? (
+                  filteredPatients.map((patient) => {
+                    const isSelected =
+                      (selectedPatient?._id || selectedPatient?.id) ===
+                      (patient._id || patient.id);
+                    return (
+                      <div
+                        key={patient._id || patient.id}
+                        onClick={() => setSelectedPatient(patient)}
+                        className={`p-3 rounded-xl cursor-pointer border transition-all flex items-center gap-3 ${isSelected ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-white border-transparent hover:bg-gray-50 hover:border-gray-100'}`}
+                      >
+                        <div
+                          className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${isSelected ? 'bg-blue-200 text-blue-700' : 'bg-gray-100 text-gray-500'}`}
                         >
-                          {patient.name}
-                        </p>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <StatusBadge status={patient.status} />
-
-                          <button
-                            onClick={(e) => handleQuickAddRecord(e, patient)}
-                            title="Novo Registro Rápido"
-                            className="text-gray-400 hover:text-blue-600 p-0.5 cursor-pointer transition-colors"
+                          {patient.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="overflow-hidden">
+                          <p
+                            className={`text-sm truncate font-medium ${isSelected ? 'text-blue-900' : 'text-gray-800'}`}
                           >
-                            <span className="w-4 h-4 block">{icons.plus}</span>
-                          </button>
+                            {patient.name}
+                          </p>
+                          <p className="text-xs text-gray-400 truncate">
+                            {patient.cpf || patient.susCard || 'Sem documento'}
+                          </p>
                         </div>
                       </div>
-                      <p className="text-xs text-gray-600 mt-0.5">
-                        {patient.cpf || patient.susCard || 'Sem documento'}
-                      </p>
-                    </div>
-                  ))
+                    );
+                  })
+                ) : (
+                  <div className="text-center py-10 text-gray-400 text-sm">
+                    Nenhum paciente encontrado.
+                  </div>
                 )}
               </div>
             </div>
-
-            {/* Coluna da Direita (Detalhes) */}
-            <div className="lg:col-span-2 bg-white rounded-lg shadow-md p-4 md:p-6 flex flex-col min-h-0">
+            {/* Detalhes do Paciente */}
+            <div className="lg:col-span-8 bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col overflow-hidden relative">
               {selectedPatient ? (
                 <>
-                  <div className="flex justify-between items-start mb-4 pb-4 border-b border-gray-200">
-                    <div>
-                      <h2 className="text-xl md::text-2xl font-bold text-gray-800">
-                        {selectedPatient?.name || 'Nome Indisponível'}
-                      </h2>
-                      <div className="mt-2 space-y-1 text-sm text-gray-600">
-                        <p>
-                          <span className="font-medium text-gray-800">
-                            CPF:
-                          </span>{' '}
-                          {selectedPatient?.cpf || 'Não informado'}
-                        </p>
-                        <p>
-                          <span className="font-medium text-gray-800">
-                            SUS:
-                          </span>{' '}
-                          {selectedPatient?.susCard || 'Não informado'}
-                        </p>
+                  <div className="bg-gradient-to-r from-blue-50 to-white p-6 border-b border-blue-100">
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center gap-4">
+                        <div className="w-16 h-16 bg-blue-600 text-white rounded-2xl flex items-center justify-center text-2xl font-bold shadow-lg shadow-blue-200">
+                          {selectedPatient.name.charAt(0)}
+                        </div>
+                        <div>
+                          <h2 className="text-2xl font-bold text-gray-800">
+                            {selectedPatient.name}
+                          </h2>
+                          <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
+                            <span className="bg-white px-2 py-0.5 rounded border border-gray-200">
+                              CPF: {selectedPatient.cpf || '-'}
+                            </span>
+                            <span className="bg-white px-2 py-0.5 rounded border border-gray-200">
+                              SUS: {selectedPatient.susCard || '-'}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="mt-3 text-sm">
-                        <strong className="text-gray-800">Observações:</strong>
-                        <p className="text-gray-600 italic">
-                          {selectedPatient?.observations || 'Nenhuma'}
-                        </p>
-                      </div>
-                      <div className="mt-3 text-sm">
-                        <strong className="text-gray-800">
-                          Anotações Gerais:
-                        </strong>
-                        <p className="text-gray-600 italic">
-                          {selectedPatient?.generalNotes || 'Nenhuma'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 flex-shrink-0">
-                      <button
-                        onClick={() => handleEditPatient(selectedPatient)}
-                        className="p-2 text-gray-600 hover:text-blue-600 hover:bg-gray-100 rounded-md cursor-pointer transition-colors"
-                        title="Editar Paciente"
-                      >
-                        <span className="w-4 h-4 block">{icons.edit}</span>
-                      </button>
-
-                      {user?.role !== 'profissional' &&
-                        user?.role !== 'Profissional' && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleEditPatient(selectedPatient)}
+                          className="p-2 bg-white border border-gray-200 text-gray-600 rounded-lg hover:text-blue-600 hover:border-blue-200 transition-colors cursor-pointer"
+                          title="Editar"
+                        >
+                          {icons.edit}
+                        </button>
+                        {user?.role !== 'profissional' && (
                           <button
                             onClick={() =>
                               setConfirmation({
                                 isOpen: true,
-                                title: 'Confirmar Exclusão', 
-                                message: `Tem certeza? Excluir ${selectedPatient?.name} é uma ação PERMANENTE e não pode ser desfeita.`,
+                                title: 'Excluir',
+                                message: `Excluir ${selectedPatient.name}?`,
                                 onConfirm: () =>
                                   handleDeletePatient(
                                     selectedPatient._id || selectedPatient.id
                                   ),
-                                data: selectedPatient._id || selectedPatient.id,
-                                confirmText: 'Sim, Excluir', 
-                                isDestructive: true, 
+                                isDestructive: true,
                               })
                             }
-                            className="p-2 text-gray-600 hover:text-red-600 hover:bg-gray-100 rounded-md cursor-pointer transition-colors"
-                            title="Excluir Paciente"
+                            className="p-2 bg-white border border-gray-200 text-gray-600 rounded-lg hover:text-red-600 hover:border-red-200 transition-colors cursor-pointer"
+                            title="Excluir"
                           >
-                            <span className="w-4 h-4 block">{icons.trash}</span>
+                            {icons.trash}
                           </button>
                         )}
+                      </div>
                     </div>
+                    {(selectedPatient.observations ||
+                      selectedPatient.generalNotes) && (
+                      <div className="mt-6 bg-yellow-50/50 p-4 rounded-xl border border-yellow-100 text-sm text-yellow-800">
+                        {selectedPatient.observations && (
+                          <p className="mb-1">
+                            <strong>Obs:</strong> {selectedPatient.observations}
+                          </p>
+                        )}
+                        {selectedPatient.generalNotes && (
+                          <p>
+                            <strong>Notas:</strong>{' '}
+                            {selectedPatient.generalNotes}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <div className="flex justify-between items-center mt-2 mb-3">
-                    <h3 className="text-lg font-semibold text-gray-700">
-                      Histórico de Registros
-                    </h3>
-                    <button
-                      onClick={() =>
-                        openRecordModalWithCheck(selectedPatient, null)
-                      }
-                      className="flex items-center gap-1.5 px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 text-xs font-medium cursor-pointer transition-colors"
-                    >
-                      <span className="w-3 h-3">{icons.plus}</span> Novo
-                      Registro
-                    </button>
-                  </div>
-
-                  <div className="flex-grow min-h-0 overflow-y-auto -mx-4 md:-mx-6 px-4 md:px-6">
-                    <PatientRecordsTable
-                      records={
-                        Array.isArray(patientRecords) ? patientRecords : []
-                      }
-                      medications={medications}
-                    />
+                  <div className="p-6 flex-grow flex flex-col min-h-0 bg-gray-50/30">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="font-bold text-gray-700 flex items-center gap-2">
+                        {icons.history} Histórico Clínico
+                      </h3>
+                      <button
+                        onClick={() =>
+                          openRecordModalWithCheck(selectedPatient, null)
+                        }
+                        className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 shadow-sm shadow-green-200 transition-all flex items-center gap-2 cursor-pointer"
+                      >
+                        {icons.plus} Nova Entrada
+                      </button>
+                    </div>
+                    <div className="flex-grow overflow-auto bg-white rounded-xl border border-gray-200 shadow-sm">
+                      <PatientRecordsTable
+                        records={
+                          Array.isArray(patientRecords) ? patientRecords : []
+                        }
+                        medications={medications}
+                      />
+                    </div>
                   </div>
                 </>
               ) : (
-                <div className="flex flex-col items-center justify-center h-full text-center text-gray-500 bg-gray-50 rounded-lg p-8">
-                  <div className="mb-4 text-gray-300 w-16 h-16">
-                    {icons.users}
+                <div className="flex flex-col items-center justify-center h-full text-gray-400 bg-gray-50/50">
+                  <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-4 text-3xl">
+                    {icons.user}
                   </div>
-                  <h2 className="text-xl font-semibold">
-                    Selecione um Paciente
-                  </h2>
-                  <p className="text-sm">
-                    Escolha um paciente na lista para ver seus detalhes.
+                  <p className="text-lg font-medium text-gray-600">
+                    Nenhum paciente selecionado
                   </p>
                 </div>
               )}
@@ -1145,299 +884,182 @@ export default function ProfessionalDashboardPage({
 
       case 'historico':
         return (
-          <div className="bg-white rounded-lg shadow-md p-4 md:p-6 animate-fade-in flex flex-col h-[calc(100vh-8rem)]">
-            <h2 className="text-xl md:text-2xl font-bold mb-4 text-gray-800">
-              Histórico Geral de Entradas
-            </h2>
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 animate-fade-in flex flex-col h-[calc(100vh-8rem)] max-w-7xl mx-auto">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6 pb-6 border-b border-gray-100">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">
+                  Histórico Completo
+                </h2>
+                <p className="text-gray-500 text-sm mt-1">
+                  Visualize e gerencie todas as entradas.
+                </p>
+              </div>
 
-            <div className="bg-blue-50 p-4 rounded-lg mb-4 border border-blue-200 shadow-sm">
-              <h4 className="flex items-center gap-2 font-semibold mb-3 text-blue-800 text-base">
-                <span className="w-5 h-5 text-blue-600">{icons.plus}</span>
-                <span>Adicionar Novo Registro Rápido</span>
-              </h4>
-
-              <div
-                className="flex flex-col sm:flex-row items-center gap-3"
-                ref={quickSelectRef}
-              >
-                <div className="relative flex-grow w-full sm:w-auto">
-                  <button
-                    type="button"
-                    onClick={() => setIsQuickSelectOpen((prev) => !prev)}
-                    className="w-full p-2 pl-3 pr-10 border border-gray-300 rounded-lg text-sm bg-white text-left flex justify-between items-center transition-all duration-150 hover:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer"
-                  >
-                    <span
-                      className={
-                        quickAddPatientId ? 'text-gray-900' : 'text-gray-500'
-                      }
-                    >
-                      {selectedPatientName || 'Selecione um paciente...'}
-                    </span>
-                    <span className="absolute right-3 top-2.5 text-gray-400 text-xs">
-                      &#9660;
-                    </span>
-                  </button>
-
-                  {isQuickSelectOpen && (
-                    <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-60 flex flex-col">
-                      <div className="p-2 border-b border-gray-200 sticky top-0 bg-white">
-                        <input
-                          type="text"
-                          placeholder="Buscar paciente..."
-                          className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          value={quickSearchTerm}
-                          onChange={(e) => setQuickSearchTerm(e.target.value)}
-                          autoFocus
-                        />
-                      </div>
-
-                      <div className="overflow-y-auto">
-                        <div
-                          className="p-2 text-sm text-gray-500 hover:bg-blue-50 cursor-pointer transition-colors"
-                          onClick={() => {
-                            setQuickAddPatientId('');
-                            setSelectedPatientName('Selecione um paciente...');
-                            setIsQuickSelectOpen(false);
-                            setQuickSearchTerm('');
-                          }}
-                        >
-                          -- Limpar seleção --
-                        </div>
-
-                        {quickFilteredPatients.length > 0 ? (
-                          quickFilteredPatients.map((p) => (
-                            <div
-                              key={p._id || p.id} // Usa _id ou id
-                              className="p-2 text-sm text-gray-800 hover:bg-blue-50 cursor-pointer transition-colors"
-                              onClick={() => {
-                                setQuickAddPatientId(String(p._id || p.id));
-                                setSelectedPatientName(p.name);
-                                setIsQuickSelectOpen(false);
-                                setQuickSearchTerm('');
-                              }}
-                            >
-                              {p.name}
-                            </div>
-                          ))
-                        ) : (
-                          <p className="p-2 text-sm text-gray-500 text-center">
-                            Nenhum paciente encontrado.
-                          </p>
-                        )}
-                      </div>
-                    </div>
+              <div className="flex gap-4 items-center">
+                {/* Busca Histórico */}
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Buscar paciente no relatório..."
+                    value={historySearchTerm}
+                    onChange={(e) => setHistorySearchTerm(e.target.value)}
+                    className="pl-8 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 w-64"
+                  />
+                  <div className="absolute left-2.5 top-2.5 text-gray-400 text-xs">
+                    {icons.search}
+                  </div>
+                </div>
+                <button
+                  onClick={openSearchModal}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors cursor-pointer"
+                >
+                  {icons.plus} Novo Registro
+                </button>
+                <div className="flex bg-gray-100 p-1 rounded-lg">
+                  {['Todos', 'Pendente', 'Atendido', 'Cancelado'].map(
+                    (status) => (
+                      <button
+                        key={status}
+                        onClick={() => setStatusFilter(status)}
+                        className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer ${statusFilter === status ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                      >
+                        {status}
+                      </button>
+                    )
                   )}
                 </div>
-
-                <button
-                  onClick={openQuickAddModal}
-                  disabled={!quickAddPatientId}
-                  className="flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 w-full sm:w-auto text-sm font-medium transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer"
-                >
-                  <span className="w-4 h-4">{icons.plus}</span>
-                  <span>Adicionar</span>
-                </button>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 mb-4 flex-wrap">
-              <span className="text-sm font-semibold">Filtrar por Status:</span>
-              {['Todos', 'Pendente', 'Atendido', 'Cancelado'].map((status) => (
-                <button
-                  key={status}
-                  onClick={() => setStatusFilter(status)}
-                  className={`px-3 py-1 text-xs rounded-full border cursor-pointer transition-colors ${
-                    statusFilter === status
-                      ? 'bg-blue-600 text-white font-bold border-blue-600'
-                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
-                  }`}
-                >
-                  {status}
-                </button>
-              ))}
-            </div>
-
-            <div className="overflow-x-auto overflow-y-auto flex-grow min-h-0">
-              <table className="min-w-full bg-white text-sm">
-                <thead className="bg-gray-50 sticky top-0 border-b border-gray-200">
-                  <tr>
-                    <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Paciente
-                    </th>
-                    <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Entrada
-                    </th>
-                    <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Medicações
-                    </th>
-                    <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Ações
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {currentRecords.map((record) => (
-                    <tr
-                      key={record._id || record.id}
-                      className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
-                    >
-                      <td className="py-3 px-3 font-medium">
-                        <button
-                          onClick={() => navigate('/patients')}
-                          className="text-blue-600 hover:underline text-left cursor-pointer transition-colors"
-                        >
-                          {getPatientNameById(record.patientId)}
-                        </button>
-                      </td>
-                      <td className="py-3 px-3 text-gray-700">
-                        {new Date(record.entryDate).toLocaleString('pt-BR', {
-                          dateStyle: 'short',
-                          timeStyle: 'short',
-                        })}
-                      </td>
-                      <td className="py-3 px-3 text-gray-700">
-                        {Array.isArray(record.medications)
-                          ? record.medications
-                              .map(
-                                (m) =>
-                                  `${getMedicationName(m.medicationId, medications)} (${m.quantity || 'N/A'})`
-                              )
-                              .join(', ')
-                          : 'N/A'}
-                      </td>
-                      <td className="py-3 px-3">
-                        <StatusBadge status={record.status} />
-                      </td>
-                      <td className="py-3 px-3">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {record.status === 'Pendente' && (
-                            <>
-                              <button
-                                onClick={() => setAttendingRecord(record)}
-                                className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 font-medium cursor-pointer transition-colors"
-                              >
-                                Atender
-                              </button>
-
-                              {user?.role !== '' && user?.role !== '' && (
-                                <button
-                                  onClick={() => setCancelingRecord(record)}
-                                  className="px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 font-medium cursor-pointer transition-colors"
-                                >
-                                  Cancelar
-                                </button>
-                              )}
-                            </>
-                          )}
-
-                          {record.status === 'Atendido' && (
-                            <button
-                              onClick={() => handleCloneRecord(record)}
-                              className="p-1 text-gray-500 hover:text-green-600 cursor-pointer transition-colors"
-                              title="Repetir este registro para o mês atual"
-                            >
-                              <span className="w-5 h-5 block">
-                                {icons.duplicate}
-                              </span>
-                            </button>
-                          )}
-
-                          <button
-                            onClick={() => {
-                              const patientForRecord = Array.isArray(patients)
-                                ? patients.find(
-                                    (p) => (p._id || p.id) === record.patientId
-                                  )
-                                : null;
-                              if (patientForRecord) {
-                                setSelectedPatient(patientForRecord);
-                                setEditingRecord(record);
-                                setIsRecordModalOpen(true);
-                              }
-                            }}
-                            className="p-1 text-gray-500 hover:text-blue-600 cursor-pointer transition-colors"
-                            title="Editar"
-                          >
-                            <span className="w-4 h-4 block">{icons.edit}</span>
-                          </button>
-
-                          {user?.role !== 'profissional' &&
-                            user?.role !== 'Profissional' && (
-                              <button
-                                onClick={() =>
-                                  setConfirmation({
-                                    isOpen: true,
-                                    title: 'Confirmar Exclusão',
-                                    message: 'Excluir registro?',
-                                    onConfirm: () =>
-                                      handleDeleteRecord(
-                                        record._id || record.id
-                                      ),
-                                    data: record._id || record.id,
-                                    confirmText: 'Sim, Excluir',
-                                    isDestructive: true,
-                                  })
-                                }
-                                className="p-1 text-gray-500 hover:text-red-600 cursor-pointer transition-colors"
-                                title="Excluir"
-                              >
-                                <span className="w-4 h-4 block">
-                                  {icons.trash}
-                                </span>
-                              </button>
-                            )}
-                        </div>
-                      </td>
+            <div className="flex-grow overflow-hidden bg-white border border-gray-200 rounded-xl shadow-sm flex flex-col">
+              <div className="overflow-x-auto overflow-y-auto custom-scrollbar flex-grow">
+                <table className="min-w-full text-sm text-left">
+                  <thead className="bg-gray-50 text-gray-500 font-medium uppercase tracking-wider text-xs sticky top-0 z-10 border-b border-gray-100">
+                    <tr>
+                      <th className="py-3 px-4 pl-6">Paciente</th>
+                      <th className="py-3 px-4">Entrada</th>
+                      <th className="py-3 px-4">Medicações</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4 text-right pr-6">Ações</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              {filteredRecords.length === 0 && (
-                <p className="text-center text-gray-500 py-6">
-                  {statusFilter === 'Todos'
-                    ? 'Nenhuma entrada registrada.'
-                    : `Nenhuma entrada com status '${statusFilter}'.`}
-                </p>
-              )}
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {currentRecords.map((record) => (
+                      <tr
+                        key={record._id || record.id}
+                        className="hover:bg-blue-50/30 transition-colors group cursor-pointer"
+                      >
+                        <td className="py-3 px-4 pl-6 font-medium text-gray-800">
+                          {getPatientNameById(record.patientId)}
+                        </td>
+                        <td className="py-3 px-4 text-gray-600">
+                          {new Date(record.entryDate).toLocaleDateString(
+                            'pt-BR'
+                          )}{' '}
+                          <span className="text-gray-400 text-xs">
+                            {new Date(record.entryDate).toLocaleTimeString(
+                              'pt-BR',
+                              { hour: '2-digit', minute: '2-digit' }
+                            )}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex flex-wrap gap-1">
+                            {Array.isArray(record.medications)
+                              ? record.medications.map((m, i) => (
+                                  <span
+                                    key={i}
+                                    className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded border border-gray-200"
+                                  >
+                                    {getMedicationName(
+                                      m.medicationId,
+                                      medications
+                                    )}{' '}
+                                    <span className="text-gray-400 border-l border-gray-300 pl-1 ml-1">
+                                      {m.quantity}
+                                    </span>
+                                  </span>
+                                ))
+                              : '-'}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <StatusBadge status={record.status} />
+                        </td>
+                        <td className="py-3 px-4 text-right pr-6">
+                          <div className="flex items-center justify-end gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
+                            {record.status === 'Pendente' && (
+                              <>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setAttendingRecord(record);
+                                  }}
+                                  className="text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm px-3 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer"
+                                >
+                                  ATENDER
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setCancelingRecord(record);
+                                  }}
+                                  className="text-red-600 hover:bg-red-50 p-1.5 rounded-md transition-colors cursor-pointer"
+                                  title="Cancelar"
+                                >
+                                  {icons.close}
+                                </button>
+                              </>
+                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const p = patients.find(
+                                  (pat) =>
+                                    (pat._id || pat.id) === record.patientId
+                                );
+                                if (p) {
+                                  setSelectedPatient(p);
+                                  setEditingRecord(record);
+                                  setIsRecordModalOpen(true);
+                                }
+                              }}
+                              className="text-gray-500 hover:text-blue-600 p-1.5 rounded-md hover:bg-gray-100 transition-colors cursor-pointer"
+                            >
+                              {icons.edit}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {filteredRecords.length === 0 && (
+                  <div className="p-10 text-center text-gray-400">
+                    Nenhum registro encontrado.
+                  </div>
+                )}
+              </div>
             </div>
             {filteredRecords.length > itemsPerPage && (
-              <div className="flex justify-between items-center pt-4 border-t border-gray-200 mt-auto">
-                <span className="text-sm text-gray-700">
-                  Mostrando{' '}
-                  {Math.min(
-                    (currentPage - 1) * itemsPerPage + 1,
-                    filteredRecords.length
-                  )}{' '}
-                  {' a '}
-                  {Math.min(currentPage * itemsPerPage, filteredRecords.length)}
-                  {' de '}
-                  {filteredRecords.length} registros
+              <div className="flex justify-between items-center mt-4 pt-2 border-t border-gray-100">
+                <button
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage((p) => p - 1)}
+                  className="px-3 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-50 cursor-pointer"
+                >
+                  Anterior
+                </button>
+                <span className="text-sm text-gray-500">
+                  Pág {currentPage} de {totalPages}
                 </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-                    disabled={currentPage === 1}
-                    className="px-3 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors"
-                  >
-                    Anterior
-                  </button>
-                  <span className="text-sm font-medium">
-                    Página {currentPage} de {totalPages > 0 ? totalPages : 1}
-                  </span>
-                  <button
-                    onClick={() =>
-                      setCurrentPage((p) => Math.min(p + 1, totalPages))
-                    }
-                    disabled={currentPage === totalPages || totalPages === 0}
-                    className="px-3 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors"
-                  >
-                    Próxima
-                  </button>
-                </div>
+                <button
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage((p) => p + 1)}
+                  className="px-3 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-50 cursor-pointer"
+                >
+                  Próxima
+                </button>
               </div>
             )}
           </div>
@@ -1445,88 +1067,57 @@ export default function ProfessionalDashboardPage({
 
       case 'deliveries':
         return (
-          <div className="bg-white rounded-lg shadow-md p-4 md:p-6 animate-fade-in flex flex-col h-[calc(100vh-8rem)]">
-            <h2 className="text-xl md:text-2xl font-bold mb-4 text-gray-800">
-              Entregas Atendidas (Última Semana)
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 animate-fade-in flex flex-col h-[calc(100vh-8rem)] max-w-7xl mx-auto">
+            <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+              <span className="bg-green-100 text-green-600 p-2 rounded-lg">
+                {icons.check}
+              </span>
+              Entregas da Semana
             </h2>
-
-            {recentDeliveries.length === 0 ? (
-              <div className="flex-grow flex items-center justify-center">
-                <p className="text-center text-gray-500 py-10">
-                  Nenhuma entrega registrada na última semana.
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto overflow-y-auto flex-grow min-h-0">
-                <table className="min-w-full bg-white text-sm">
-                  <thead className="bg-gray-50 sticky top-0 border-b border-gray-200">
-                    <tr>
-                      <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Data da Entrega
-                      </th>
-                      <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Paciente
-                      </th>
-                      <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Medicações Entregues
-                      </th>
-                      <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Data da Entrada
-                      </th>
-                      <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Status
-                      </th>
+            <div className="flex-grow overflow-auto bg-white rounded-xl border border-gray-200 shadow-sm">
+              <table className="min-w-full text-sm text-left">
+                <thead className="bg-gray-50 text-gray-500 font-medium uppercase text-xs border-b border-gray-100">
+                  <tr>
+                    <th className="py-3 px-4 pl-6">Data Entrega</th>
+                    <th className="py-3 px-4">Paciente</th>
+                    <th className="py-3 px-4">Medicações</th>
+                    <th className="py-3 px-4">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {recentDeliveries.map((record) => (
+                    <tr
+                      key={record._id || record.id}
+                      className="hover:bg-gray-50 transition-colors cursor-pointer"
+                    >
+                      <td className="py-3 px-4 pl-6 font-medium text-green-700">
+                        {new Date(record.deliveryDate).toLocaleDateString(
+                          'pt-BR'
+                        )}
+                      </td>
+                      <td className="py-3 px-4 font-medium text-gray-800">
+                        {getPatientNameById(record.patientId)}
+                      </td>
+                      <td className="py-3 px-4 text-gray-600">
+                        {record.medications
+                          ?.map((m) =>
+                            getMedicationName(m.medicationId, medications)
+                          )
+                          .join(', ')}
+                      </td>
+                      <td className="py-3 px-4">
+                        <StatusBadge status={record.status} />
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {recentDeliveries.map((record) => (
-                      <tr
-                        key={record._id || record.id}
-                        className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
-                      >
-                        <td className="py-3 px-3 font-medium text-gray-800">
-                          {new Date(
-                            record.deliveryDate + 'T00:00:00'
-                          ).toLocaleDateString('pt-BR', {
-                            day: '2-digit',
-                            month: '2-digit',
-                            year: 'numeric',
-                            timeZone: 'UTC',
-                          })}
-                        </td>
-                        <td className="py-3 px-3">
-                          <button
-                            onClick={() => navigate('/patients')}
-                            className="text-blue-600 hover:underline font-medium text-left cursor-pointer transition-colors"
-                          >
-                            {getPatientNameById(record.patientId)}
-                          </button>
-                        </td>
-                        <td className="py-3 px-3 text-gray-700">
-                          {Array.isArray(record.medications)
-                            ? record.medications
-                                .map(
-                                  (m) =>
-                                    `${getMedicationName(m.medicationId, medications)} (${m.quantity || 'N/A'})`
-                                )
-                                .join(', ')
-                            : 'N/A'}
-                        </td>
-                        <td className="py-3 px-3 text-gray-700">
-                          {new Date(record.entryDate).toLocaleString('pt-BR', {
-                            dateStyle: 'short',
-                            timeStyle: 'short',
-                          })}
-                        </td>
-                        <td className="py-3 px-3">
-                          <StatusBadge status={record.status} />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                  ))}
+                </tbody>
+              </table>
+              {recentDeliveries.length === 0 && (
+                <div className="p-10 text-center text-gray-400">
+                  Nenhuma entrega nos últimos 7 dias.
+                </div>
+              )}
+            </div>
           </div>
         );
 
@@ -1546,6 +1137,18 @@ export default function ProfessionalDashboardPage({
   return (
     <>
       {renderCurrentView()}
+
+      <SearchPatientModal
+        isOpen={isSearchModalOpen}
+        onClose={() => setIsSearchModalOpen(false)}
+        patients={patients}
+        onSelectPatient={handleSelectPatientFromSearch}
+        onCreateNew={() => {
+          setIsSearchModalOpen(false);
+          handleEditPatient(null);
+        }}
+      />
+
       {isPatientModalOpen && (
         <PatientForm
           patient={editingPatient}
@@ -1558,14 +1161,23 @@ export default function ProfessionalDashboardPage({
           addToast={addToast}
         />
       )}
+
       {isRecordModalOpen && (
         <RecordForm
+          key={recordFormKey} // Key só precisa mudar se quiser forçar reset. Como fechamos o modal, o unmount já limpa.
           patient={selectedPatient}
           patients={patients}
           records={records}
           profissionalId={user?._id || user?.id}
           record={editingRecord}
-          recentRecord={selectedPatient ? findRecentRecord(selectedPatient?._id || selectedPatient?.id, editingRecord?._id || editingRecord?.id || null) : null}
+          recentRecord={
+            selectedPatient
+              ? findRecentRecord(
+                  selectedPatient?._id || selectedPatient?.id,
+                  editingRecord?._id || editingRecord?.id || null
+                )
+              : null
+          }
           onSave={handleSaveRecord}
           onClose={() => {
             setIsRecordModalOpen(false);
@@ -1577,7 +1189,6 @@ export default function ProfessionalDashboardPage({
         />
       )}
 
-      {/* Modal de Confirmação */}
       {confirmation.isOpen && (
         <ConfirmModal
           title={confirmation.title}
@@ -1585,28 +1196,23 @@ export default function ProfessionalDashboardPage({
           confirmText={confirmation.confirmText}
           isDestructive={confirmation.isDestructive}
           onConfirm={() => {
-            if (confirmation.onConfirm) {
+            if (confirmation.onConfirm)
               confirmation.onConfirm(confirmation.data);
-            }
           }}
           onClose={closeConfirmation}
         />
       )}
-
-      {/* (CORRIGIDO) Modal de Atendimento com Loading */}
       {attendingRecord && (
         <AttendRecordModal
           record={attendingRecord}
           onConfirm={handleUpdateRecordStatus}
-          // Só permite fechar o modal se NÃO estiver carregando
           onClose={() => !isAttendingLoading && setAttendingRecord(null)}
           getPatientName={getPatientNameById}
           medications={medications}
           getMedicationName={getMedicationName}
-          isSaving={isAttendingLoading} 
+          isSaving={isAttendingLoading}
         />
       )}
-
       {cancelingRecord && (
         <CancelRecordModal
           record={cancelingRecord}

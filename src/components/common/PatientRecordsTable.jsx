@@ -2,103 +2,136 @@
 
 import React from 'react';
 import { StatusBadge } from '../common/StatusBadge';
-import { icons } from '../../utils/icons'; 
+import { icons } from '../../utils/icons';
 
-// Helper interno (Compara ID como string)
+// Helper interno para buscar nome da medicação
 const getMedicationNameLocal = (medicationId, meds = []) => {
-  return meds.find((m) => m.id === medicationId)?.name || 'ID Inválido';
+  return meds.find((m) => m.id === medicationId)?.name || 'Item desconhecido';
 };
 
-// Função para formatar a Data de Referência com segurança (YYYY-MM-DD -> DD/MM/YYYY)
-const formatDateRef = (dateStr) => {
-  if (!dateStr) return '---';
-  const isoDatePart = dateStr.slice(0, 10);
-  return new Date(isoDatePart + 'T00:00:00').toLocaleDateString('pt-BR');
-};
-
-export function PatientRecordsTable({ records = [], medications = [], onViewReason }) {
+export function PatientRecordsTable({
+  records = [],
+  medications = [],
+  onViewReason,
+}) {
   if (!Array.isArray(records) || records.length === 0) {
     return (
-      <p className="text-gray-500 mt-4 text-center">
-        Nenhum registro encontrado para este paciente.
-      </p>
+      <div className="flex flex-col items-center justify-center py-10 text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+        <span className="text-3xl mb-2 opacity-20">{icons.clipboard}</span>
+        <p className="text-sm">Nenhum registro encontrado.</p>
+      </div>
     );
   }
 
   return (
-    <div className="overflow-x-auto mt-4">
-      <table className="min-w-full bg-white text-sm">
-        <thead className="bg-gray-100">
-          <tr>
-            <th className="text-left py-2 px-3 font-semibold text-gray-600">
-              Data Ref.
-            </th>
-            <th className="text-left py-2 px-3 font-semibold text-gray-600">
-              Entrada
-            </th>
-            <th className="text-left py-2 px-3 font-semibold text-gray-600">
-              Entrega
-            </th>
-            <th className="text-left py-2 px-3 font-semibold text-gray-600">
-              Medicações
-            </th>
-            <th className="text-left py-2 px-3 font-semibold text-gray-600">
-              Status
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {[...records]
-            .sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate))
-            .map((record) => (
-              <tr key={record.id} className="border-b hover:bg-gray-50">
-                <td className="py-2 px-3">
-                  {formatDateRef(record.referenceDate)}
-                </td>
-                <td className="py-2 px-3 text-gray-700">
-                  {record.entryDate
-                    ? new Date(record.entryDate).toLocaleString('pt-BR', {
-                        dateStyle: 'short',
-                        timeStyle: 'short',
-                      })
-                    : '---'}
-                </td>
-                <td className="py-2 px-3 text-gray-700">
-                  {record.deliveryDate
-                    ? new Date(record.deliveryDate).toLocaleString('pt-BR', {
-                        dateStyle: 'short',
-                        timeStyle: 'short',
-                      })
-                    : '---'}
-                </td>
-                <td className="py-2 px-3 text-gray-700">
-                  {Array.isArray(record.medications)
-                    ? record.medications
-                        .map(
-                          (m) =>
-                            `${getMedicationNameLocal(m.medicationId, medications)} (${m.quantity || 'N/A'})`
-                        )
-                        .join(', ')
-                    : 'N/A'}
-                </td>
-                
-                <td className="py-2 px-3">
-                  <StatusBadge status={record.status} />
-                  {record.status === 'Cancelado' && onViewReason && (
-                    <button
-                      onClick={() => onViewReason(record)}
-                      className="mt-1 text-xs text-blue-600 hover:underline cursor-pointer flex items-center gap-1"
-                      title="Ver motivo do cancelamento"
-                    >
-                      <span className="w-4 h-4">{icons.info}</span>
-                      (Ver Motivo)
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-        </tbody>
-      </table>
+    <div className="overflow-hidden bg-white border border-gray-100 rounded-xl shadow-sm">
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-sm text-left">
+          {/* Cabeçalho Moderno */}
+          <thead className="bg-gray-50/80 text-gray-500 font-medium uppercase tracking-wider text-[11px] border-b border-gray-100">
+            <tr>
+              <th className="py-3 px-4 pl-6">Data de Entrada</th>
+              <th className="py-3 px-4">Data de Entrega</th>
+              <th className="py-3 px-4">Medicações</th>
+              <th className="py-3 px-4 pr-6 text-right">Status</th>
+            </tr>
+          </thead>
+
+          {/* Corpo da Tabela */}
+          <tbody className="divide-y divide-gray-50">
+            {[...records]
+              .sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate))
+              .map((record) => (
+                <tr
+                  key={record.id}
+                  className="group hover:bg-blue-50/30 transition-colors duration-150 ease-in-out"
+                >
+                  {/* 1. Entrada */}
+                  <td className="py-4 px-4 pl-6 align-middle text-gray-700">
+                    <div className="flex flex-col">
+                      <span className="font-semibold text-gray-800">
+                        {record.entryDate
+                          ? new Date(record.entryDate).toLocaleDateString(
+                              'pt-BR'
+                            )
+                          : '--/--/--'}
+                      </span>
+                      <span className="text-[11px] text-gray-400">
+                        {record.entryDate
+                          ? new Date(record.entryDate).toLocaleTimeString(
+                              'pt-BR',
+                              { hour: '2-digit', minute: '2-digit' }
+                            )
+                          : ''}
+                      </span>
+                    </div>
+                  </td>
+
+                  {/* 2. Entrega */}
+                  <td className="py-4 px-4 align-middle text-gray-600">
+                    {record.deliveryDate ? (
+                      <span className="bg-green-50 text-green-700 px-2 py-1 rounded text-xs font-medium border border-green-100">
+                        {new Date(record.deliveryDate).toLocaleDateString(
+                          'pt-BR'
+                        )}
+                      </span>
+                    ) : (
+                      <span className="text-gray-300 text-xs italic">
+                        Pendente
+                      </span>
+                    )}
+                  </td>
+
+                  {/* 3. Medicações (Visual de Tags/Pílulas) */}
+                  <td className="py-4 px-4 align-middle">
+                    <div className="flex flex-wrap gap-1.5 max-w-[300px]">
+                      {Array.isArray(record.medications) &&
+                      record.medications.length > 0 ? (
+                        record.medications.map((m, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-flex items-center px-2 py-1 rounded-md bg-gray-100 text-gray-600 text-xs border border-gray-200"
+                          >
+                            <span className="font-medium mr-1">
+                              {getMedicationNameLocal(
+                                m.medicationId,
+                                medications
+                              )}
+                            </span>
+                            {m.quantity && (
+                              <span className="text-gray-400 text-[10px] border-l border-gray-300 pl-1 ml-1">
+                                {m.quantity}
+                              </span>
+                            )}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-gray-400 text-xs">N/A</span>
+                      )}
+                    </div>
+                  </td>
+
+                  {/* 4. Status e Ações */}
+                  <td className="py-4 px-4 pr-6 align-middle text-right">
+                    <div className="flex flex-col items-end gap-1">
+                      <StatusBadge status={record.status} />
+
+                      {record.status === 'Cancelado' && onViewReason && (
+                        <button
+                          onClick={() => onViewReason(record)}
+                          className="mt-1 text-[11px] font-medium text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-0.5 rounded transition-colors flex items-center gap-1"
+                        >
+                          {icons.info}
+                          Ver Motivo
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

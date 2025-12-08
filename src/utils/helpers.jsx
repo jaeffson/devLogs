@@ -1,4 +1,5 @@
 // utils/helpers.jsx 
+// (CORRIGIDO: Função do paciente renomeada para getPatientNameById)
 
 /**
  * Busca o nome de uma medicação na lista de medicações pelo seu ID.
@@ -21,11 +22,12 @@ export const getMedicationName = (medicationId, medicationsList = []) => {
 
 /**
  * Retorna o nome de um paciente dado seu ID.
+ * RENOMEADO para getPatientNameById para corresponder ao uso nos relatórios.
  * @param {string} patientId - O ID do paciente (string ObjectId).
  * @param {Array<Object>} patientsList - Lista de pacientes.
  * @returns {string} O nome do paciente ou 'Paciente Desconhecido'.
  */
-export const getPatientName = (patientId, patientsList = []) => {
+export const getPatientNameById = (patientId, patientsList = []) => {
     if (!patientId) return 'Paciente Ausente';
 
     const patient = patientsList.find(

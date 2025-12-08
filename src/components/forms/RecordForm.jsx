@@ -37,6 +37,9 @@ export default function RecordForm({
     { medicationId: '', quantity: quantityOptions[0], value: '', tempId: Date.now() },
   ]);
   
+  // --- NOVO ESTADO PARA A FARMÁCIA ---
+  const [farmaciaOrigin, setFarmaciaOrigin] = useState(record?.farmacia || '');
+
   // --- Estados de Busca e UI ---
   const [patientSearchTerm, setPatientSearchTerm] = useState('');
   const [showPatientList, setShowPatientList] = useState(false);
@@ -71,6 +74,7 @@ export default function RecordForm({
       setReferenceDate(record.referenceDate ? new Date(record.referenceDate).toISOString().slice(0, 10) : today);
       setObservation(record.observation || '');
       setLocalPatient(patient || null);
+      setFarmaciaOrigin(record.farmacia || ''); // Carrega farmácia existente
       
       const existingMeds = record.medications?.map((m, i) => ({
           medicationId: m.medicationId || '',
@@ -84,6 +88,7 @@ export default function RecordForm({
       // MODO NOVO REGISTRO
       if (!referenceDate) setReferenceDate(today);
       if (patient) setLocalPatient(patient);
+      if (!farmaciaOrigin) setFarmaciaOrigin(''); // Limpa ou mantém o default para novo registro
     }
   }, [record, patient]);
 
@@ -170,6 +175,7 @@ export default function RecordForm({
     setObservation('');
     setAutoFilled(false);
     setPatientSearchTerm('');
+    setFarmaciaOrigin(''); // Limpa a farmácia também
     setTimeout(() => {
        if(patientInputRef.current) patientInputRef.current.focus();
     }, 100);
@@ -179,6 +185,7 @@ export default function RecordForm({
     e.preventDefault();
     const newErrors = {};
     if (!localPatient) newErrors.patient = "Selecione um paciente!";
+    if (!farmaciaOrigin) newErrors.farmacia = "Selecione a Farmácia de origem!"; // Validação da Farmácia
     const validMeds = medications.filter(m => m.medicationId);
     if (validMeds.length === 0) newErrors.medications = "Adicione pelo menos uma medicação.";
     validMeds.forEach((m, i) => {
@@ -202,6 +209,7 @@ export default function RecordForm({
             observation,
             status: record?.status || 'Pendente',
             entryDate: record?.entryDate || new Date(),
+            farmacia: farmaciaOrigin, // <<-- CAMPO ADICIONADO AQUI
             medications: validMeds.map(m => ({
                 medicationId: m.medicationId,
                 quantity: m.quantity,
@@ -359,15 +367,32 @@ export default function RecordForm({
                           <h4 className="font-bold text-gray-700 uppercase tracking-wider text-sm flex items-center gap-2">
                               {icons.clipboard} Detalhes do Atendimento
                           </h4>
-                          {/* FIX: Data TRAVADA (disabled) */}
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-gray-500 font-bold">DATA:</span>
-                            <input 
-                                type="date" 
-                                value={referenceDate}
-                                disabled
-                                className="bg-gray-100 border border-gray-200 rounded px-2 py-1 text-sm text-gray-500 font-medium cursor-not-allowed outline-none"
-                            />
+                          <div className="flex items-center gap-4">
+                            {/* CAMPO DE SELEÇÃO DA FARMÁCIA (NOVO) */}
+                            <div className="flex flex-col items-start">
+                                <label className="text-xs text-gray-700 font-bold mb-1">FARMÁCIA</label>
+                                <select 
+                                    value={farmaciaOrigin} 
+                                    onChange={e => setFarmaciaOrigin(e.target.value)}
+                                    className={`bg-white border rounded px-2 py-1 text-sm text-gray-700 font-medium outline-none ${errors.farmacia ? 'border-red-500' : 'border-gray-300'}`}
+                                >
+                                    <option value="" disabled>Selecione a origem</option>
+                                    <option value="Campina Grande">Farmácia Campina Grande</option>
+                                    <option value="João Paulo">Farmácia João Paulo</option>
+                                </select>
+                                {errors.farmacia && <p className="text-xs text-red-500 mt-1">{errors.farmacia}</p>}
+                            </div>
+
+                            {/* FIX: Data TRAVADA (disabled) */}
+                            <div className="flex flex-col items-start">
+                                <label className="text-xs text-gray-700 font-bold mb-1">DATA</label>
+                                <input 
+                                    type="date" 
+                                    value={referenceDate}
+                                    disabled
+                                    className="bg-gray-100 border border-gray-200 rounded px-2 py-1 text-sm text-gray-500 font-medium cursor-not-allowed outline-none"
+                                />
+                            </div>
                           </div>
                       </div>
 
