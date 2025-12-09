@@ -1,5 +1,5 @@
 // src/pages/ProfessionalDashboardPage.jsx
-// (ATUALIZADO: Correção do fluxo do Modal de Exclusão e cursor-pointer)
+// (ATUALIZADO: Otimização de Performance, UI/UX Moderno e Logs de Atividade Corrigidos)
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -141,7 +141,7 @@ export default function ProfessionalDashboardPage({
   medications = [],
   setMedications,
   addToast,
-  addLog,
+  addLog, // Garantir que addLog está sendo passado
   activeTabForced,
 }) {
   const navigate = useNavigate();
@@ -306,11 +306,20 @@ export default function ProfessionalDashboardPage({
 
       if (patientId && patientId !== 'new') {
         response = await api.put(`/patients/${patientId}`, payload);
+        // --- LOG DE ATIVIDADE: Atualização de Paciente ---
+        addLog?.(
+          user?.name,
+          `atualizou o cadastro do paciente ${patientData.name}`
+        );
+        // --- FIM LOG ---
         addToast('Paciente atualizado!', 'success');
         setIsPatientModalOpen(false);
         setEditingPatient(null);
       } else {
         response = await api.post('/patients', payload);
+        // --- LOG DE ATIVIDADE: Criação de Paciente ---
+        addLog?.(user?.name, `cadastrou novo paciente: ${patientData.name}`);
+        // --- FIM LOG ---
         addToast('Paciente cadastrado!', 'success');
 
         setIsPatientModalOpen(false);
@@ -349,11 +358,25 @@ export default function ProfessionalDashboardPage({
 
       if (recordId && recordId !== 'new') {
         await api.put(`/records/${recordId}`, payload);
+        const patientName = getPatientNameById(recordData.patientId);
+        // --- LOG DE ATIVIDADE: Atualização de Registro ---
+        addLog?.(
+          user?.name,
+          `atualizou o registro de atendimento de ${patientName}`
+        );
+        // --- FIM LOG ---
         addToast('Registro atualizado!', 'success');
         setIsRecordModalOpen(false);
         setEditingRecord(null);
       } else {
         await api.post('/records', payload);
+        const patientName = getPatientNameById(recordData.patientId);
+        // --- LOG DE ATIVIDADE: Criação de Registro ---
+        addLog?.(
+          user?.name,
+          `criou novo registro de atendimento para ${patientName}`
+        );
+        // --- FIM LOG ---
         addToast('Atendimento salvo! Selecione o próximo paciente.', 'success');
 
         // Fluxo "Confirmar e Próximo"
@@ -381,25 +404,34 @@ export default function ProfessionalDashboardPage({
       addToast('Erro ao excluir.', 'error');
     }
   };
-  
-  // --- FLUXO CORRIGIDO: Garante que o modal fecha e a toast só aparece depois ---
+
   const handleDeleteRecord = async (id) => {
+    const record = records.find((r) => (r._id || r.id) === id);
+    const patientName = getPatientNameById(record?.patientId);
+
     try {
       await api.delete(`/records/${id}`);
+      // --- LOG DE ATIVIDADE: Exclusão de Registro ---
+      addLog?.(
+        user?.name,
+        `EXCLUIU o registro de atendimento de ${patientName}`
+      );
+      // --- FIM LOG ---
       addToast('Registro excluído!', 'success');
       await syncGlobalState(setRecords, 'registros');
     } catch {
       addToast('Erro ao excluir.', 'error');
     } finally {
-      // FECHA O MODAL DE CONFIRMAÇÃO DEPOIS DE TUDO
       closeConfirmation();
     }
   };
-  // --- FIM FLUXO CORRIGIDO ---
 
   const handleAddNewMedication = async (medData) => {
     try {
       const res = await api.post('/medications', { name: medData.name.trim() });
+      // --- LOG DE ATIVIDADE: Criação de Medicação ---
+      addLog?.(user?.name, `cadastrou nova medicação: ${medData.name.trim()}`);
+      // --- FIM LOG ---
       addToast('Medicação cadastrada!', 'success');
       await syncGlobalState(setMedications, 'medicações');
       return res.data;
@@ -408,13 +440,22 @@ export default function ProfessionalDashboardPage({
       return null;
     }
   };
+
   const handleUpdateRecordStatus = async (id, date) => {
     setIsAttendingLoading(true);
+    const record = records.find((r) => (r._id || r.id) === id);
+    const patientName = getPatientNameById(record?.patientId);
+
     try {
       await api.patch(`/records/${id}/status`, {
         status: 'Atendido',
         deliveryDate: date,
       });
+
+      // --- LOG DE ATIVIDADE: Atendimento (Conclusão) ---
+      addLog?.(user?.name, `registrou ATENDIMENTO de ${patientName}`);
+      // --- FIM LOG ---
+
       await syncGlobalState(setRecords, 'registros');
       addToast('Atendido!', 'success');
       setAttendingRecord(null);
@@ -424,12 +465,24 @@ export default function ProfessionalDashboardPage({
       setIsAttendingLoading(false);
     }
   };
+
   const handleCancelRecordStatus = async (id, reason) => {
+    const record = records.find((r) => (r._id || r.id) === id);
+    const patientName = getPatientNameById(record?.patientId);
+
     try {
       await api.patch(`/records/${id}/status`, {
         status: 'Cancelado',
         cancelReason: reason,
       });
+
+      // --- LOG DE ATIVIDADE: Cancelamento de Registro ---
+      addLog?.(
+        user?.name,
+        `CANCELOU o registro de atendimento de ${patientName} (Motivo: ${reason})`
+      );
+      // --- FIM LOG ---
+
       addToast('Cancelado.', 'info');
       await syncGlobalState(setRecords, 'registros');
     } catch {
@@ -1045,7 +1098,7 @@ export default function ProfessionalDashboardPage({
                 </div>
                 <button
                   onClick={openSearchModal}
-                  className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
                 >
                   {icons.plus} Novo Registro
                 </button>
@@ -1180,7 +1233,7 @@ export default function ProfessionalDashboardPage({
                                     message: `Tem certeza que deseja excluir o registro de ${record.patientName} (Entrada: ${new Date(record.entryDate).toLocaleDateString('pt-BR')})? Esta ação é irreversível.`,
                                     onConfirm: () => {
                                       // Fecha o modal imediatamente para o feedback visual ser rápido
-                                      closeConfirmation(); 
+                                      closeConfirmation();
                                       // Chama a função que fará a requisição e a toast
                                       handleDeleteRecord(
                                         record._id || record.id

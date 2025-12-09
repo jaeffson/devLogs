@@ -1,5 +1,5 @@
 // src/pages/AdminSettingsPage.jsx
-// (CORRIGIDO: Conexão Local e API Centralizada)
+// (ATUALIZADO: Tema Cartesiano Moderno, Melhorias de UX)
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 // CORREÇÃO 1: Importamos 'api' em vez de axios direto
@@ -12,8 +12,6 @@ import { ConfirmModal } from '../components/common/Modal'; // Para Status Toggle
 import { StatusBadge } from '../components/common/StatusBadge';
 import  {AnnualBudgetChart}  from '../components/common/AnnualBudgetChart';
 import { icons } from '../utils/icons';
-
-// CORREÇÃO 2: Removemos a constante API_BASE_URL. O api.js gerencia isso.
 
 // --- Componente da Página ---
 export default function AdminSettingsPage({
@@ -203,43 +201,45 @@ export default function AdminSettingsPage({
         switch (activeSubTab) {
             case 'users':
                 return (
-                    <div className="animate-fade-in">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-xl font-semibold text-gray-700">Gerenciar Usuários</h3>
-                            <button onClick={() => handleOpenUserModal()} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors cursor-pointer">
+                    <div className="animate-fade-in bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 border-b pb-4">
+                            <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                                {icons.users} Gerenciar Usuários
+                            </h3>
+                            <button onClick={() => handleOpenUserModal()} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 text-sm font-semibold transition-colors shadow-md mt-3 md:mt-0 cursor-pointer">
                                 <span className="w-4 h-4">{icons.plus}</span> Novo Usuário
                             </button>
                         </div>
                         <div className="overflow-x-auto">
-                            <table className="min-w-full bg-white text-sm">
-                                <thead className="bg-gray-50">
+                            <table className="min-w-full bg-white text-sm border-collapse">
+                                <thead className="bg-gray-50 border-b border-gray-200">
                                     <tr>
-                                        <th className="text-left py-2 px-3 font-semibold text-gray-600">Nome</th>
-                                        <th className="text-left py-2 px-3 font-semibold text-gray-600">Email</th>
-                                        <th className="text-left py-2 px-3 font-semibold text-gray-600">Função</th>
-                                        <th className="text-left py-2 px-3 font-semibold text-gray-600">Status</th>
-                                        <th className="text-left py-2 px-3 font-semibold text-gray-600">Ações</th>
+                                        <th className="text-left py-3 px-4 font-bold text-gray-600 uppercase tracking-wider">Nome</th>
+                                        <th className="text-left py-3 px-4 font-bold text-gray-600 uppercase tracking-wider hidden sm:table-cell">Email</th>
+                                        <th className="text-left py-3 px-4 font-bold text-gray-600 uppercase tracking-wider hidden md:table-cell">Função</th>
+                                        <th className="text-left py-3 px-4 font-bold text-gray-600 uppercase tracking-wider">Status</th>
+                                        <th className="text-left py-3 px-4 font-bold text-gray-600 uppercase tracking-wider">Ações</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {users.map(u => (
                                         // Usando _id ou id para garantir a chave
-                                        <tr key={u._id || u.id} className="border-b hover:bg-gray-50 transition-colors"> 
-                                            <td className="py-2 px-3 font-medium text-gray-800">{u.name}</td>
-                                            <td className="py-2 px-3 text-gray-600">{u.email}</td>
-                                            <td className="py-2 px-3 text-gray-600 capitalize">{u.role}</td>
-                                            <td className="py-2 px-3"><StatusBadge status={u.status} /></td>
-                                            <td className="py-2 px-3">
-                                                <div className="flex items-center gap-3">
-                                                    <button onClick={() => handleOpenUserModal(u)} className="p-1 text-blue-600 hover:text-blue-800 transition-colors cursor-pointer" title="Editar Usuário"><span className="w-4 h-4 block">{icons.edit}</span></button>
+                                        <tr key={u._id || u.id} className="border-b border-gray-100 hover:bg-blue-50/50 transition-colors"> 
+                                            <td className="py-3 px-4 font-medium text-gray-800">{u.name}</td>
+                                            <td className="py-3 px-4 text-gray-600 hidden sm:table-cell">{u.email}</td>
+                                            <td className="py-3 px-4 text-gray-600 capitalize hidden md:table-cell">{u.role}</td>
+                                            <td className="py-3 px-4"><StatusBadge status={u.status} /></td>
+                                            <td className="py-3 px-4">
+                                                <div className="flex items-center gap-2">
+                                                    <button onClick={() => handleOpenUserModal(u)} className="p-1 text-blue-600 hover:bg-blue-100 rounded transition-colors cursor-pointer" title="Editar Usuário"><span className="w-5 h-5 block">{icons.edit}</span></button>
                                                     
-                                                    <button onClick={() => handleToggleUserStatusClick(u)} className={`p-1 ${u.status === 'active' ? 'text-yellow-600 hover:text-yellow-800' : 'text-green-600 hover:text-green-800'} transition-colors cursor-pointer`} title={u.status === 'active' ? 'Desativar' : 'Ativar'}>
-                                                        <span className="w-4 h-4 block">
+                                                    <button onClick={() => handleToggleUserStatusClick(u)} className={`p-1 rounded ${u.status === 'active' ? 'text-yellow-600 hover:bg-yellow-100' : 'text-green-600 hover:bg-green-100'} transition-colors cursor-pointer`} title={u.status === 'active' ? 'Desativar' : 'Ativar'}>
+                                                        <span className="w-5 h-5 block">
                                                           {u.status === 'active' ? icons.ban : icons.check}
                                                         </span>
                                                     </button>
                                                     
-                                                    <button onClick={() => handleDeleteUserClick(u)} className="p-1 text-red-600 hover:text-red-800 disabled:opacity-50 transition-colors cursor-pointer" title="Excluir" disabled={(u._id || u.id) === (user._id || user.id)}><span className="w-4 h-4 block">{icons.trash}</span></button>
+                                                    <button onClick={() => handleDeleteUserClick(u)} className="p-1 text-red-600 hover:bg-red-100 rounded disabled:opacity-30 transition-colors cursor-pointer" title="Excluir" disabled={(u._id || u.id) === (user._id || user.id)}><span className="w-5 h-5 block">{icons.trash}</span></button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -247,43 +247,65 @@ export default function AdminSettingsPage({
                                 </tbody>
                             </table>
                             {/* A tabela agora mostra esta mensagem se 'users' estiver vazio */}
-                            {users.length === 0 && <p className="text-center text-gray-500 py-6">Nenhum usuário encontrado.</p>}
+                            {users.length === 0 && <p className="text-center text-gray-500 py-10">Nenhum usuário encontrado.</p>}
                         </div>
                     </div>
                 );
             case 'budget':
                 return (
-                    <div className="animate-fade-in max-w-lg mx-auto">
-                        <h3 className="text-xl font-semibold text-gray-700 mb-4">Orçamento Anual</h3>
-                        <div className="bg-gray-50 p-6 rounded-lg border space-y-4">
-                            <div className="mb-6 flex justify-center">
+                    <div className="animate-fade-in max-w-lg mx-auto bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+                        <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+                            {icons.dollar} Orçamento Anual
+                        </h3>
+                        <div className="bg-gray-50 p-6 rounded-xl border border-gray-200 space-y-6">
+                            <div className="flex justify-center">
+                                {/* Gráfico de Desempenho vs Orçamento */}
                                 <AnnualBudgetChart key={annualBudget} totalSpent={totalSpentForYear} budgetLimit={annualBudget} />
                             </div>
-                            <div>
-                                <label className="block text-gray-700 font-medium mb-1" htmlFor="annual-budget-input">Definir Orçamento (R$)</label>
-                                {/* (CORREÇÃO) O input agora aceita vírgula e ponto da formatação pt-BR */}
-                                <input id="annual-budget-input" type="text" value={newBudgetValue} onChange={(e) => setNewBudgetValue(e.target.value)} className="w-full p-2 border rounded border-gray-300" placeholder="Ex: 5.000,00"/>
+                            <div className="border-t border-gray-200 pt-4">
+                                <label className="block text-gray-700 font-semibold mb-2" htmlFor="annual-budget-input">Definir Novo Limite (R$)</label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-2.5 text-gray-400 font-bold">R$</span>
+                                    {/* (Melhoria) Input estilizado como moeda */}
+                                    <input 
+                                        id="annual-budget-input" 
+                                        type="text" 
+                                        value={newBudgetValue} 
+                                        onChange={(e) => setNewBudgetValue(e.target.value)} 
+                                        className="w-full pl-10 pr-4 py-2.5 border-2 border-gray-300 rounded-xl focus:border-blue-500 transition-colors text-lg font-bold text-gray-800" 
+                                        placeholder="0,00"
+                                    />
+                                </div>
                             </div>
-                            <button onClick={handleBudgetSave} className="px-5 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium transition-colors cursor-pointer">Salvar Orçamento</button>
+                            <button onClick={handleBudgetSave} className="w-full px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-semibold transition-colors shadow-md cursor-pointer">
+                                {icons.save} Salvar Orçamento
+                            </button>
                         </div>
                     </div>
                 );
             case 'log':
                 // Nota: ActivityLog ainda é local e precisa de rotas de API futuras
                 return (
-                    <div className="animate-fade-in">
-                        <h3 className="text-xl font-semibold text-gray-700 mb-4">Log de Atividades</h3>
-                        <div className="overflow-y-auto max-h-[60vh] bg-gray-50 border rounded p-4">
+                    <div className="animate-fade-in bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+                        <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+                            {icons.history} Log de Atividades
+                        </h3>
+                        <div className="overflow-y-auto max-h-[60vh] bg-gray-50 border border-gray-200 rounded-xl p-4">
                             {sortedActivityLog.length > 0 ? (
                                 <ul className="space-y-3">
                                     {sortedActivityLog.map(log => (
-                                        <li key={log.id} className="border-b pb-2 last:border-b-0">
-                                            <p className="text-sm text-gray-800"><span className="font-semibold">{log.user}</span> {log.action}</p>
-                                            <p className="text-xs text-gray-500 mt-0.5">{new Date(log.timestamp).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'medium' })}</p>
+                                        <li key={log.id} className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm transition-shadow hover:shadow-md">
+                                            <p className="text-sm text-gray-800">
+                                                <span className="font-semibold text-blue-600">{log.user}</span> 
+                                                <span className="text-gray-700"> {log.action}</span>
+                                            </p>
+                                            <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                                                {icons.clock} {new Date(log.timestamp).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'medium' })}
+                                            </p>
                                         </li>
                                     ))}
                                 </ul>
-                            ) : (<p className="text-center text-gray-500 py-6">Nenhuma atividade.</p>)}
+                            ) : (<p className="text-center text-gray-500 py-6">Nenhuma atividade registrada.</p>)}
                         </div>
                     </div>
                 );
@@ -293,13 +315,15 @@ export default function AdminSettingsPage({
 
     // --- Renderização Principal da Página ---
     return (
-        <div className="bg-white rounded-lg shadow p-4 md:p-6 space-y-6">
-            <h2 className="text-2xl md:text-3xl font-bold text-gray-800 border-b pb-3">Configurações Gerais</h2>
+        <div className="bg-white rounded-2xl shadow-xl p-4 md:p-8 space-y-8 max-w-7xl mx-auto">
+            <h2 className="text-3xl font-bold text-gray-800 border-b pb-3 flex items-center gap-2">
+                <span className="text-blue-600">{icons.gear}</span> Configurações Gerais
+            </h2>
             <div className="border-b border-gray-200">
               <nav className="-mb-px flex space-x-6 md:space-x-8" aria-label="Tabs">
-                  <button onClick={() => setActiveSubTab('users')} className={`${activeSubTab === 'users' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'} whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors cursor-pointer`}>Usuários ({users.length})</button>
-                  <button onClick={() => setActiveSubTab('budget')} className={`${activeSubTab === 'budget' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'} whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors cursor-pointer`}>Orçamento</button>
-                  <button onClick={() => setActiveSubTab('log')} className={`${activeSubTab === 'log' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'} whitespace-nowBwrap py-3 px-1 border-b-2 font-medium text-sm transition-colors cursor-pointer`}>Log de Atividades</button>
+                  <button onClick={() => setActiveSubTab('users')} className={`${activeSubTab === 'users' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-gray-500 hover:text-gray-700'} whitespace-nowrap py-3 px-1 border-b-2 font-medium text-base transition-colors cursor-pointer`}>Usuários ({users.length})</button>
+                  <button onClick={() => setActiveSubTab('budget')} className={`${activeSubTab === 'budget' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-gray-500 hover:text-gray-700'} whitespace-nowrap py-3 px-1 border-b-2 font-medium text-base transition-colors cursor-pointer`}>Orçamento</button>
+                  <button onClick={() => setActiveSubTab('log')} className={`${activeSubTab === 'log' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-gray-500 hover:text-gray-700'} whitespace-nowrap py-3 px-1 border-b-2 font-medium text-base transition-colors cursor-pointer`}>Log de Atividades</button>
               </nav>
             </div>
             <div className="mt-4">

@@ -1,6 +1,8 @@
 // src/pages/SecretarySettingsPage.jsx
+
+
 import React, { useState, useMemo, useEffect } from 'react';
-import axios from 'axios'; // Importado para referência, mas não usado
+import api from '../services/api'; // Importado para comunicação com a API
 
 // --- Imports de Componentes ---
 import { AnnualBudgetChart } from '../components/common/AnnualBudgetChart';
@@ -9,10 +11,12 @@ import { icons } from '../utils/icons';
 
 // --- Componente da Página ---
 export default function SecretarySettingsPage({
+  user,
   annualBudget,
-  handleUpdateBudget, // Função passada do App.jsx (deve conter a chamada API)
-  records = [], // Dados dos registros (agora vindos da API/MongoDB)
+  handleUpdateBudget, // Função passada do App.jsx (agora só para atualização do estado global)
+  records = [], // Dados dos registros
   addToast,
+  addLog, // NOVO: Adicionado para registrar a alteração
 }) {
   // Inicializa com o valor da prop, mas permite edição
   const [newBudgetValue, setNewBudgetValue] = useState(
@@ -43,21 +47,45 @@ export default function SecretarySettingsPage({
       }, 0);
   }, [records]);
 
-  // --- FUNÇÃO DE SALVAR ORÇAMENTO ---
-  const handleBudgetSave = () => {
-    // Remove pontuação de milhar (se houver) e substitui vírgula por ponto para parsear
+  // --- FUNÇÃO DE SALVAR ORÇAMENTO (CORRIGIDA) ---
+  const handleBudgetSave = async () => {
+    // AGORA ASYNC
+    // 1. Remove pontuação de milhar (se houver) e substitui vírgula por ponto para parsear
     const cleanedValue = newBudgetValue.replace(/\./g, '').replace(',', '.');
     const value = parseFloat(cleanedValue);
 
     if (!isNaN(value) && value >= 0) {
-      if (typeof handleUpdateBudget === 'function') {
-        // Esta função chama o App.jsx, que fará (ou simulará) a chamada API de PATCH
-        handleUpdateBudget(value); 
-      } else {
-        addToast?.('Erro: Função de salvar não encontrada.', 'error');
+      try {
+        // 2. CHAMA A API PARA SALVAR NO BANCO DE DADOS
+        await api.post('/settings/budget', {
+          budget: value,
+        });
+
+        // 3. ATUALIZA O ESTADO GLOBAL (via prop) e notifica
+        if (typeof handleUpdateBudget === 'function') {
+          handleUpdateBudget(value);
+          addToast?.('Orçamento atualizado com sucesso!', 'success');
+        } else {
+          addToast?.(
+            'Sucesso no servidor, mas falha na atualização local.',
+            'info'
+          );
+        }
+
+        // 4. REGISTRA O LOG
+        addLog?.(
+          user?.name,
+          `atualizou o Orçamento Anual para R$ ${value.toFixed(2).replace('.', ',')}`
+        );
+      } catch (error) {
+        console.error('[API Error] Salvar Orçamento:', error);
+        addToast?.('Falha ao salvar orçamento no servidor.', 'error');
       }
     } else {
-      addToast?.('Por favor, insira um valor numérico válido e positivo.', 'error');
+      addToast?.(
+        'Por favor, insira um valor numérico válido e positivo.',
+        'error'
+      );
     }
   };
 
@@ -68,92 +96,103 @@ export default function SecretarySettingsPage({
       currency: 'BRL',
     }).format(value);
   };
-  
+
   const totalRemaining = annualBudget - totalSpentForYear;
-  const percentageSpent = annualBudget > 0 ? (totalSpentForYear / annualBudget) * 100 : 0;
+  // const percentageSpent = annualBudget > 0 ? (totalSpentForYear / annualBudget) * 100 : 0; // Não usado no novo design
   const isOverBudget = totalRemaining < 0;
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 bg-white rounded-xl shadow-lg">
-      <h1 className="text-3xl font-bold text-gray-800 mb-6">
-        Configurações da Secretária
-      </h1>
+    // Container Principal: Aplicando o visual cartesiano e moderno
+    <div className="p-4 md:p-8 bg-gray-50 min-h-screen">
+      <div className="bg-white rounded-2xl shadow-xl p-6 md:p-8 max-w-4xl mx-auto">
+        <h1 className="text-3xl font-bold text-gray-800 border-b pb-4 mb-8 flex items-center gap-3">
+          <span className="text-blue-600">{icons.gear}</span> Configurações da
+          Secretária
+        </h1>
 
-      {/* --- SEÇÃO ORÇAMENTO ANUAL --- */}
-      <section className="mb-8">
-        <h3 className="text-xl font-semibold text-gray-700 mb-4">
-          Orçamento Anual
-        </h3>
-        <div className="bg-gray-50 p-6 rounded-lg border space-y-4">
-          
-          {/* Gráfico para feedback visual */}
-          <div className="mb-6 flex justify-center">
-            <AnnualBudgetChart
-              key={annualBudget} // Força re-renderização
-              totalSpent={totalSpentForYear}
-              budgetLimit={annualBudget}
-            />
-          </div>
-          
-          <div className="grid md:grid-cols-3 gap-4">
-              <SimpleCard 
-                  title="Orçamento Total"
-                  value={formatCurrency(annualBudget)}
-                  icon={icons.money}
-                  className="bg-green-100 border-green-300"
-              />
-              <SimpleCard 
-                  title="Gasto Atual"
-                  value={formatCurrency(totalSpentForYear)}
-                  icon={icons.chart}
-                  className="bg-yellow-100 border-yellow-300"
-              />
-              <SimpleCard 
-                  title="Restante Estimado"
-                  value={formatCurrency(totalRemaining)}
-                  icon={icons.wallet}
-                  className={isOverBudget ? "bg-red-100 border-red-300" : "bg-blue-100 border-blue-300"}
-              />
-          </div>
+        {/* --- SEÇÃO ORÇAMENTO ANUAL --- */}
+        <section className="mb-8">
+          <h3 className="text-xl font-bold text-gray-700 mb-6 flex items-center gap-2">
+            {icons.dollar} Orçamento Anual e Gastos
+          </h3>
 
-          {/* Campo para alterar o valor */}
-          <div className='pt-4'>
-            <label
-              className="block text-gray-700 font-medium mb-1"
-              htmlFor="annual-budget-input"
+          {/* Cartão principal para o controle de orçamento */}
+          <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-md">
+            {/* Gráfico (centralizado e proeminente) */}
+            <div className="mb-6 flex justify-center">
+              <AnnualBudgetChart
+                key={annualBudget}
+                totalSpent={totalSpentForYear}
+                budgetLimit={annualBudget}
+              />
+            </div>
+
+            {/* Indicadores de KPI (Grid de 3 Cards) */}
+            <div className="grid md:grid-cols-3 gap-4 border-t border-gray-100 pt-6">
+              <SimpleCard
+                title="Orçamento Total"
+                value={formatCurrency(annualBudget)}
+                icon={icons.money}
+                // Estilo moderno: cores mais claras no fundo para melhor contraste
+                className="bg-blue-50 border-blue-200 text-blue-800"
+              />
+              <SimpleCard
+                title="Gasto no Ano"
+                value={formatCurrency(totalSpentForYear)}
+                icon={icons.chart}
+                className="bg-yellow-50 border-yellow-200 text-yellow-800"
+              />
+              <SimpleCard
+                title="Restante Estimado"
+                value={formatCurrency(totalRemaining)}
+                icon={icons.wallet}
+                // Destaca vermelho para estouro, verde para sobra
+                className={
+                  isOverBudget
+                    ? 'bg-red-50 border-red-200 text-red-800'
+                    : 'bg-green-50 border-green-200 text-green-800'
+                }
+              />
+            </div>
+
+            {/* Campo para alterar o valor (Estilo Moderno) */}
+            <div className="pt-8 border-t border-gray-100 mt-6">
+              <label
+                className="block text-gray-700 font-semibold mb-2"
+                htmlFor="annual-budget-input"
+              >
+                Definir Novo Limite do Orçamento (R$)
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-2.5 text-gray-400 font-bold">
+                  R$
+                </span>
+                <input
+                  id="annual-budget-input"
+                  type="text"
+                  value={newBudgetValue}
+                  onChange={(e) => setNewBudgetValue(e.target.value)}
+                  // Novo estilo de input: maior, borda mais grossa, foco azul
+                  className="w-full pl-10 pr-4 py-2.5 border-2 border-gray-300 rounded-xl focus:border-blue-500 transition-colors text-lg font-bold text-gray-800"
+                  placeholder="0,00"
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Use vírgula para separar centavos (ex: 5.000,00).
+              </p>
+            </div>
+
+            {/* Botão para salvar (Estilo Moderno) */}
+            <button
+              onClick={handleBudgetSave}
+              disabled={newBudgetValue.length === 0}
+              className="w-full mt-4 px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-semibold transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2"
             >
-              Definir Novo Valor do Orçamento (R$)
-            </label>
-            <input
-              id="annual-budget-input"
-              type="text"
-              value={newBudgetValue}
-              onChange={(e) => setNewBudgetValue(e.target.value)}
-              className="w-full p-2 border rounded border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              placeholder="Ex: 5000,00"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-                Use vírgula para separar centavos.
-            </p>
+              {icons.save} Salvar Novo Orçamento
+            </button>
           </div>
-          
-          {/* Botão para salvar */}
-          <button
-            onClick={handleBudgetSave}
-            disabled={newBudgetValue.length === 0}
-            className="w-full px-5 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Salvar Novo Orçamento
-          </button>
-        </div>
-      </section>
-
-      {/* Observação sobre a lógica de atualização */}
-      <div className="mt-8 p-4 text-sm bg-blue-50 border border-blue-200 text-blue-800 rounded">
-          <p className='font-semibold'>Nota Técnica:</p>
-          <p></p>
+        </section>
       </div>
-
     </div>
   );
 }
