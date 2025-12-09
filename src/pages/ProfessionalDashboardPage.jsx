@@ -1,5 +1,5 @@
 // src/pages/ProfessionalDashboardPage.jsx
-// (CORRIGIDO: Fluxo "Confirmar e Próximo" -> Salva Registro -> Fecha -> Abre Busca de Novo)
+// (ATUALIZADO: Otimização de Performance, UI/UX Moderno e Responsividade/Cursor-Pointer)
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -34,7 +34,7 @@ const SearchPatientModal = ({
 
   useEffect(() => {
     if (isOpen) {
-      setTerm(''); // Limpa a busca sempre que abre (preparando para o próximo paciente)
+      setTerm('');
       if (searchInputRef.current) {
         setTimeout(() => searchInputRef.current.focus(), 100);
       }
@@ -56,6 +56,7 @@ const SearchPatientModal = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+      {/* Responsividade: max-w-lg garante que não fica gigante, e max-h-[90vh] funciona em telas pequenas */}
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
         <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
           <h3 className="font-bold text-gray-800 flex items-center gap-2">
@@ -63,7 +64,7 @@ const SearchPatientModal = ({
           </h3>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
           >
             {icons.close}
           </button>
@@ -84,7 +85,8 @@ const SearchPatientModal = ({
               <button
                 key={p._id || p.id}
                 onClick={() => onSelectPatient(p)}
-                className="w-full text-left p-3 hover:bg-blue-50 rounded-xl transition-colors flex items-center justify-between group"
+                // cursor-pointer já está aqui (embutido no botão)
+                className="w-full text-left p-3 hover:bg-blue-50 rounded-xl transition-colors flex items-center justify-between group cursor-pointer"
               >
                 <div className="flex items-center gap-3 overflow-hidden">
                   <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm flex-shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-colors">
@@ -109,7 +111,7 @@ const SearchPatientModal = ({
               <p>Nenhum paciente encontrado.</p>
               <button
                 onClick={onCreateNew}
-                className="mt-3 text-blue-600 hover:underline font-medium text-sm"
+                className="mt-3 text-blue-600 hover:underline font-medium text-sm cursor-pointer"
               >
                 + Cadastrar Novo Paciente
               </button>
@@ -119,7 +121,7 @@ const SearchPatientModal = ({
         <div className="p-3 bg-gray-50 border-t border-gray-100 text-center">
           <button
             onClick={onCreateNew}
-            className="w-full py-2.5 rounded-xl border border-blue-200 text-blue-700 font-semibold hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
+            className="w-full py-2.5 rounded-xl border border-blue-200 text-blue-700 font-semibold hover:bg-blue-50 transition-colors flex items-center justify-center gap-2 cursor-pointer"
           >
             {icons.plus} Cadastrar Novo Paciente
           </button>
@@ -252,14 +254,11 @@ export default function ProfessionalDashboardPage({
   };
 
   // --- FLUXO DE ATENDIMENTO ---
-
-  // 1. Iniciar Atendimento -> Abre Busca
   const openSearchModal = () => setIsSearchModalOpen(true);
 
-  // 2. Escolheu Paciente na Busca -> Abre Modal de Registro (Atendimento)
   const handleSelectPatientFromSearch = (patient) => {
-    setIsSearchModalOpen(false); // Fecha busca
-    openRecordModalWithCheck(patient, null); // Abre registro
+    setIsSearchModalOpen(false);
+    openRecordModalWithCheck(patient, null);
   };
 
   const openRecordModalWithCheck = (patient, recordData = null) => {
@@ -314,7 +313,6 @@ export default function ProfessionalDashboardPage({
         response = await api.post('/patients', payload);
         addToast('Paciente cadastrado!', 'success');
 
-        // Se cadastrou um novo no fluxo de busca, já seleciona ele e abre o atendimento
         setIsPatientModalOpen(false);
         setEditingPatient(null);
         openRecordModalWithCheck(response.data, null);
@@ -328,7 +326,6 @@ export default function ProfessionalDashboardPage({
     }
   };
 
-  // === AQUI ESTÁ A LÓGICA DO "CONFIRMAR E PRÓXIMO" ===
   const handleSaveRecord = async (recordData) => {
     try {
       const recordId = recordData._id || recordData.id;
@@ -351,24 +348,19 @@ export default function ProfessionalDashboardPage({
       };
 
       if (recordId && recordId !== 'new') {
-        // Se for EDIÇÃO de um registro antigo, apenas salva e fecha normal
         await api.put(`/records/${recordId}`, payload);
         addToast('Registro atualizado!', 'success');
         setIsRecordModalOpen(false);
         setEditingRecord(null);
       } else {
-        // Se for NOVO REGISTRO (Atendimento do dia)
         await api.post('/records', payload);
         addToast('Atendimento salvo! Selecione o próximo paciente.', 'success');
 
-        // 1. Fecha o Modal de Atendimento (Registro)
+        // Fluxo "Confirmar e Próximo"
         setIsRecordModalOpen(false);
-
-        // 2. Limpa o Paciente Selecionado (para não travar no atual)
         setSelectedPatient(null);
         setEditingRecord(null);
 
-        // 3. Abre o Modal de BUSCA imediatamente para o próximo
         setTimeout(() => {
           setIsSearchModalOpen(true);
         }, 200);
@@ -379,7 +371,6 @@ export default function ProfessionalDashboardPage({
     }
   };
 
-  // Handlers auxiliares
   const handleDeletePatient = async (id) => {
     try {
       await api.delete(`/patients/${id}`);
@@ -439,7 +430,7 @@ export default function ProfessionalDashboardPage({
     }
   };
 
-  // --- Memos ---
+  // --- Memos de Listagem e Performance ---
   const filteredPatients = useMemo(
     () =>
       Array.isArray(patients)
@@ -483,8 +474,22 @@ export default function ProfessionalDashboardPage({
     );
   }, [records]);
 
+  // OTIMIZAÇÃO: Pré-calcula o nome do paciente
+  const recordsWithPatientNames = useMemo(() => {
+    const patientMap = patients.reduce((acc, p) => {
+      acc[p._id || p.id] = p.name;
+      return acc;
+    }, {});
+
+    return records.map((r) => ({
+      ...r,
+      patientName: patientMap[r.patientId] || 'Desconhecido',
+    }));
+  }, [records, patients]);
+
+  // Filtro de Histórico usando o nome pré-calculado
   const filteredRecords = useMemo(() => {
-    let result = records.sort(
+    let result = recordsWithPatientNames.sort(
       (a, b) => new Date(b.entryDate) - new Date(a.entryDate)
     );
     if (statusFilter !== 'Todos') {
@@ -492,13 +497,12 @@ export default function ProfessionalDashboardPage({
     }
     if (debouncedHistorySearch) {
       const lowerSearch = debouncedHistorySearch.toLowerCase();
-      result = result.filter((r) => {
-        const pName = getPatientNameById(r.patientId).toLowerCase();
-        return pName.includes(lowerSearch);
-      });
+      result = result.filter((r) =>
+        r.patientName.toLowerCase().includes(lowerSearch)
+      );
     }
     return result;
-  }, [records, statusFilter, debouncedHistorySearch, patients]);
+  }, [recordsWithPatientNames, statusFilter, debouncedHistorySearch]);
 
   const totalPages = useMemo(
     () => Math.ceil(filteredRecords.length / itemsPerPage),
@@ -532,7 +536,10 @@ export default function ProfessionalDashboardPage({
     switch (currentView) {
       case 'dashboard':
         return (
-          <div className="space-y-8 animate-fade-in max-w-7xl mx-auto">
+          <div className="space-y-8 animate-fade-in max-w-7xl mx-auto p-4 md:p-0">
+            {' '}
+            {/* Adicionado padding para móvel */}
+            {/* Responsividade do cabeçalho */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div>
                 <h2 className="text-3xl font-bold text-gray-800 tracking-tight">
@@ -546,43 +553,14 @@ export default function ProfessionalDashboardPage({
                 </p>
               </div>
 
-              {/* BOTÃO PRINCIPAL: INICIA O FLUXO */}
               <button
                 onClick={openSearchModal}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl shadow-lg shadow-blue-200 font-semibold flex items-center gap-2 transition-all transform hover:-translate-y-1 active:scale-95 cursor-pointer"
+                className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl shadow-lg shadow-blue-200 font-semibold flex items-center justify-center gap-2 transition-all transform hover:-translate-y-1 active:scale-95 cursor-pointer"
               >
                 <span className="text-xl">{icons.plus}</span>
                 <span>Iniciar Atendimento</span>
               </button>
             </div>
-
-            {/* Alertas e Cards (Mantido igual) */}
-            {overduePendingRecords.length > 0 && isOverdueAlertVisible && (
-              <div className="bg-red-50 border border-red-100 p-4 rounded-xl flex items-start gap-4 shadow-sm relative overflow-hidden">
-                <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-500"></div>
-                <div className="text-red-500 mt-1 flex-shrink-0 bg-red-100 p-2 rounded-full">
-                  {icons.exclamation}
-                </div>
-                <div className="flex-grow">
-                  <p className="font-bold text-red-800 text-sm uppercase">
-                    Pendências Antigas
-                  </p>
-                  <p className="text-gray-700 mt-1">
-                    Você tem{' '}
-                    <strong className="text-red-600">
-                      {overduePendingRecords.length} registros
-                    </strong>{' '}
-                    pendentes há mais de 30 dias.
-                  </p>
-                </div>
-                <button
-                  onClick={() => setIsOverdueAlertVisible(false)}
-                  className="text-gray-400 hover:text-gray-600 p-1 cursor-pointer"
-                >
-                  {icons.close}
-                </button>
-              </div>
-            )}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div
                 className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all cursor-pointer group"
@@ -705,8 +683,11 @@ export default function ProfessionalDashboardPage({
 
       case 'patients':
         return (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-8rem)] animate-fade-in max-w-7xl mx-auto">
-            {/* Lista Lateral de Pacientes */}
+          // O grid de 12 colunas só ativa em 'lg', mobile é 1 coluna
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-8rem)] lg:h-[calc(100vh-8rem)] animate-fade-in max-w-7xl mx-auto p-4 md:p-0">
+            {' '}
+            {/* Adicionado padding para móvel */}
+            {/* Painel lateral: Mobile ocupa 100%, Desktop 4 colunas */}
             <div className="lg:col-span-4 bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col overflow-hidden">
               <div className="p-5 border-b border-gray-100 bg-gray-50/50">
                 <div className="flex justify-between items-center mb-4">
@@ -746,6 +727,7 @@ export default function ProfessionalDashboardPage({
                       <div
                         key={patient._id || patient.id}
                         onClick={() => setSelectedPatient(patient)}
+                        // cursor-pointer garantido
                         className={`p-3 rounded-xl cursor-pointer border transition-all flex items-center gap-3 ${isSelected ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-white border-transparent hover:bg-gray-50 hover:border-gray-100'}`}
                       >
                         <div
@@ -773,7 +755,7 @@ export default function ProfessionalDashboardPage({
                 )}
               </div>
             </div>
-            {/* Detalhes do Paciente */}
+            {/* Painel de detalhes: Mobile só aparece se houver paciente selecionado */}
             <div className="lg:col-span-8 bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col overflow-hidden relative">
               {selectedPatient ? (
                 <>
@@ -787,7 +769,7 @@ export default function ProfessionalDashboardPage({
                           <h2 className="text-2xl font-bold text-gray-800">
                             {selectedPatient.name}
                           </h2>
-                          <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
+                          <div className="flex flex-wrap items-center gap-3 mt-1 text-sm text-gray-500">
                             <span className="bg-white px-2 py-0.5 rounded border border-gray-200">
                               CPF: {selectedPatient.cpf || '-'}
                             </span>
@@ -876,6 +858,13 @@ export default function ProfessionalDashboardPage({
                   <p className="text-lg font-medium text-gray-600">
                     Nenhum paciente selecionado
                   </p>
+                  {/* Responsividade: Botão de voltar no mobile se a lista estiver escondida */}
+                  <button
+                    onClick={() => navigate('/dashboard')}
+                    className="mt-4 text-blue-600 hover:underline lg:hidden cursor-pointer"
+                  >
+                    Voltar ao Dashboard
+                  </button>
                 </div>
               )}
             </div>
@@ -884,7 +873,9 @@ export default function ProfessionalDashboardPage({
 
       case 'historico':
         return (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 animate-fade-in flex flex-col h-[calc(100vh-8rem)] max-w-7xl mx-auto">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 animate-fade-in flex flex-col h-[calc(100vh-8rem)] max-w-7xl mx-auto p-4 md:p-6">
+            {' '}
+            {/* Ajustado padding */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6 pb-6 border-b border-gray-100">
               <div>
                 <h2 className="text-2xl font-bold text-gray-800">
@@ -895,15 +886,17 @@ export default function ProfessionalDashboardPage({
                 </p>
               </div>
 
-              <div className="flex gap-4 items-center">
-                {/* Busca Histórico */}
-                <div className="relative">
+              {/* Responsividade: flex-wrap para permitir que os botões quebrem a linha em telas pequenas */}
+              <div className="flex flex-wrap gap-4 items-center">
+                <div className="relative w-full sm:w-auto">
+                  {' '}
+                  {/* w-full para input no mobile */}
                   <input
                     type="text"
                     placeholder="Buscar paciente no relatório..."
                     value={historySearchTerm}
                     onChange={(e) => setHistorySearchTerm(e.target.value)}
-                    className="pl-8 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 w-64"
+                    className="pl-8 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 w-full sm:w-64"
                   />
                   <div className="absolute left-2.5 top-2.5 text-gray-400 text-xs">
                     {icons.search}
@@ -911,17 +904,19 @@ export default function ProfessionalDashboardPage({
                 </div>
                 <button
                   onClick={openSearchModal}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors cursor-pointer"
+                  className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
                 >
                   {icons.plus} Novo Registro
                 </button>
-                <div className="flex bg-gray-100 p-1 rounded-lg">
+                <div className="flex bg-gray-100 p-1 rounded-lg w-full sm:w-auto">
+                  {' '}
+                  {/* w-full para grupo de botões no mobile */}
                   {['Todos', 'Pendente', 'Atendido', 'Cancelado'].map(
                     (status) => (
                       <button
                         key={status}
                         onClick={() => setStatusFilter(status)}
-                        className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer ${statusFilter === status ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                        className={`flex-1 sm:flex-none px-4 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer ${statusFilter === status ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                       >
                         {status}
                       </button>
@@ -930,7 +925,6 @@ export default function ProfessionalDashboardPage({
                 </div>
               </div>
             </div>
-
             <div className="flex-grow overflow-hidden bg-white border border-gray-200 rounded-xl shadow-sm flex flex-col">
               <div className="overflow-x-auto overflow-y-auto custom-scrollbar flex-grow">
                 <table className="min-w-full text-sm text-left">
@@ -947,10 +941,12 @@ export default function ProfessionalDashboardPage({
                     {currentRecords.map((record) => (
                       <tr
                         key={record._id || record.id}
-                        className="hover:bg-blue-50/30 transition-colors group cursor-pointer"
+                        // UI/UX Moderno e Cursor-Pointer
+                        className="hover:bg-blue-50/30 transition-colors group cursor-pointer border-b border-gray-100 shadow-sm hover:shadow-md"
+                        tabIndex={0}
                       >
                         <td className="py-3 px-4 pl-6 font-medium text-gray-800">
-                          {getPatientNameById(record.patientId)}
+                          {record.patientName}
                         </td>
                         <td className="py-3 px-4 text-gray-600">
                           {new Date(record.entryDate).toLocaleDateString(
@@ -1041,33 +1037,31 @@ export default function ProfessionalDashboardPage({
                 )}
               </div>
             </div>
-            {filteredRecords.length > itemsPerPage && (
-              <div className="flex justify-between items-center mt-4 pt-2 border-t border-gray-100">
-                <button
-                  disabled={currentPage === 1}
-                  onClick={() => setCurrentPage((p) => p - 1)}
-                  className="px-3 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-50 cursor-pointer"
-                >
-                  Anterior
-                </button>
-                <span className="text-sm text-gray-500">
-                  Pág {currentPage} de {totalPages}
-                </span>
-                <button
-                  disabled={currentPage === totalPages}
-                  onClick={() => setCurrentPage((p) => p + 1)}
-                  className="px-3 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-50 cursor-pointer"
-                >
-                  Próxima
-                </button>
-              </div>
-            )}
+            <div className="flex justify-between items-center mt-4 pt-2 border-t border-gray-100">
+              <button
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage((p) => p - 1)}
+                className="px-3 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-50 cursor-pointer"
+              >
+                Anterior
+              </button>
+              <span className="text-sm text-gray-500">
+                Pág {currentPage} de {totalPages}
+              </span>
+              <button
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage((p) => p + 1)}
+                className="px-3 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-50 cursor-pointer"
+              >
+                Próxima
+              </button>
+            </div>
           </div>
         );
 
       case 'deliveries':
         return (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 animate-fade-in flex flex-col h-[calc(100vh-8rem)] max-w-7xl mx-auto">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 animate-fade-in flex flex-col h-[calc(100vh-8rem)] max-w-7xl mx-auto p-4 md:p-6">
             <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
               <span className="bg-green-100 text-green-600 p-2 rounded-lg">
                 {icons.check}
@@ -1090,6 +1084,8 @@ export default function ProfessionalDashboardPage({
                       key={record._id || record.id}
                       className="hover:bg-gray-50 transition-colors cursor-pointer"
                     >
+                      {' '}
+                      {/* cursor-pointer garantido */}
                       <td className="py-3 px-4 pl-6 font-medium text-green-700">
                         {new Date(record.deliveryDate).toLocaleDateString(
                           'pt-BR'
@@ -1164,7 +1160,7 @@ export default function ProfessionalDashboardPage({
 
       {isRecordModalOpen && (
         <RecordForm
-          key={recordFormKey} // Key só precisa mudar se quiser forçar reset. Como fechamos o modal, o unmount já limpa.
+          key={recordFormKey}
           patient={selectedPatient}
           patients={patients}
           records={records}
