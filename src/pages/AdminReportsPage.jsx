@@ -1,7 +1,9 @@
 // src/pages/AdminReportsPage.jsx
-// (CORRIGIDO: Removido seletor de ano duplicado. Usa a prop 'filterYear' global.)
+// (ATUALIZADO: Tema Claro Moderno, Funcionalidade Exportar PDF)
 
-import React, { useState, useMemo, useEffect } from 'react'; 
+import React, { useState, useMemo, useEffect, useRef } from 'react'; 
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 // --- Imports de Componentes (Opcional: Gráficos) ---
 import { BarChart } from '../components/common/BarChart';
@@ -9,6 +11,7 @@ import { AnnualBudgetChart } from '../components/common/AnnualBudgetChart';
 
 // --- Imports de Utils ---
 import { getMedicationName } from '../utils/helpers';
+import { icons } from '../utils/icons';
 
 // --- NOSSOS NOVOS SKELETONS ---
 import { SkeletonCard } from '../components/common/SkeletonCard';
@@ -22,15 +25,10 @@ export default function AdminReportsPage({
   medications = [],
   users = [],
   annualBudget,
-  // --- (INÍCIO DA MUDANÇA 1) ---
-  // Recebe o filterYear global do App.jsx
   filterYear, 
-  // --- (FIM DA MUDANÇA 1) ---
 }) {
-  // --- Estados Internos ---
-  // --- (REMOVIDO) ---
-  // const [filterYear, setFilterYear] = useState(new Date().getFullYear());
-
+  // Cria uma referência para o container que será exportado como PDF
+  const reportRef = useRef(null); 
   const [isLoading, setIsLoading] = useState(true);
 
   // Simula o carregamento dos dados
@@ -42,18 +40,16 @@ export default function AdminReportsPage({
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [filterYear]); // Dispara toda vez que o 'filterYear' (da prop) mudar
+  }, [filterYear]);
 
-  // --- Memos para Calcular Estatísticas ---
+  // --- Memos para Calcular Estatísticas (Lógica Mantida) ---
 
-  // Filtra registros pelo ano selecionado (agora usa a prop filterYear)
   const recordsThisYear = useMemo(
     () =>
       records.filter((r) => new Date(r.entryDate).getFullYear() === filterYear),
     [records, filterYear]
   );
 
-  // Estatísticas Gerais
   const generalStats = useMemo(() => {
     const totalRecords = recordsThisYear.length;
     const attended = recordsThisYear.filter(
@@ -76,7 +72,7 @@ export default function AdminReportsPage({
     ).size;
 
     return {
-      totalPatients: patients.length, // Total geral de pacientes
+      totalPatients: patients.length,
       totalRecords,
       attended,
       pending,
@@ -86,7 +82,6 @@ export default function AdminReportsPage({
     };
   }, [patients, recordsThisYear]);
 
-  // Dados para Gráfico de Status dos Registros
   const statusChartData = useMemo(
     () => [
       { label: 'Atendidos', value: generalStats.attended },
@@ -96,7 +91,6 @@ export default function AdminReportsPage({
     [generalStats]
   );
 
-  // Dados para Gráfico de Custo Mensal vs Orçamento (Simplificado)
   const monthlyCostData = useMemo(() => {
     const months = [
       'Jan',
@@ -127,7 +121,6 @@ export default function AdminReportsPage({
     }));
   }, [recordsThisYear]);
 
-  // Relatório de Uso de Medicações (Contagem Simples)
   const medicationUsage = useMemo(() => {
     const usageCount = {};
     recordsThisYear.forEach((record) => {
@@ -145,26 +138,103 @@ export default function AdminReportsPage({
       .sort((a, b) => b.count - a.count); 
   }, [recordsThisYear, medications]);
 
+
+  // --- Função de Exportação de PDF ---
+  const handleExportPdf = () => {
+    if (!reportRef.current) return;
+
+    // Garante que o usuário vê que algo está acontecendo
+    setIsLoading(true);
+
+    // Ajusta a escala para melhor resolução no PDF
+    const scale = 2; 
+
+    html2canvas(reportRef.current, {
+      scale: scale,
+      useCORS: true, // Necessário se houver imagens externas
+      logging: false,
+    }).then((canvas) => {
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4'); // 'p': portrait, 'mm': units, 'a4': format
+      
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      
+      const imgProps = pdf.getImageProperties(imgData);
+      const imgHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      // Adiciona a primeira página (ou a única)
+      pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
+      heightLeft -= pdfHeight;
+
+      // Se o conteúdo for maior que uma página, adiciona mais páginas
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
+        heightLeft -= pdfHeight;
+      }
+
+      pdf.save(`Relatorio_Anual_${filterYear}.pdf`);
+      setIsLoading(false); // Finaliza o carregamento
+    });
+  };
+  // --- Fim Função de Exportação de PDF ---
+
+
+  // --- Componente de Card de Estatística (Novo Visual Claro) ---
+  const StatCard = ({ title, value, colorClass, icon, span = 1, format = (v) => v }) => (
+    <div className={`p-5 rounded-xl shadow-md border border-gray-100 bg-white transition-all hover:shadow-lg lg:col-span-${span}`}>
+      <div className={`text-3xl font-bold ${colorClass}`}>
+        {icons[icon]}
+      </div>
+      <div className="text-xl font-bold text-gray-900 mt-3 flex items-end justify-between">
+          {format(value)}
+      </div>
+      <div className="text-sm font-medium text-gray-500 mt-1 uppercase tracking-wider">
+        {title}
+      </div>
+    </div>
+  );
+
   // --- Renderização ---
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-8 animate-fade-in min-h-screen bg-gray-50 p-4 md:p-8">
       {/* Header da Página (Sempre visível) */}
-      <div className="flex flex-col md:flex-row justify-between items-center mb-4 border-b pb-3">
-        <h2 className="text-2xl md:text-3xl font-bold text-gray-800">
-          Relatórios Administrativos
+      <div className="flex flex-col md:flex-row justify-between items-center pb-4 border-b border-gray-200">
+        <h2 className="text-3xl font-extrabold text-gray-800 flex items-center gap-3">
+          {icons.chart} Centro de Comando & Relatórios
         </h2>
-        {/* --- (INÍCIO DA MUDANÇA 2) --- */}
-        {/* O seletor de ano local foi REMOVIDO daqui. */}
-        {/* O seletor global no MainLayout (header) agora controla esta página. */}
-        {/* --- (FIM DA MUDANÇA 2) --- */}
+        <div className="flex items-center gap-4 mt-2 md:mt-0">
+          <p className="text-gray-500 text-sm">
+            Análise: <span className="font-semibold text-blue-600">{filterYear}</span>
+          </p>
+          <button
+            onClick={handleExportPdf}
+            disabled={isLoading}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl shadow-md font-semibold text-sm transition-all flex items-center gap-2 disabled:bg-gray-400 disabled:cursor-not-allowed cursor-pointer"
+          >
+            {isLoading ? (
+              <>
+                {icons.loading} Gerando...
+              </>
+            ) : (
+              <>
+                {icons.download} Exportar PDF
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
-      {isLoading ? (
-        // --- SE ESTIVER CARREGANDO, MOSTRA SKELETONS ---
+      {isLoading && !reportRef.current ? ( // Mostra skeleton apenas no carregamento inicial
         <div className="space-y-6">
-          <section className="bg-white p-4 md:p-6 rounded-lg shadow">
-            <div className="h-6 w-1/3 rounded bg-gray-200 animate-pulse mb-4"></div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 text-center">
+          <section className="bg-white p-6 rounded-xl shadow-xl border border-gray-200">
+            <div className="h-6 w-1/3 rounded bg-gray-200 animate-pulse mb-6"></div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-6">
               {[...Array(9)].map((_, i) => (
                 <SkeletonCard key={i} />
               ))}
@@ -174,84 +244,93 @@ export default function AdminReportsPage({
             <SkeletonBlock />
             <SkeletonBlock />
           </section>
-          <section className="bg-white p-4 md:p-6 rounded-lg shadow">
+          <section className="bg-white p-6 rounded-xl shadow-xl border border-gray-200">
             <SkeletonBlock />
           </section>
         </div>
       ) : (
-        // --- SE JÁ CARREGOU, MOSTRA O CONTEÚDO REAL ---
-        <>
-          {/* Seção de Estatísticas Gerais */}
-          <section className="bg-white p-4 md:p-6 rounded-lg shadow">
-            <h3 className="text-xl font-semibold text-gray-700 mb-4">
-              Visão Geral ({filterYear})
+        // --- CONTEÚDO REAL DENTRO DO CONTAINER PARA PDF ---
+        <div ref={reportRef} className="p-2 md:p-0 bg-gray-50"> 
+          
+          {/* Seção de Estatísticas Gerais (Cards Claros) */}
+          <section className="bg-white p-6 rounded-xl shadow-xl border border-gray-200 mb-8">
+            <h3 className="text-xl font-semibold text-blue-600 mb-6 flex items-center gap-2">
+              {icons.overview} KPIs Anuais
             </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 text-center">
-              <div className="bg-blue-50 p-3 rounded">
-                <div className="text-sm text-blue-800 font-semibold">
-                  Total Pacientes
-                </div>
-                <div className="text-2xl font-bold text-blue-900">
-                  {generalStats.totalPatients}
-                </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 lg:gap-6">
+              
+              {/* Card de Total de Pacientes (Geral) */}
+              <StatCard
+                title="Pacientes Cadastrados"
+                value={generalStats.totalPatients}
+                icon="users"
+                colorClass="text-blue-500"
+              />
+
+              {/* Card de Total de Registros (Anual) */}
+              <StatCard
+                title="Registros Anuais"
+                value={generalStats.totalRecords}
+                icon="clipboard"
+                colorClass="text-indigo-500"
+              />
+
+              {/* Card de Atendidos (Sucesso) */}
+              <StatCard
+                title="Atendidos (Concluídos)"
+                value={generalStats.attended}
+                icon="check"
+                colorClass="text-green-500"
+              />
+
+              {/* Card de Pacientes Únicos Atendidos */}
+              <StatCard
+                title="Pacientes Únicos Atend."
+                value={generalStats.uniquePatientsAttended}
+                icon="user"
+                colorClass="text-purple-500"
+              />
+
+              {/* Card de Custo Total (Destacado) */}
+              <StatCard
+                title="Custo Total (R$)"
+                value={generalStats.totalCost}
+                icon="dollar"
+                colorClass="text-emerald-500"
+                format={(v) => `R$ ${v.toFixed(2).replace('.', ',')}`}
+              />
+
+              {/* Linha 2 de Cards menores */}
+              <div className='lg:col-span-2 grid grid-cols-2 gap-4 lg:gap-6'>
+                {/* Card de Pendentes */}
+                <StatCard
+                  title="Pendentes"
+                  value={generalStats.pending}
+                  icon="hourglass"
+                  colorClass="text-yellow-500"
+                />
+                
+                {/* Card de Cancelados */}
+                <StatCard
+                  title="Cancelados"
+                  value={generalStats.canceled}
+                  icon="close"
+                  colorClass="text-red-500"
+                />
               </div>
-              <div className="bg-gray-50 p-3 rounded">
-                <div className="text-sm text-gray-800 font-semibold">
-                  Total Registros
-                </div>
-                <div className="text-2xl font-bold text-gray-900">
-                  {generalStats.totalRecords}
-                </div>
-              </div>
-              <div className="bg-green-50 p-3 rounded">
-                <div className="text-sm text-green-800 font-semibold">
-                  Atendidos
-                </div>
-                <div className="text-2xl font-bold text-green-900">
-                  {generalStats.attended}
-                </div>
-              </div>
-              <div className="bg-yellow-50 p-3 rounded">
-                <div className="text-sm text-yellow-800 font-semibold">
-                  Pendentes
-                </div>
-                <div className="text-2xl font-bold text-yellow-900">
-                  {generalStats.pending}
-                </div>
-              </div>
-              <div className="bg-red-50 p-3 rounded">
-                <div className="text-sm text-red-800 font-semibold">
-                  Cancelados
-                </div>
-                <div className="text-2xl font-bold text-red-900">
-                  {generalStats.canceled}
-                </div>
-              </div>
-              <div className="bg-purple-50 p-3 rounded col-span-2 sm:col-span-1">
-                <div className="text-sm text-purple-800 font-semibold">
-                  Pacientes Únicos Atend.
-                </div>
-                <div className="text-2xl font-bold text-purple-900">
-                  {generalStats.uniquePatientsAttended}
-                </div>
-              </div>
-              <div className="bg-emerald-50 p-3 rounded col-span-2 lg:col-span-1">
-                <div className="text-sm text-emerald-800 font-semibold">
-                  Custo Total (Registros)
-                </div>
-                <div className="text-xl font-bold text-emerald-900">
-                  R$ {generalStats.totalCost.toFixed(2).replace('.', ',')}
-                </div>
-              </div>
-              <div className="bg-teal-50 p-3 rounded col-span-2 lg:col-span-1">
-                <div className="text-sm text-teal-800 font-semibold">
-                  Orçamento Anual
-                </div>
-                <div className="text-xl font-bold text-teal-900">
-                  R$ {(Number(annualBudget) || 0).toFixed(2).replace('.', ',')}
-                </div>
-              </div>
-              <div className="bg-white p-3 rounded col-span-2 lg:col-span-2 flex justify-center items-center border">
+
+              {/* Card de Orçamento Anual */}
+              <StatCard
+                title="Orçamento Limite"
+                value={Number(annualBudget) || 0}
+                icon="budget"
+                colorClass="text-teal-500"
+                format={(v) => `R$ ${v.toFixed(2).replace('.', ',')}`}
+                span={1}
+              />
+              
+              {/* Gráfico de Desempenho vs Orçamento */}
+              <div className="bg-white p-4 rounded-xl shadow-inner border border-gray-200 col-span-2 lg:col-span-2 flex justify-center items-center">
                 <AnnualBudgetChart
                   totalSpent={generalStats.totalCost}
                   budgetLimit={annualBudget}
@@ -260,47 +339,56 @@ export default function AdminReportsPage({
             </div>
           </section>
 
-          {/* Gráficos */}
-          <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white p-4 md:p-6 rounded-lg shadow">
+          {/* Gráficos em colunas */}
+          <section className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div className="bg-white p-6 rounded-xl shadow-xl border border-gray-200">
               <BarChart
                 data={statusChartData}
                 title={`Status dos Registros (${filterYear})`}
+                barColor="#3b82f6" // blue-500
               />
             </div>
-            <div className="bg-white p-4 md:p-6 rounded-lg shadow">
+            <div className="bg-white p-6 rounded-xl shadow-xl border border-gray-200">
               <BarChart
                 data={monthlyCostData}
                 title={`Custo Mensal (R$) (${filterYear})`}
+                barColor="#10b981" // emerald-500
               />
             </div>
           </section>
 
-          {/* Relatório de Uso de Medicações */}
-          <section className="bg-white p-4 md:p-6 rounded-lg shadow">
-            <h3 className="text-xl font-semibold text-gray-700 mb-4">
-              Medicações Mais Utilizadas ({filterYear})
+          {/* Relatório de Uso de Medicações (Tabela) */}
+          <section className="bg-white p-6 rounded-xl shadow-xl border border-gray-200">
+            <h3 className="text-xl font-semibold text-blue-600 mb-6 flex items-center gap-2">
+              {icons.pill} Top 15 Medicações Utilizadas ({filterYear})
             </h3>
-            <div className="overflow-x-auto max-h-60">
+            <div className="overflow-x-auto max-h-96 custom-scrollbar">
               {medicationUsage.length > 0 ? (
-                <table className="min-w-full bg-white text-sm">
-                  <thead className="bg-gray-50 sticky top-0">
+                <table className="min-w-full bg-white rounded-lg overflow-hidden text-sm">
+                  <thead className="bg-gray-100 sticky top-0 border-b border-gray-200">
                     <tr>
-                      <th className="text-left py-2 px-3 font-semibold text-gray-600">
+                      <th className="text-left py-3 px-4 font-semibold text-gray-600 uppercase tracking-wider">
+                        #
+                      </th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-600 uppercase tracking-wider">
                         Medicação
                       </th>
-                      <th className="text-right py-2 px-3 font-semibold text-gray-600">
+                      <th className="text-right py-3 px-4 font-semibold text-gray-600 uppercase tracking-wider">
                         Nº de Registros
                       </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {medicationUsage.slice(0, 15).map((med) => (
-                      <tr key={med.id} className="border-b last:border-b-0">
-                        <td className="py-2 px-3 font-medium text-gray-800">
+                    {medicationUsage.slice(0, 15).map((med, index) => (
+                      <tr 
+                        key={med.id} 
+                        className={`border-b border-gray-100 hover:bg-blue-50/50 transition-colors ${index < 3 ? 'text-blue-700 font-semibold' : 'text-gray-700'}`}
+                      >
+                        <td className="py-3 px-4">{index + 1}</td>
+                        <td className="py-3 px-4 font-medium">
                           {med.name}
                         </td>
-                        <td className="py-2 px-3 text-gray-600 text-right">
+                        <td className="py-3 px-4 text-right font-bold text-lg">
                           {med.count}
                         </td>
                       </tr>
@@ -308,18 +396,18 @@ export default function AdminReportsPage({
                   </tbody>
                 </table>
               ) : (
-                <p className="text-center text-gray-500 py-4">
-                  Nenhum registro encontrado para este ano.
+                <p className="text-center text-gray-500 py-8">
+                  Nenhum registro de medicação encontrado para este ano.
                 </p>
               )}
             </div>
             {medicationUsage.length > 15 && (
-              <p className="text-xs text-gray-500 mt-2 text-center">
+              <p className="text-xs text-gray-500 mt-4 text-center">
                 Exibindo as 15 mais utilizadas.
               </p>
             )}
           </section>
-        </>
+        </div>
       )}
     </div>
   );

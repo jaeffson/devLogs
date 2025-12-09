@@ -1,5 +1,5 @@
 // src/pages/ProfessionalDashboardPage.jsx
-// (ATUALIZADO: Otimização de Performance, UI/UX Moderno e Responsividade/Cursor-Pointer)
+// (ATUALIZADO: Correção do fluxo do Modal de Exclusão e cursor-pointer)
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -381,6 +381,8 @@ export default function ProfessionalDashboardPage({
       addToast('Erro ao excluir.', 'error');
     }
   };
+  
+  // --- FLUXO CORRIGIDO: Garante que o modal fecha e a toast só aparece depois ---
   const handleDeleteRecord = async (id) => {
     try {
       await api.delete(`/records/${id}`);
@@ -388,8 +390,13 @@ export default function ProfessionalDashboardPage({
       await syncGlobalState(setRecords, 'registros');
     } catch {
       addToast('Erro ao excluir.', 'error');
+    } finally {
+      // FECHA O MODAL DE CONFIRMAÇÃO DEPOIS DE TUDO
+      closeConfirmation();
     }
   };
+  // --- FIM FLUXO CORRIGIDO ---
+
   const handleAddNewMedication = async (medData) => {
     try {
       const res = await api.post('/medications', { name: medData.name.trim() });
@@ -535,147 +542,271 @@ export default function ProfessionalDashboardPage({
   const renderCurrentView = () => {
     switch (currentView) {
       case 'dashboard':
+        // --- Novo Visual para o Dashboard (Mantido para Contexto) ---
+
+        // --- Alerta de Registros Vencidos ---
+        const showOverdueAlert =
+          overduePendingRecords.length > 0 && isOverdueAlertVisible;
+
+        // --- Mapeamento de Cores para Cards ---
+        const statCards = [
+          {
+            label: 'Novo Atendimento',
+            value: icons.newEntry,
+            subtext: 'Clique para iniciar a busca',
+            icon: icons.search,
+            color: 'bg-blue-600',
+            textColor: 'text-white',
+            hover: 'hover:bg-blue-700 hover:shadow-xl hover:shadow-blue-200',
+            action: openSearchModal,
+            isButton: true,
+            shadow: 'shadow-lg shadow-blue-200',
+          },
+          {
+            label: 'Pendentes',
+            value: pendingRecords.length,
+            subtext: 'Aguardando ação',
+            icon: icons.clipboard,
+            color: 'bg-yellow-50',
+            textColor: 'text-yellow-700',
+            hover: 'hover:border-yellow-300',
+            action: () => navigate('/history'),
+            isButton: false,
+            shadow: 'shadow-sm',
+          },
+          {
+            label: 'Pacientes',
+            value: patients.length,
+            subtext: 'Total cadastrados',
+            icon: icons.users,
+            color: 'bg-blue-50',
+            textColor: 'text-blue-700',
+            hover: 'hover:border-blue-300',
+            action: () => navigate('/patients'),
+            isButton: false,
+            shadow: 'shadow-sm',
+          },
+          {
+            label: 'Entregas (7 dias)',
+            value: recentDeliveries.length,
+            subtext: 'Realizadas recentemente',
+            icon: icons.check,
+            color: 'bg-green-50',
+            textColor: 'text-green-700',
+            hover: 'hover:border-green-300',
+            action: () => navigate('/deliveries'),
+            isButton: false,
+            shadow: 'shadow-sm',
+          },
+        ];
+
+        // --- Mapeamento de Acessos Rápidos ---
+        const quickAccess = [
+          {
+            label: 'Pacientes',
+            icon: icons.users,
+            path: '/patients',
+            color: 'text-blue-600',
+            bg: 'bg-blue-50',
+          },
+          {
+            label: 'Histórico',
+            icon: icons.history,
+            path: '/history',
+            color: 'text-purple-600',
+            bg: 'bg-purple-50',
+          },
+          {
+            label: 'Medicações',
+            icon: icons.pill,
+            path: '/medications',
+            color: 'text-pink-600',
+            bg: 'bg-pink-50',
+          },
+        ];
+
         return (
-          <div className="space-y-8 animate-fade-in max-w-7xl mx-auto p-4 md:p-0">
-            {' '}
-            {/* Adicionado padding para móvel */}
-            {/* Responsividade do cabeçalho */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <div className="space-y-8 animate-fade-in max-w-7xl mx-auto p-4 md:p-6 lg:p-0">
+            {/* --- 1. Cabeçalho e Botão Principal --- */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <h2 className="text-3xl font-bold text-gray-800 tracking-tight">
-                  Olá,{' '}
+                  Bem-vindo(a),{' '}
                   <span className="text-blue-600">
                     {user?.name?.split(' ')[0] || 'Profissional'}
                   </span>
                 </h2>
                 <p className="text-gray-500 mt-1 font-medium">
-                  Dashboard Geral
+                  Seu resumo de atividades e acesso rápido.
                 </p>
               </div>
 
+              {/* Botão de Iniciar Atendimento - Proeminente */}
               <button
                 onClick={openSearchModal}
-                className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl shadow-lg shadow-blue-200 font-semibold flex items-center justify-center gap-2 transition-all transform hover:-translate-y-1 active:scale-95 cursor-pointer"
+                className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl shadow-xl shadow-blue-200 font-semibold flex items-center justify-center gap-2 transition-all transform hover:-translate-y-0.5 active:scale-95 text-lg cursor-pointer flex-shrink-0"
               >
-                <span className="text-xl">{icons.plus}</span>
-                <span>Iniciar Atendimento</span>
+                <span className="text-xl">{icons.search}</span>
+                <span>Iniciar Atendimento Rápido</span>
               </button>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div
-                className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all cursor-pointer group"
-                onClick={() => navigate('/history')}
-              >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-sm font-medium text-gray-500 uppercase">
-                      Pendentes
-                    </p>
-                    <h3 className="text-4xl font-bold text-gray-800 mt-2">
-                      {pendingRecords.length}
-                    </h3>
-                  </div>
-                  <div className="p-3 bg-yellow-50 text-yellow-600 rounded-xl group-hover:scale-110 transition-transform">
-                    {icons.clipboard}
-                  </div>
+
+            {/* --- 2. Alertas --- */}
+            {showOverdueAlert && (
+              <div className="bg-red-50 border border-red-200 p-4 rounded-xl flex justify-between items-center transition-opacity animate-slide-down">
+                <div className="flex items-center gap-3">
+                  <span className="text-red-600 text-xl flex-shrink-0">
+                    {icons.alert}
+                  </span>
+                  <p className="text-sm font-medium text-red-800">
+                    Atenção: Você tem **{overduePendingRecords.length}**{' '}
+                    registro(s) pendente(s) por mais de 30 dias. Verifique no
+                    Histórico.
+                  </p>
                 </div>
-                <div className="mt-4 flex items-center gap-1 text-xs font-medium text-yellow-600 bg-yellow-50 w-fit px-2 py-1 rounded-md">
-                  <span>Aguardando ação</span>
-                </div>
+                <button
+                  onClick={() => setIsOverdueAlertVisible(false)}
+                  className="text-red-400 hover:text-red-600 transition-colors flex-shrink-0 p-1 cursor-pointer"
+                >
+                  {icons.close}
+                </button>
               </div>
-              <div
-                className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all cursor-pointer group"
-                onClick={() => navigate('/patients')}
-              >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-sm font-medium text-gray-500 uppercase">
-                      Pacientes
-                    </p>
-                    <h3 className="text-4xl font-bold text-gray-800 mt-2">
-                      {patients.length}
-                    </h3>
-                  </div>
-                  <div className="p-3 bg-blue-50 text-blue-600 rounded-xl group-hover:scale-110 transition-transform">
-                    {icons.users}
-                  </div>
-                </div>
-                <div className="mt-4 flex items-center gap-1 text-xs font-medium text-blue-600 bg-blue-50 w-fit px-2 py-1 rounded-md">
-                  <span>Cadastrados</span>
-                </div>
-              </div>
-              <div
-                className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all cursor-pointer group"
-                onClick={() => navigate('/deliveries')}
-              >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-sm font-medium text-gray-500 uppercase">
-                      Entregas (7d)
-                    </p>
-                    <h3 className="text-4xl font-bold text-gray-800 mt-2">
-                      {recentDeliveries.length}
-                    </h3>
-                  </div>
-                  <div className="p-3 bg-green-50 text-green-600 rounded-xl group-hover:scale-110 transition-transform">
-                    {icons.check}
-                  </div>
-                </div>
-                <div className="mt-4 flex items-center gap-1 text-xs font-medium text-green-600 bg-green-50 w-fit px-2 py-1 rounded-md">
-                  <span>Na última semana</span>
-                </div>
-              </div>
-            </div>
-            <div className="pt-6 border-t border-gray-100">
-              <h3 className="text-lg font-bold text-gray-800 mb-4">
-                Acesso Rápido
-              </h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {[
-                  {
-                    label: 'Pacientes',
-                    icon: icons.users,
-                    path: '/patients',
-                    color: 'text-blue-600',
-                    bg: 'bg-blue-50',
-                  },
-                  {
-                    label: 'Histórico',
-                    icon: icons.history,
-                    path: '/history',
-                    color: 'text-purple-600',
-                    bg: 'bg-purple-50',
-                  },
-                  {
-                    label: 'Entregas',
-                    icon: icons.check,
-                    path: '/deliveries',
-                    color: 'text-green-600',
-                    bg: 'bg-green-50',
-                  },
-                  {
-                    label: 'Medicações',
-                    icon: icons.pill,
-                    path: '/medications',
-                    color: 'text-pink-600',
-                    bg: 'bg-pink-50',
-                  },
-                ].map((item, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => navigate(item.path)}
-                    className="flex flex-col items-center justify-center p-4 bg-white border border-gray-100 rounded-xl hover:border-gray-300 hover:shadow-sm transition-all group cursor-pointer"
-                  >
-                    <div
-                      className={`p-3 rounded-full mb-2 ${item.bg} ${item.color} group-hover:scale-110 transition-transform`}
-                    >
-                      {item.icon}
+            )}
+
+            {/* --- 3. Cards de Estatísticas (Grid 4 colunas) --- */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {statCards.map((card, idx) => (
+                <div
+                  key={idx}
+                  onClick={card.action}
+                  className={`bg-white p-6 rounded-2xl border border-gray-100 transition-all cursor-pointer ${card.hover} ${card.shadow} ${
+                    card.isButton ? 'border-none' : ''
+                  }`}
+                >
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-sm font-medium text-gray-500 uppercase mb-2">
+                        {card.label}
+                      </p>
+                      {card.isButton ? (
+                        <span className="text-3xl font-bold text-white flex items-center gap-2">
+                          {card.value}
+                        </span>
+                      ) : (
+                        <h3 className="text-4xl font-bold text-gray-800">
+                          {card.value}
+                        </h3>
+                      )}
                     </div>
-                    <span className="font-semibold text-gray-700 text-sm">
-                      {item.label}
-                    </span>
+                    <div
+                      className={`p-3 rounded-xl transition-transform ${
+                        card.isButton ? card.color : card.color
+                      } ${card.textColor} group-hover:scale-110`}
+                    >
+                      {card.icon}
+                    </div>
+                  </div>
+                  <p
+                    className={`mt-3 text-xs font-medium ${
+                      card.isButton ? 'text-white/80' : 'text-gray-500'
+                    }`}
+                  >
+                    {card.subtext}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {/* --- 4. Acesso Rápido e Últimas Entregas (Grid 2/3) --- */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-4">
+              {/* Bloco 1: Acesso Rápido */}
+              <div className="lg:col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                  {icons.bolt} Acesso Rápido
+                </h3>
+                <div className="space-y-3">
+                  {quickAccess.map((item, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => navigate(item.path)}
+                      className="w-full text-left p-4 bg-gray-50 rounded-xl border border-gray-100 hover:bg-gray-100 hover:border-gray-300 transition-all flex items-center justify-between group cursor-pointer"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div
+                          className={`p-2 rounded-lg ${item.bg} ${item.color} transition-transform`}
+                        >
+                          {item.icon}
+                        </div>
+                        <span className="font-semibold text-gray-700 text-base">
+                          {item.label}
+                        </span>
+                      </div>
+                      <div className="text-gray-400 group-hover:text-blue-600">
+                        {icons.arrowRight}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Bloco 2: Últimas Entregas (Mini Tabela) */}
+              <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col">
+                <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                  {icons.history} Últimas Entregas ({recentDeliveries.length})
+                </h3>
+                <div className="flex-grow overflow-auto">
+                  {recentDeliveries.slice(0, 5).length > 0 ? (
+                    <table className="min-w-full text-sm text-left border-collapse">
+                      <thead className="text-gray-500 font-medium uppercase text-xs border-b border-gray-100">
+                        <tr>
+                          <th className="py-2 px-1">Paciente</th>
+                          <th className="py-2 px-1">Data</th>
+                          <th className="py-2 px-1">Itens</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {recentDeliveries.slice(0, 5).map((record) => (
+                          <tr
+                            key={record._id || record.id}
+                            onClick={() => {
+                              setSelectedPatient(
+                                patients.find(
+                                  (p) => (p._id || p.id) === record.patientId
+                                )
+                              );
+                              navigate('/patients');
+                            }}
+                            className="hover:bg-green-50/30 transition-colors cursor-pointer"
+                          >
+                            <td className="py-2 px-1 font-medium text-gray-800">
+                              {getPatientNameById(record.patientId)}
+                            </td>
+                            <td className="py-2 px-1 text-green-600">
+                              {new Date(record.deliveryDate).toLocaleDateString(
+                                'pt-BR'
+                              )}
+                            </td>
+                            <td className="py-2 px-1 text-gray-600">
+                              {record.medications?.length || 0}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div className="text-center py-8 text-gray-400">
+                      <p>Nenhuma entrega na última semana.</p>
+                    </div>
+                  )}
+                </div>
+                {recentDeliveries.length > 5 && (
+                  <button
+                    onClick={() => navigate('/deliveries')}
+                    className="mt-4 text-sm font-medium text-blue-600 hover:underline self-start cursor-pointer"
+                  >
+                    Ver todas as entregas recentes
                   </button>
-                ))}
+                )}
               </div>
             </div>
           </div>
@@ -728,16 +859,26 @@ export default function ProfessionalDashboardPage({
                         key={patient._id || patient.id}
                         onClick={() => setSelectedPatient(patient)}
                         // cursor-pointer garantido
-                        className={`p-3 rounded-xl cursor-pointer border transition-all flex items-center gap-3 ${isSelected ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-white border-transparent hover:bg-gray-50 hover:border-gray-100'}`}
+                        className={`p-3 rounded-xl cursor-pointer border transition-all flex items-center gap-3 ${
+                          isSelected
+                            ? 'bg-blue-50 border-blue-200 shadow-sm'
+                            : 'bg-white border-transparent hover:bg-gray-50 hover:border-gray-100'
+                        }`}
                       >
                         <div
-                          className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${isSelected ? 'bg-blue-200 text-blue-700' : 'bg-gray-100 text-gray-500'}`}
+                          className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
+                            isSelected
+                              ? 'bg-blue-200 text-blue-700'
+                              : 'bg-gray-100 text-gray-500'
+                          }`}
                         >
                           {patient.name.charAt(0).toUpperCase()}
                         </div>
                         <div className="overflow-hidden">
                           <p
-                            className={`text-sm truncate font-medium ${isSelected ? 'text-blue-900' : 'text-gray-800'}`}
+                            className={`text-sm truncate font-medium ${
+                              isSelected ? 'text-blue-900' : 'text-gray-800'
+                            }`}
                           >
                             {patient.name}
                           </p>
@@ -904,7 +1045,7 @@ export default function ProfessionalDashboardPage({
                 </div>
                 <button
                   onClick={openSearchModal}
-                  className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                  className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer"
                 >
                   {icons.plus} Novo Registro
                 </button>
@@ -916,7 +1057,11 @@ export default function ProfessionalDashboardPage({
                       <button
                         key={status}
                         onClick={() => setStatusFilter(status)}
-                        className={`flex-1 sm:flex-none px-4 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer ${statusFilter === status ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                        className={`flex-1 sm:flex-none px-4 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer ${
+                          statusFilter === status
+                            ? 'bg-white text-blue-600 shadow-sm'
+                            : 'text-gray-500 hover:text-gray-700'
+                        }`}
                       >
                         {status}
                       </button>
@@ -1024,6 +1169,35 @@ export default function ProfessionalDashboardPage({
                             >
                               {icons.edit}
                             </button>
+                            {/* --- NOVO BOTÃO DE EXCLUSÃO (Somente Admin) --- */}
+                            {user?.role !== 'profissional' && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setConfirmation({
+                                    isOpen: true,
+                                    title: 'Excluir Registro',
+                                    message: `Tem certeza que deseja excluir o registro de ${record.patientName} (Entrada: ${new Date(record.entryDate).toLocaleDateString('pt-BR')})? Esta ação é irreversível.`,
+                                    onConfirm: () => {
+                                      // Fecha o modal imediatamente para o feedback visual ser rápido
+                                      closeConfirmation(); 
+                                      // Chama a função que fará a requisição e a toast
+                                      handleDeleteRecord(
+                                        record._id || record.id
+                                      );
+                                    },
+                                    isDestructive: true,
+                                    confirmText: 'Excluir',
+                                  });
+                                }}
+                                // Adicionado cursor-pointer
+                                className="text-red-600 hover:bg-red-50 p-1.5 rounded-md transition-colors cursor-pointer"
+                                title="Excluir Registro"
+                              >
+                                {icons.trash}
+                              </button>
+                            )}
+                            {/* --- FIM NOVO BOTÃO DE EXCLUSÃO --- */}
                           </div>
                         </td>
                       </tr>

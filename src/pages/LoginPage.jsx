@@ -564,7 +564,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
               {isLoading ? (
                 <>
                   <Spinner />
-                  <span>A processar...</span>
+                  <span>Aguarde!</span>
                 </>
               ) : (
                 <span>
