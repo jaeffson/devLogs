@@ -1,6 +1,5 @@
 // src/components/forms/RecordForm.jsx
 
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Modal } from '../common/Modal';
 import MedicationForm from './MedicationForm';
@@ -237,8 +236,8 @@ export default function RecordForm({
   return (
     <>
       <Modal onClose={onClose}>
-        {/* FIX: h-[85vh] trava a altura total para caber na tela */}
-        <div className="flex flex-col h-[85vh] -m-6 rounded-lg overflow-hidden bg-white">
+        {/* FIX: max-h-full no mobile e max-h-[85vh] no desktop */}
+        <div className="flex flex-col h-full max-h-[95vh] md:max-h-[85vh] -m-6 rounded-lg overflow-hidden bg-white">
           
           {/* HEADER (Fixo) */}
           <div className="bg-gray-800 text-white px-6 py-4 flex justify-between items-center shadow-md shrink-0">
@@ -367,7 +366,7 @@ export default function RecordForm({
                           <h4 className="font-bold text-gray-700 uppercase tracking-wider text-sm flex items-center gap-2">
                               {icons.clipboard} Detalhes do Atendimento
                           </h4>
-                          <div className="flex items-center gap-4">
+                          <div className="flex gap-4 items-center flex-wrap justify-end"> {/* FIX: Adicionado flex-wrap */}
                             {/* CAMPO DE SELEÇÃO DA FARMÁCIA (NOVO) */}
                             <div className="flex flex-col items-start">
                                 <label className="text-xs text-gray-700 font-bold mb-1">FARMÁCIA</label>
@@ -400,8 +399,9 @@ export default function RecordForm({
                           {medications.map((med, index) => {
                                const medName = medicationsList.find(m => (m.id || m._id) === med.medicationId)?.name || '';
                                return (
-                                  <div key={med.tempId} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start bg-white p-3 rounded-lg border border-gray-200 hover:border-blue-300 transition-colors shadow-sm">
-                                      <div className="md:col-span-6 relative">
+                                  <div key={med.tempId} className="grid grid-cols-2 md:grid-cols-12 gap-4 items-start bg-white p-3 rounded-lg border border-gray-200 hover:border-blue-300 transition-colors shadow-sm">
+                                      {/* Fix: Colunas no mobile 2/2, no desktop 6/3/2/1 */}
+                                      <div className="col-span-2 md:col-span-6 relative">
                                           <label className="text-xs font-bold text-gray-500 mb-1 block">Medicação</label>
                                           <input
                                               type="text"
@@ -446,7 +446,7 @@ export default function RecordForm({
                                           )}
                                       </div>
 
-                                      <div className="md:col-span-3">
+                                      <div className="col-span-1 md:col-span-3">
                                           <label className="text-xs font-bold text-gray-500 mb-1 block">Qtd.</label>
                                           <input
                                               type="text"
@@ -464,7 +464,7 @@ export default function RecordForm({
                                           </datalist>
                                       </div>
 
-                                      <div className="md:col-span-2">
+                                      <div className="col-span-1 md:col-span-2">
                                           <label className="text-xs font-bold text-gray-500 mb-1 block">Valor (R$)</label>
                                           <input
                                               type="number"
@@ -479,7 +479,8 @@ export default function RecordForm({
                                           />
                                       </div>
 
-                                      <div className="md:col-span-1 pt-6 flex justify-center">
+                                      {/* FIX: pt-0 no mobile, alinha no final da coluna de grid */}
+                                      <div className="col-span-2 md:col-span-1 flex justify-end md:justify-center items-end py-2 md:pt-6"> 
                                           <button 
                                               onClick={() => {
                                                   if(medications.length > 1) {

@@ -25,15 +25,17 @@ export function PatientRecordsTable({
 
   return (
     <div className="overflow-hidden bg-white border border-gray-100 rounded-xl shadow-sm">
+      {/* Garantindo que a rolagem horizontal esteja ativa */}
       <div className="overflow-x-auto">
         <table className="min-w-full text-sm text-left">
           {/* Cabeçalho Moderno */}
           <thead className="bg-gray-50/80 text-gray-500 font-medium uppercase tracking-wider text-[11px] border-b border-gray-100">
             <tr>
-              <th className="py-3 px-4 pl-6">Data de Entrada</th>
-              <th className="py-3 px-4">Data de Entrega</th>
-              <th className="py-3 px-4">Medicações</th>
-              <th className="py-3 px-4 pr-6 text-right">Status</th>
+              {/* FIX: Redução de padding horizontal para mobile */}
+              <th className="py-3 px-3 pl-4">Data de Entrada</th>
+              <th className="py-3 px-3">Data de Entrega</th>
+              <th className="py-3 px-3">Medicações</th>
+              <th className="py-3 px-3 pr-4 text-right">Status</th>
             </tr>
           </thead>
 
@@ -47,7 +49,7 @@ export function PatientRecordsTable({
                   className="group hover:bg-blue-50/30 transition-colors duration-150 ease-in-out"
                 >
                   {/* 1. Entrada */}
-                  <td className="py-4 px-4 pl-6 align-middle text-gray-700">
+                  <td className="py-4 px-3 pl-4 align-middle text-gray-700"> {/* FIX: Redução de padding */}
                     <div className="flex flex-col">
                       <span className="font-semibold text-gray-800">
                         {record.entryDate
@@ -68,7 +70,7 @@ export function PatientRecordsTable({
                   </td>
 
                   {/* 2. Entrega */}
-                  <td className="py-4 px-4 align-middle text-gray-600">
+                  <td className="py-4 px-3 align-middle text-gray-600"> {/* FIX: Redução de padding */}
                     {record.deliveryDate ? (
                       <span className="bg-green-50 text-green-700 px-2 py-1 rounded text-xs font-medium border border-green-100">
                         {new Date(record.deliveryDate).toLocaleDateString(
@@ -83,7 +85,7 @@ export function PatientRecordsTable({
                   </td>
 
                   {/* 3. Medicações (Visual de Tags/Pílulas) */}
-                  <td className="py-4 px-4 align-middle">
+                  <td className="py-4 px-3 align-middle"> {/* FIX: Redução de padding */}
                     <div className="flex flex-wrap gap-1.5 max-w-[300px]">
                       {Array.isArray(record.medications) &&
                       record.medications.length > 0 ? (
@@ -112,7 +114,7 @@ export function PatientRecordsTable({
                   </td>
 
                   {/* 4. Status e Ações */}
-                  <td className="py-4 px-4 pr-6 align-middle text-right">
+                  <td className="py-4 px-3 pr-4 align-middle text-right"> {/* FIX: Redução de padding */}
                     <div className="flex flex-col items-end gap-1">
                       <StatusBadge status={record.status} />
 

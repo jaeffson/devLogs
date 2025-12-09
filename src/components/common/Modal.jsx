@@ -50,11 +50,16 @@ const SpinnerIcon = () => (
 export function Modal({ children, onClose }) {
   return (
     <div
-      className="fixed inset-0 bg-[#ececeec2] bg-opacity-75 flex justify-center items-center z-50 p-4 transition-opacity duration-300 ease-in-out "
+      // Adicionado p-4 para garantir padding em telas pequenas e centralização
+      className="fixed inset-0 bg-[#ececeec2] bg-opacity-75 flex justify-center items-center z-50 p-4 transition-opacity duration-300 ease-in-out" 
       role="dialog"
       aria-modal="true"
     >
-      <div className="bg-white rounded-lg shadow-xl p-[24px] w-[800px] max-w-[700px] m-[16px] relative animate-fade-in-up overflow-hidden">
+      <div 
+         // FIX: Largura responsiva. w-full no mobile, max-w-lg no desktop.
+         // Mantido p-[24px] para preservar o padding original.
+         className="bg-white rounded-xl shadow-2xl w-full max-w-lg md:max-w-xl lg:max-w-3xl relative animate-fade-in-up overflow-hidden p-[24px]"
+      >
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400"
