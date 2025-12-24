@@ -1,36 +1,74 @@
-import React, { useMemo } from 'react';
+// src/components/common/BarChart.jsx
 
-// Exportação nomeada
-export function BarChart({ data = [], title }) { // Valor padrão para data
-  // Garante que maxValue seja pelo menos 1, mesmo com dados vazios ou negativos
-  const maxValue = useMemo(() => Math.max(...data.map(d => d.value), 1), [data]);
+import React from 'react';
+import {
+  BarChart as RechartsBarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell
+} from 'recharts';
+
+export function BarChart({ data }) {
+  if (!data || data.length === 0) {
+    return (
+      <div className="flex h-full items-center justify-center text-gray-400 text-sm">
+        Sem dados para exibir no gráfico.
+      </div>
+    );
+  }
 
   return (
-    <div className="w-full bg-white p-4 rounded shadow"> {/* Adicionado fundo e sombra */}
-      <h3 className="text-lg font-semibold mb-4 text-center">{title}</h3>
-      {data.length > 0 ? (
-        <div className="flex justify-around items-end h-[220px] p-4 border-l border-b border-gray-300">
-          {data.map((item, index) => (
-            <div key={index} className="flex flex-col items-center w-full px-1"> {/* Adicionado padding x */}
-              <div className="relative flex-grow flex items-end w-3/4 md:w-1/2"> {/* Largura responsiva da barra */}
-                  <div
-                      className="w-full bg-blue-500 hover:bg-blue-600 rounded-t-sm transition-all duration-300"
-                      style={{ height: `${Math.max(0, (item.value / maxValue) * 100)}%` }} // Garante altura >= 0
-                      title={`${item.label}: ${item.value} paciente(s)`}
-                  >
-                  </div>
-                  {/* Mostra valor apenas se > 0 */}
-                  {item.value > 0 && (
-                     <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-sm font-bold text-gray-700">{item.value}</span>
-                  )}
-              </div>
-              <span className="text-xs mt-2 text-gray-600 text-center break-words">{item.label}</span> {/* Quebra de palavra */}
-            </div>
+    <ResponsiveContainer width="100%" height="100%">
+      <RechartsBarChart
+        data={data}
+        margin={{
+          top: 10,
+          right: 10,
+          left: -20,
+          bottom: 0,
+        }}
+      >
+        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+        
+        <XAxis 
+          dataKey="label" 
+          axisLine={false} 
+          tickLine={false} 
+          tick={{ fill: '#9ca3af', fontSize: 12 }} 
+          dy={10}
+        />
+        
+        <YAxis 
+          axisLine={false} 
+          tickLine={false} 
+          tick={{ fill: '#9ca3af', fontSize: 12 }} 
+        />
+        
+        <Tooltip
+          cursor={{ fill: '#f9fafb' }}
+          contentStyle={{
+            backgroundColor: '#fff',
+            border: 'none',
+            borderRadius: '8px',
+            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+            padding: '8px 12px'
+          }}
+        />
+        
+        <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+          {data.map((entry, index) => (
+            <Cell 
+              key={`cell-${index}`} 
+              fill="#6366f1" // Cor Indigo (padrão do seu tema)
+              className="hover:opacity-80 transition-opacity duration-300"
+            />
           ))}
-        </div>
-      ) : (
-        <p className="text-center text-gray-500 h-[220px] flex items-center justify-center">Sem dados para exibir.</p>
-      )}
-    </div>
+        </Bar>
+      </RechartsBarChart>
+    </ResponsiveContainer>
   );
 }

@@ -1,77 +1,77 @@
 // src/components/common/AnnualBudgetChart.jsx
-// (Versão com visual mais profissional e elegante)
 
-import React from 'react';
+import React, { useMemo } from 'react';
 
-// Exportação NOMEADA
-export function AnnualBudgetChart({ totalSpent = 0, budgetLimit = 0 }) {
-  const numericTotalSpent = Number(totalSpent) || 0;
-  const numericBudgetLimit = Number(budgetLimit) || 0;
+export function AnnualBudgetChart({ 
+  records = [], 
+  distributors = [], 
+  annualBudget = 0,
+  filterYear // Recebe o ano selecionado no filtro
+}) {
+  
+  // Define o ano base: se não vier prop, usa o ano atual
+  const targetYear = filterYear || new Date().getFullYear();
 
-  const formatCurrency = (value) => {
-    if (!isFinite(value)) return 'R$ ---';
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+  const { percentage } = useMemo(() => {
+    
+    // 1. TETO (ORÇAMENTO): Soma das Farmácias ou Global
+    // Usa Number() simples igual à Dashboard
+    const sumDistributors = distributors.reduce((acc, d) => acc + (Number(d.budget) || 0), 0);
+    const finalBudget = sumDistributors > 0 ? sumDistributors : (Number(annualBudget) || 0);
+
+    // 2. GASTO REAL: Filtra pelo targetYear igual à Dashboard
+    const totalSpent = records
+      .filter(r => {
+        const recordYear = new Date(r.referenceDate || r.entryDate).getFullYear();
+        return recordYear === Number(targetYear) && r.status !== 'Cancelado';
+      })
+      .reduce((acc, curr) => acc + (Number(curr.totalValue) || 0), 0);
+
+    // 3. Porcentagem
+    const pct = finalBudget > 0 ? (totalSpent / finalBudget) * 100 : 0;
+
+    return { percentage: pct };
+  }, [records, distributors, annualBudget, targetYear]);
+
+  // --- Cores e Visual ---
+  const isOver = percentage > 100;
+  const isWarning = percentage > 85 && !isOver;
+  
+  let gradient = 'from-emerald-400 to-teal-500';
+  let textColor = 'text-emerald-600';
+  
+  if (isOver) {
+    gradient = 'from-red-500 to-rose-600';
+    textColor = 'text-red-600';
+  } else if (isWarning) {
+    gradient = 'from-amber-400 to-orange-500';
+    textColor = 'text-amber-600';
   }
-
-  const percentage = numericBudgetLimit > 0 ? (numericTotalSpent / numericBudgetLimit) * 100 : (numericTotalSpent > 0 ? 101 : 0);
-  const displayPercentage = Math.min(percentage, 100);
-  const isOverBudget = percentage > 100;
-  const budgetDifference = numericBudgetLimit - numericTotalSpent;
-
-  // --- (NOVA) LÓGICA DE CORES (Mais Limpa) ---
-  let barColorClass = 'bg-blue-600';    // Padrão (OK)
-  let textColorClass = 'text-gray-700'; // Padrão
-  let percentageText = `${percentage.toFixed(0)}%`;
-
-  if (isOverBudget) {
-    barColorClass = 'bg-red-600';     // Estourado
-    textColorClass = 'text-red-700';
-    // Mostra o quanto estourou
-    percentageText = `+${(percentage - 100).toFixed(0)}%`; 
-  } else if (percentage > 85) {
-    barColorClass = 'bg-yellow-500';  // Alerta
-    textColorClass = 'text-yellow-700';
-  }
-  // --- Fim da nova lógica ---
 
   return (
-    // Container principal
-    <div className="min-w-[220px] animate-fade-in mx-auto">
-      <div className="space-y-1">
-        
-        {/* --- 1. Informações de Porcentagem (Topo) --- */}
-        {/* A informação principal (porcentagem) fica em destaque */}
-        <div className="flex justify-between items-baseline mb-1 text-sm">
-          <span className="font-semibold text-gray-800">Progresso Anual</span>
-          <span className={`font-bold text-lg ${textColorClass}`}>
-            {percentageText}
-          </span>
+    <div className="w-full animate-fadeIn">
+      {/* Cabeçalho */}
+      <div className="flex justify-between items-end mb-3">
+        <h4 className="text-gray-600 font-bold text-base flex items-center gap-2">
+          <span className={`w-2 h-2 rounded-full ${isOver ? 'bg-red-500' : 'bg-emerald-500'}`}></span>
+          Saúde Financeira
+        </h4>
+        <span className={`text-3xl font-extrabold tracking-tight ${textColor}`}>
+          {percentage.toFixed(1)}%
+        </span>
+      </div>
+
+      {/* Barra de Progresso */}
+      <div className="relative h-5 w-full bg-gray-100 rounded-full overflow-hidden shadow-inner border border-gray-200/50">
+        <div 
+          className={`absolute top-0 left-0 h-full rounded-full bg-gradient-to-r ${gradient} transition-all duration-1000 ease-out shadow-sm`}
+          style={{ width: `${Math.min(percentage, 100)}%` }}
+        >
+          <div className="absolute top-0 left-0 right-0 h-[40%] bg-white/30"></div>
+          {(isWarning || isOver) && (
+             <div className="absolute inset-0 w-full h-full bg-[linear-gradient(45deg,rgba(255,255,255,.2)_25%,transparent_25%,transparent_50%,rgba(255,255,255,.2)_50%,rgba(255,255,255,.2)_75%,transparent_75%,transparent)] bg-[length:1rem_1rem] animate-[progress-bar-stripes_1s_linear_infinite]"></div>
+          )}
         </div>
-
-        {/* --- 2. Barra de Progresso (Slim) --- */}
-        {/* A barra agora é mais fina (h-2.5) e sem texto dentro */}
-        <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700" title={`Utilizado: ${percentage.toFixed(1)}%`}>
-          <div
-            className={`h-2.5 rounded-full ${barColorClass} transition-all duration-1000 ease-out`}
-            style={{ width: `${displayPercentage}%` }}
-          ></div>
-        </div>
-
-        {/* --- 3. Informações de Valor (Contexto) --- */}
-        {/* Os valores "Gasto" e "Limite" ficam abaixo, como contexto */}
-        <div className="flex justify-between items-center text-xs text-gray-600">
-          <span className="font-mono" title="Total Gasto">
-            {formatCurrency(numericTotalSpent)}
-          </span>
-          <span className="font-mono" title="Limite do Orçamento">
-            {formatCurrency(numericBudgetLimit)}
-          </span>
-        </div>
-
-        {/* --- 4. Status (Restante / Estourado) --- */}
-        {/* O resultado final (Restante/Estourado) fica por último */}
-      
-
       </div>
     </div>
   );

@@ -49,7 +49,9 @@ export function PatientRecordsTable({
                   className="group hover:bg-blue-50/30 transition-colors duration-150 ease-in-out"
                 >
                   {/* 1. Entrada */}
-                  <td className="py-4 px-3 pl-4 align-middle text-gray-700"> {/* FIX: Redução de padding */}
+                  <td className="py-4 px-3 pl-4 align-middle text-gray-700">
+                    {' '}
+                    {/* FIX: Redução de padding */}
                     <div className="flex flex-col">
                       <span className="font-semibold text-gray-800">
                         {record.entryDate
@@ -70,12 +72,22 @@ export function PatientRecordsTable({
                   </td>
 
                   {/* 2. Entrega */}
-                  <td className="py-4 px-3 align-middle text-gray-600"> {/* FIX: Redução de padding */}
+                  <td className="py-4 px-3 align-middle text-gray-600">
+                    {' '}
+                    {/* FIX: Redução de padding */}
                     {record.deliveryDate ? (
                       <span className="bg-green-50 text-green-700 px-2 py-1 rounded text-xs font-medium border border-green-100">
-                        {new Date(record.deliveryDate).toLocaleDateString(
-                          'pt-BR'
-                        )}
+                        {(() => {
+                          const d = new Date(record.deliveryDate);
+                          // getUTCDate garante que o dia 22 permaneça 22, ignorando o fuso horário local
+                          const dia = String(d.getUTCDate()).padStart(2, '0');
+                          const mes = String(d.getUTCMonth() + 1).padStart(
+                            2,
+                            '0'
+                          );
+                          const ano = d.getUTCFullYear();
+                          return `${dia}/${mes}/${ano}`;
+                        })()}
                       </span>
                     ) : (
                       <span className="text-gray-300 text-xs italic">
@@ -85,7 +97,9 @@ export function PatientRecordsTable({
                   </td>
 
                   {/* 3. Medicações (Visual de Tags/Pílulas) */}
-                  <td className="py-4 px-3 align-middle"> {/* FIX: Redução de padding */}
+                  <td className="py-4 px-3 align-middle">
+                    {' '}
+                    {/* FIX: Redução de padding */}
                     <div className="flex flex-wrap gap-1.5 max-w-[300px]">
                       {Array.isArray(record.medications) &&
                       record.medications.length > 0 ? (
@@ -114,7 +128,9 @@ export function PatientRecordsTable({
                   </td>
 
                   {/* 4. Status e Ações */}
-                  <td className="py-4 px-3 pr-4 align-middle text-right"> {/* FIX: Redução de padding */}
+                  <td className="py-4 px-3 pr-4 align-middle text-right">
+                    {' '}
+                    {/* FIX: Redução de padding */}
                     <div className="flex flex-col items-end gap-1">
                       <StatusBadge status={record.status} />
 
