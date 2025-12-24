@@ -1,198 +1,193 @@
 // src/pages/SecretarySettingsPage.jsx
 
+import React, { useState, useEffect, useMemo } from 'react';
+import api from '../services/api';
+import { icons } from '../utils/icons'; // Assumindo que você tem esse arquivo, senão usará ícones inline
 
-import React, { useState, useMemo, useEffect } from 'react';
-import api from '../services/api'; // Importado para comunicação com a API
+export default function SecretarySettingsPage({ addToast }) {
+  const [distributors, setDistributors] = useState([]);
+  const [editingValues, setEditingValues] = useState({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [savingId, setSavingId] = useState(null); // Para mostrar loading no botão específico
 
-// --- Imports de Componentes ---
-import { AnnualBudgetChart } from '../components/common/AnnualBudgetChart';
-import { SimpleCard } from '../components/common/SimpleCard';
-import { icons } from '../utils/icons';
-
-// --- Componente da Página ---
-export default function SecretarySettingsPage({
-  user,
-  annualBudget,
-  handleUpdateBudget, // Função passada do App.jsx (agora só para atualização do estado global)
-  records = [], // Dados dos registros
-  addToast,
-  addLog, // NOVO: Adicionado para registrar a alteração
-}) {
-  // Inicializa com o valor da prop, mas permite edição
-  const [newBudgetValue, setNewBudgetValue] = useState(
-    String(annualBudget || '0')
-  );
-
-  // Sincroniza o estado interno (newBudgetValue) quando a prop mudar (ex: após o App.jsx salvar na API)
   useEffect(() => {
-    // Formatação amigável para o input
-    setNewBudgetValue(
-      new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2 }).format(
-        annualBudget || 0
-      )
-    );
-  }, [annualBudget]);
+    loadDistributors();
+  }, []);
 
-  // --- CÁLCULO OTIMIZADO DE GASTOS DO ANO ---
-  const totalSpentForYear = useMemo(() => {
-    const currentYear = new Date().getFullYear();
-    return (records || [])
-      .filter((r) => {
-        // Usa o campo entryDate para filtrar por ano
-        return new Date(r.entryDate).getFullYear() === currentYear;
-      })
-      .reduce((sum, item) => {
-        // ATENÇÃO: totalValue deve vir como string da API, mas ser parseado para número
-        return sum + (Number(item.totalValue) || 0);
-      }, 0);
-  }, [records]);
-
-  // --- FUNÇÃO DE SALVAR ORÇAMENTO (CORRIGIDA) ---
-  const handleBudgetSave = async () => {
-    // AGORA ASYNC
-    // 1. Remove pontuação de milhar (se houver) e substitui vírgula por ponto para parsear
-    const cleanedValue = newBudgetValue.replace(/\./g, '').replace(',', '.');
-    const value = parseFloat(cleanedValue);
-
-    if (!isNaN(value) && value >= 0) {
-      try {
-        // 2. CHAMA A API PARA SALVAR NO BANCO DE DADOS
-        await api.post('/settings/budget', {
-          budget: value,
-        });
-
-        // 3. ATUALIZA O ESTADO GLOBAL (via prop) e notifica
-        if (typeof handleUpdateBudget === 'function') {
-          handleUpdateBudget(value);
-          addToast?.('Orçamento atualizado com sucesso!', 'success');
-        } else {
-          addToast?.(
-            'Sucesso no servidor, mas falha na atualização local.',
-            'info'
-          );
-        }
-
-        // 4. REGISTRA O LOG
-        addLog?.(
-          user?.name,
-          `atualizou o Orçamento Anual para R$ ${value.toFixed(2).replace('.', ',')}`
-        );
-      } catch (error) {
-        console.error('[API Error] Salvar Orçamento:', error);
-        addToast?.('Falha ao salvar orçamento no servidor.', 'error');
-      }
-    } else {
-      addToast?.(
-        'Por favor, insira um valor numérico válido e positivo.',
-        'error'
-      );
+  const loadDistributors = async () => {
+    setIsLoading(true);
+    try {
+      const response = await api.get('/distributors');
+      setDistributors(response.data || []);
+      
+      // Prepara os valores para edição
+      const values = {};
+      response.data.forEach(d => {
+        values[d._id] = d.budget || 0;
+      });
+      setEditingValues(values);
+    } catch (error) {
+      if (addToast) addToast('Erro ao carregar farmácias.', 'error');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  // --- Helpers de Exibição ---
-  const formatCurrency = (value) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(value);
+  const handleSave = async (id) => {
+    setSavingId(id);
+    try {
+      const newVal = parseFloat(editingValues[id]);
+      if (isNaN(newVal) || newVal < 0) {
+        if (addToast) addToast('Por favor, insira um valor válido.', 'warning');
+        setSavingId(null);
+        return;
+      }
+
+      await api.put(`/distributors/${id}`, { budget: newVal });
+      
+      if (addToast) addToast('Teto orçamentário atualizado com sucesso!', 'success');
+      
+      // Atualiza a lista localmente para refletir sem precisar recarregar tudo
+      setDistributors(prev => prev.map(d => d._id === id ? { ...d, budget: newVal } : d));
+      
+    } catch (e) {
+      if (addToast) addToast('Erro ao salvar alteração.', 'error');
+      console.error(e);
+    } finally {
+      setSavingId(null);
+    }
   };
 
-  const totalRemaining = annualBudget - totalSpentForYear;
-  // const percentageSpent = annualBudget > 0 ? (totalSpentForYear / annualBudget) * 100 : 0; // Não usado no novo design
-  const isOverBudget = totalRemaining < 0;
+  // Calcula o total consolidado baseado nos valores que estão sendo editados (tempo real)
+  const totalBudget = useMemo(() => {
+    return Object.values(editingValues).reduce((acc, val) => acc + (Number(val) || 0), 0);
+  }, [editingValues]);
 
   return (
-    // Container Principal: Aplicando o visual cartesiano e moderno
-    <div className="p-4 md:p-8 bg-gray-50 min-h-screen">
-      <div className="bg-white rounded-2xl shadow-xl p-6 md:p-8 max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold text-gray-800 border-b pb-4 mb-8 flex items-center gap-3">
-          <span className="text-blue-600">{icons.gear}</span> Configurações da
-          Secretária
-        </h1>
-
-        {/* --- SEÇÃO ORÇAMENTO ANUAL --- */}
-        <section className="mb-8">
-          <h3 className="text-xl font-bold text-gray-700 mb-6 flex items-center gap-2">
-            {icons.dollar} Orçamento Anual e Gastos
-          </h3>
-
-          {/* Cartão principal para o controle de orçamento */}
-          <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-md">
-            {/* Gráfico (centralizado e proeminente) */}
-            <div className="mb-6 flex justify-center">
-              <AnnualBudgetChart
-                key={annualBudget}
-                totalSpent={totalSpentForYear}
-                budgetLimit={annualBudget}
-              />
-            </div>
-
-            {/* Indicadores de KPI (Grid de 3 Cards) */}
-            <div className="grid md:grid-cols-3 gap-4 border-t border-gray-100 pt-6">
-              <SimpleCard
-                title="Orçamento Total"
-                value={formatCurrency(annualBudget)}
-                icon={icons.money}
-                // Estilo moderno: cores mais claras no fundo para melhor contraste
-                className="bg-blue-50 border-blue-200 text-blue-800"
-              />
-              <SimpleCard
-                title="Gasto no Ano"
-                value={formatCurrency(totalSpentForYear)}
-                icon={icons.chart}
-                className="bg-yellow-50 border-yellow-200 text-yellow-800"
-              />
-              <SimpleCard
-                title="Restante Estimado"
-                value={formatCurrency(totalRemaining)}
-                icon={icons.wallet}
-                // Destaca vermelho para estouro, verde para sobra
-                className={
-                  isOverBudget
-                    ? 'bg-red-50 border-red-200 text-red-800'
-                    : 'bg-green-50 border-green-200 text-green-800'
-                }
-              />
-            </div>
-
-            {/* Campo para alterar o valor (Estilo Moderno) */}
-            <div className="pt-8 border-t border-gray-100 mt-6">
-              <label
-                className="block text-gray-700 font-semibold mb-2"
-                htmlFor="annual-budget-input"
-              >
-                Definir Novo Limite do Orçamento (R$)
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-2.5 text-gray-400 font-bold">
-                  R$
-                </span>
-                <input
-                  id="annual-budget-input"
-                  type="text"
-                  value={newBudgetValue}
-                  onChange={(e) => setNewBudgetValue(e.target.value)}
-                  // Novo estilo de input: maior, borda mais grossa, foco azul
-                  className="w-full pl-10 pr-4 py-2.5 border-2 border-gray-300 rounded-xl focus:border-blue-500 transition-colors text-lg font-bold text-gray-800"
-                  placeholder="0,00"
-                />
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Use vírgula para separar centavos (ex: 5.000,00).
-              </p>
-            </div>
-
-            {/* Botão para salvar (Estilo Moderno) */}
-            <button
-              onClick={handleBudgetSave}
-              disabled={newBudgetValue.length === 0}
-              className="w-full mt-4 px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-semibold transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2"
-            >
-              {icons.save} Salvar Novo Orçamento
-            </button>
-          </div>
-        </section>
+    <div className="space-y-8 animate-fade-in pb-12 max-w-5xl mx-auto">
+      
+      {/* --- HEADER --- */}
+      <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-4 border-b border-gray-100 pb-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-800 tracking-tight">Configurações Financeiras</h1>
+          <p className="text-gray-500 mt-1 text-sm">
+            Gerenciamento de teto de gastos por unidade distribuidora
+          </p>
+        </div>
       </div>
+
+      {/* --- CARD DE RESUMO (Totalizador) --- */}
+      <div className="bg-gradient-to-br from-indigo-600 to-blue-700 rounded-2xl p-6 text-white shadow-lg flex flex-col md:flex-row justify-between items-center gap-6">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
+             {/* Ícone de Dinheiro/Gráfico */}
+             <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+             </svg>
+          </div>
+          <div>
+            <h2 className="text-indigo-100 text-sm font-medium uppercase tracking-wider">Orçamento Global Consolidado</h2>
+            <p className="text-xs text-indigo-200 mt-1">Soma de todos os tetos definidos abaixo</p>
+          </div>
+        </div>
+        <div className="text-right">
+          <p className="text-4xl font-bold tracking-tight">
+            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalBudget)}
+          </p>
+        </div>
+      </div>
+
+      {/* --- LISTA DE FARMÁCIAS --- */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="p-6 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
+            <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                {/* Ícone Predio/Farmácia */}
+                <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                </svg>
+                Unidades Cadastradas
+            </h3>
+            <span className="text-xs font-semibold bg-indigo-100 text-indigo-700 px-2 py-1 rounded-md">
+                {distributors.length} Unidades
+            </span>
+        </div>
+
+        {isLoading ? (
+            <div className="p-10 flex justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+            </div>
+        ) : (
+            <div className="divide-y divide-gray-100">
+            {distributors.length > 0 ? distributors.map((dist) => (
+                <div key={dist._id} className="p-4 md:p-6 flex flex-col md:flex-row items-center justify-between gap-4 hover:bg-gray-50 transition-colors group">
+                    
+                    {/* Info da Farmácia */}
+                    <div className="flex items-center gap-4 w-full md:w-auto">
+                        <div className="w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-lg shadow-sm">
+                            {dist.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                            <p className="font-bold text-gray-800 text-base">{dist.name}</p>
+                            <p className="text-xs text-gray-500">ID: {dist._id}</p>
+                        </div>
+                    </div>
+
+                    {/* Área de Edição */}
+                    <div className="flex items-center gap-3 w-full md:w-auto">
+                        <div className="relative w-full md:w-48 group-focus-within:ring-2 ring-indigo-100 rounded-lg transition-all">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-medium text-sm">R$</span>
+                            <input 
+                                type="number" 
+                                className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-lg text-gray-800 font-semibold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
+                                value={editingValues[dist._id]}
+                                onChange={(e) => setEditingValues({...editingValues, [dist._id]: e.target.value})}
+                                placeholder="0.00"
+                            />
+                        </div>
+                        
+                        <button 
+                            onClick={() => handleSave(dist._id)}
+                            disabled={savingId === dist._id}
+                            className={`
+                                flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all shadow-sm cursor-pointer
+                                ${savingId === dist._id 
+                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                                    : 'bg-indigo-600 hover:bg-indigo-700 text-white active:scale-95 hover:shadow-md'}
+                            `}
+                        >
+                            {savingId === dist._id ? (
+                                <>
+                                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    <span>Salvando...</span>
+                                </>
+                            ) : (
+                                <>
+                                    {/* Ícone de Save */}
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                                    </svg>
+                                    <span>Salvar Teto</span>
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </div>
+            )) : (
+                <div className="p-8 text-center text-gray-500">
+                    Nenhuma farmácia encontrada.
+                </div>
+            )}
+            </div>
+        )}
+      </div>
+      
+      <div className="text-center text-xs text-gray-400">
+        <p>Os valores definidos aqui impactam diretamente os gráficos de saúde financeira na Dashboard.</p>
+      </div>
+
     </div>
   );
 }

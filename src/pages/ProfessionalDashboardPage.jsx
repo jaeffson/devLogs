@@ -335,62 +335,40 @@ export default function ProfessionalDashboardPage({
     }
   };
 
-  const handleSaveRecord = async (recordData) => {
+  const handleSaveRecord = async (formData) => {
+    // IMPORTANTE: formData já vem do RecordForm com { farmacia: '...', medications: [...], etc }
     try {
-      const recordId = recordData._id || recordData.id;
-      const payload = {
-        patientId: recordData.patientId,
-        profissionalId: user?._id || user?.id,
-        medications: (recordData.medications || [])
-          .map((m) => ({
-            medicationId:
-              typeof m === 'object' && m.id
-                ? String(m.id)
-                : m.medicationId || String(m),
-            quantity: m.quantity || 'N/A',
-          }))
-          .filter((m) => m.medicationId),
-        referenceDate: recordData.referenceDate,
-        observation: recordData.observation,
-        totalValue: recordData.totalValue,
-        status: recordData.status || 'Pendente',
-      };
+      if (editingRecord) {
+        // --- MODO EDIÇÃO ---
+        const id = editingRecord._id || editingRecord.id;
 
-      if (recordId && recordId !== 'new') {
-        await api.put(`/records/${recordId}`, payload);
-        const patientName = getPatientNameById(recordData.patientId);
-        // --- LOG DE ATIVIDADE: Atualização de Registro ---
-        addLog?.(
-          user?.name,
-          `atualizou o registro de atendimento de ${patientName}`
+        // Enviamos o formData completo para que o campo 'farmacia' chegue ao backend
+        const response = await api.put(`/records/${id}`, formData);
+
+        // Atualiza a lista localmente
+        setRecords((prev) =>
+          prev.map((r) => (r._id === id || r.id === id ? response.data : r))
         );
-        // --- FIM LOG ---
-        addToast('Registro atualizado!', 'success');
-        setIsRecordModalOpen(false);
-        setEditingRecord(null);
+        addToast('Registro atualizado com sucesso!', 'success');
       } else {
-        await api.post('/records', payload);
-        const patientName = getPatientNameById(recordData.patientId);
-        // --- LOG DE ATIVIDADE: Criação de Registro ---
-        addLog?.(
-          user?.name,
-          `criou novo registro de atendimento para ${patientName}`
-        );
-        // --- FIM LOG ---
-        addToast('Atendimento salvo! Selecione o próximo paciente.', 'success');
+        // --- MODO NOVO REGISTRO ---
 
-        // Fluxo "Confirmar e Próximo"
-        setIsRecordModalOpen(false);
-        setSelectedPatient(null);
-        setEditingRecord(null);
+        // Enviamos o formData completo (incluindo o campo farmacia selecionado no modal)
+        const response = await api.post('/records', formData);
 
-        setTimeout(() => {
-          setIsSearchModalOpen(true);
-        }, 200);
+        // Adiciona o novo registro no topo da lista
+        setRecords((prev) => [response.data, ...prev]);
+        addToast('Registro criado com sucesso!', 'success');
       }
-      await syncGlobalState(setRecords, 'registros');
-    } catch {
-      addToast('Erro ao salvar registro.', 'error');
+
+      setIsRecordModalOpen(false);
+      setEditingRecord(null);
+
+      // Opcional: recarregar os dados para garantir sincronia
+      // fetchData();
+    } catch (error) {
+      console.error('Erro ao salvar registro:', error);
+      addToast('Erro ao salvar o registro. Verifique os dados.', 'error');
     }
   };
 
@@ -834,9 +812,28 @@ export default function ProfessionalDashboardPage({
                             <td className="py-2 px-1 font-medium text-gray-800">
                               {getPatientNameById(record.patientId)}
                             </td>
-                            <td className="py-2 px-1 text-green-600">
-                              {new Date(record.deliveryDate).toLocaleDateString(
-                                'pt-BR'
+                            {/* 2. Entrega */}
+                            <td className="py-4 px-3 align-middle text-gray-600">
+                              {record.deliveryDate ? (
+                                <span className="bg-green-50 text-green-700 px-2 py-1 rounded text-xs font-medium border border-green-100 cursor-pointer">
+                                  {(() => {
+                                    const d = new Date(record.deliveryDate);
+                                    // getUTCDate ignora o fuso horário local e lê o dia exato do banco
+                                    const dia = String(d.getUTCDate()).padStart(
+                                      2,
+                                      '0'
+                                    );
+                                    const mes = String(
+                                      d.getUTCMonth() + 1
+                                    ).padStart(2, '0');
+                                    const ano = d.getUTCFullYear();
+                                    return `${dia}/${mes}/${ano}`;
+                                  })()}
+                                </span>
+                              ) : (
+                                <span className="text-gray-300 text-xs italic cursor-default">
+                                  Pendente
+                                </span>
                               )}
                             </td>
                             <td className="py-2 px-1 text-gray-600">
@@ -1312,11 +1309,23 @@ export default function ProfessionalDashboardPage({
                       className="hover:bg-gray-50 transition-colors cursor-pointer"
                     >
                       {' '}
-                      {/* cursor-pointer garantido */}
                       <td className="py-3 px-4 pl-6 font-medium text-green-700">
-                        {new Date(record.deliveryDate).toLocaleDateString(
-                          'pt-BR'
-                        )}
+                        {record.deliveryDate
+                          ? (() => {
+                              const d = new Date(record.deliveryDate);
+                              // getUTCDate garante que o dia 22 continue sendo 22 no Brasil
+                              const dia = String(d.getUTCDate()).padStart(
+                                2,
+                                '0'
+                              );
+                              const mes = String(d.getUTCMonth() + 1).padStart(
+                                2,
+                                '0'
+                              );
+                              const ano = d.getUTCFullYear();
+                              return `${dia}/${mes}/${ano}`;
+                            })()
+                          : '-'}
                       </td>
                       <td className="py-3 px-4 font-medium text-gray-800">
                         {getPatientNameById(record.patientId)}

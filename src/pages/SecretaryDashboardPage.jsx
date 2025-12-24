@@ -1,8 +1,11 @@
 // src/pages/SecretaryDashboardPage.jsx
-// (ATUALIZADO: Adicionado estado para o Modal de Motivo de Cancelamento)
+// (ATUALIZADO: Com busca de Farmácias para Filtros e Gráficos)
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom'; 
+
+// --- Serviços ---
+import api from '../services/api'; // <--- Necessário para buscar farmácias
 
 // --- Imports de Componentes (Views) ---
 import { DashboardView } from '../components/views/secretary/DashboardView';
@@ -10,14 +13,11 @@ import { PatientHistoryView } from '../components/views/secretary/PatientHistory
 import { GeneralReportView } from '../components/views/secretary/GeneralReportView';
 import { RecentDeliveriesView } from '../components/views/secretary/RecentDeliveriesView';
 
-// --- (NOVO) Import do Modal de Motivo ---
+// --- Modais e Utils ---
 import { ViewReasonModal } from '../components/common/ViewReasonModal';
-
-// --- Imports de Utils e Ícones ---
 import { getMedicationName } from '../utils/helpers';
 import { icons } from '../utils/icons';
 
-// --- Componente da Página ---
 export default function SecretaryDashboardPage({
   user,
   annualBudget,
@@ -29,103 +29,101 @@ export default function SecretaryDashboardPage({
   activeTabForced,
   addToast,
 }) {
-  const navigate = useNavigate(); // Hook para o 'default' case
+  const navigate = useNavigate();
 
   // --- Estados do Controlador ---
   const [currentView, setCurrentView] = useState('dashboard');
   const [filterStatus, setFilterStatus] = useState('all');
   const [initialPatientForHistory, setInitialPatientForHistory] = useState(null);
-  
-  // --- (NOVO) Estado para o Modal de Motivo ---
   const [viewingReasonRecord, setViewingReasonRecord] = useState(null);
-  
-  
-  // --- Wrapper de Navegação (Usado apenas para limpar estados) ---
+
+  // --- (NOVO) Estado para Farmácias (Distribuidores) ---
+  const [distributors, setDistributors] = useState([]);
+
+  // --- (NOVO) Busca Farmácias ao Iniciar ---
+  useEffect(() => {
+    const fetchDistributors = async () => {
+      try {
+        const response = await api.get('/distributors');
+        setDistributors(response.data || []);
+      } catch (error) {
+        console.error("Erro ao carregar farmácias:", error);
+      }
+    };
+    fetchDistributors();
+  }, []); // Executa apenas uma vez na montagem
+
+  // --- Wrapper de Navegação ---
   const navigateToView = useCallback((view) => {
-    if (view !== 'records') {
-        setInitialPatientForHistory(null);
-    }
-    if (view !== 'all_history') {
-        setFilterStatus('all');
-    }
+    if (view !== 'records') setInitialPatientForHistory(null);
+    if (view !== 'all_history') setFilterStatus('all');
     setCurrentView(view);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []); 
 
-
-  // --- useEffect (Sincroniza URL com o Estado Interno) ---
+  // --- Sincroniza URL com Estado ---
   useEffect(() => {
     let targetView = activeTabForced || 'dashboard';
-    
-    if (targetView === 'reports' || targetView === 'reports-general') {
-      targetView = 'all_history';
-    }
-    if (targetView === 'patient-history') {
-      targetView = 'records';
-    }
-    
-    if (!['dashboard', 'records', 'deliveries', 'all_history'].includes(targetView)) {
-      targetView = 'dashboard';
-    }
-    
+    if (targetView === 'reports' || targetView === 'reports-general') targetView = 'all_history';
+    if (targetView === 'patient-history') targetView = 'records';
+    if (!['dashboard', 'records', 'deliveries', 'all_history'].includes(targetView)) targetView = 'dashboard';
     navigateToView(targetView); 
-
   }, [activeTabForced, navigateToView]);
-  
 
-  // --- Helpers Globais (Corrigido para _id) ---
+  // --- Helpers ---
   const patientMap = useMemo(() => {
     if (!Array.isArray(patients)) return {};
     return patients.reduce((acc, patient) => {
-      acc[patient._id] = patient.name || 'Desconhecido';
+      acc[patient._id || patient.id] = patient.name || 'Desconhecido';
       return acc;
     }, {});
   }, [patients]);
 
-  const getPatientNameById = useCallback(
-    (patientId) => {
-      return patientMap[patientId] || 'Desconhecido';
-    },
-    [patientMap]
-  );
+  const getPatientNameById = useCallback((id) => patientMap[id] || 'Desconhecido', [patientMap]);
   
-  // --- Funções de Callback para os Filhos ---
-  
+  // --- Callbacks ---
   const handleNavigateWithFilter = (viewUrl, status) => {
-    setFilterStatus(status);
-    navigate(viewUrl);
+    if (viewUrl === '/reports-general') {
+        setFilterStatus(status);
+        setCurrentView('all_history'); // Força a troca de view internamente se necessário
+        navigate('/reports-general');
+    } else {
+        navigate(viewUrl);
+    }
   };
   
   const handleNavigateToPatientHistory = (patientId) => {
-    const patient = patients.find(p => p._id === patientId); 
+    const patient = patients.find(p => (p._id || p.id) === patientId); 
     if (patient) {
       setInitialPatientForHistory(patient); 
       navigate('/patient-history');          
     } else {
-      addToast?.('Erro: Paciente não encontrado para navegação.', 'error');
+      if(addToast) addToast('Erro: Paciente não encontrado.', 'error');
     }
   };
 
-  // --- Renderização Condicional (O Corpo Principal) ---
+  // --- Renderização ---
   const renderCurrentView = () => {
     switch (currentView) {
       case 'dashboard':
         return (
           <DashboardView
             user={user}
-            annualBudget={annualBudget}
+            annualBudget={annualBudget || user?.budget}
+            distributors={distributors} // <--- Passando para o gráfico
             patients={patients}
             records={records}
             medications={medications}
             users={users}
             filterYear={filterYear}
-            getPatientNameById={getPatientNameById} // (Mantido)
+            getPatientNameById={getPatientNameById}
             getMedicationName={getMedicationName}
             icons={icons} 
             onNavigateWithFilter={handleNavigateWithFilter}
           />
         );
 
-      case 'records': // Rota /patient-history
+      case 'records':
         return (
           <PatientHistoryView
             patients={patients}
@@ -133,23 +131,25 @@ export default function SecretaryDashboardPage({
             medications={medications}
             getMedicationName={getMedicationName}
             initialPatient={initialPatientForHistory}
-            onHistoryViewed={() => {}} // (Mantido)
-            onViewReason={setViewingReasonRecord} // <-- (NOVO) Passa o handler
+            onViewReason={setViewingReasonRecord}
+            onBack={() => navigate('/dashboard')}
           />
         );
 
-      case 'all_history': // Rota /reports-general
+      case 'all_history':
         return (
           <GeneralReportView
             user={user}
             records={records}
             medications={medications}
+            distributors={distributors} // <--- Passando para o filtro do relatório
             addToast={addToast}
             getPatientNameById={getPatientNameById}
             getMedicationName={getMedicationName}
             initialFilterStatus={filterStatus}
-            onReportViewed={() => {}} // (Mantido)
-            onViewReason={setViewingReasonRecord} // <-- (NOVO) Passa o handler
+            onReportViewed={() => {}} 
+            onViewReason={setViewingReasonRecord}
+            onBack={() => navigate('/dashboard')}
           />
         );
 
@@ -161,19 +161,12 @@ export default function SecretaryDashboardPage({
             getPatientNameById={getPatientNameById}
             getMedicationName={getMedicationName}
             onPatientClick={handleNavigateToPatientHistory}
+            onBack={() => navigate('/dashboard')}
           />
         );
 
       default:
-        return (
-          <div className="text-center p-10">
-            <h2 className="text-xl font-semibold text-gray-700">Visão Inválida</h2>
-            <p className="text-gray-500">A visualização solicitada não foi encontrada.</p>
-            <button onClick={() => navigate('/dashboard')} className="mt-4 text-blue-600 hover:underline">
-              Voltar ao Dashboard
-            </button>
-          </div>
-        );
+        return null;
     }
   };
 
@@ -181,9 +174,10 @@ export default function SecretaryDashboardPage({
     <>
       {renderCurrentView()}
       
-      {/* --- (NOVO) Renderiza o Modal de Motivo --- */}
       {viewingReasonRecord && (
         <ViewReasonModal
+          isOpen={true}
+          reason={viewingReasonRecord.cancelReason}
           record={viewingReasonRecord}
           onClose={() => setViewingReasonRecord(null)}
           getPatientNameById={getPatientNameById}
