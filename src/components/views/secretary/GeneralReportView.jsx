@@ -1,5 +1,4 @@
 // src/components/views/secretary/GeneralReportView.jsx
-// (CORRIGIDO: Lógica de identificação de Farmácia simplificada e modo Debug explícito para rastreamento)
 
 import React, { useState, useMemo, useEffect } from 'react';
 import jsPDF from 'jspdf';
@@ -10,52 +9,44 @@ import useDebounce from '../../../hooks/useDebounce';
 
 const MS_IN_30_DAYS = 30 * 24 * 60 * 60 * 1000;
 
-// --- HELPER CORRIGIDO: Mapeia o campo de localização para um nome de Farmácia (FINAL) ---
+// --- HELPER: Mapeia o campo de localização para um nome de Farmácia ---
 const getFarmaciaName = (record) => {
-    // 1. Pega o valor dos possíveis campos (location, farmacia, origin) e normaliza
-    const loc = String(record?.location || record?.farmacia || record?.origin || '').toLowerCase().trim();
-    
-    // 2. Tenta correspondência direta e parcial (Campina Grande)
-    if (loc.includes('campina grande') || loc.includes('campina') || loc.includes('grande') || loc.includes('farmacia a') || loc === 'a' || loc === 'cg') {
-        return 'Campina Grande';
-    }
-    
-    // 3. Tenta correspondência direta e parcial (João Paulo)
-    if (loc.includes('joao paulo') || loc.includes('joão paulo') || loc.includes('joao') || loc.includes('joão') || loc.includes('paulo') || loc.includes('farmacia b') || loc === 'b' || loc === 'jp') {
-        return 'João Paulo';
-    }
-
-    // 4. MODO DEBUG: Se a localização tiver algum valor (e não for só um espaço), retorna o valor exato.
-    if (loc.length > 0) {
-        // Se você vir "Debug: [CÓDIGO]", este é o valor que precisa ser mapeado no futuro.
-        return `Debug: ${loc.toUpperCase()}`;
-    }
-    
-    return 'Não Identificada';
+  const loc = String(record?.location || record?.farmacia || record?.pharmacy || record?.origin || '').toLowerCase().trim();
+  
+  if (loc.includes('campina grande') || loc.includes('campina') || loc.includes('grande') || loc.includes('farmacia a') || loc === 'a' || loc === 'cg') return 'Campina Grande';
+  if (loc.includes('joao paulo') || loc.includes('joão paulo') || loc.includes('joao') || loc.includes('joão') || loc.includes('paulo') || loc.includes('farmacia b') || loc === 'b' || loc === 'jp') return 'João Paulo';
+  if (loc.length > 0) return `Debug: ${loc.toUpperCase()}`;
+  
+  return 'Não Identificada';
 };
 
 export function GeneralReportView({
   user,
   records = [],
   medications = [],
+  distributors = [], 
   addToast,
-  getPatientNameById, // Agora renomeado em helpers.jsx
+  getPatientNameById,
   getMedicationName,
   initialFilterStatus, 
   onReportViewed,
   onViewReason, 
+  onBack
 }) {
   
   // --- Estados ---
   const [filterPeriod, setFilterPeriod] = useState('all');
   const [filterStatus, setFilterStatus] = useState(initialFilterStatus || 'all');
   const [reportSearchTerm, setReportSearchTerm] = useState('');
+  const [selectedPharmacy, setSelectedPharmacy] = useState(''); 
+
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(20);
+  
   const debouncedReportSearchTerm = useDebounce(reportSearchTerm, 300);
   const isSearchingReport = reportSearchTerm !== debouncedReportSearchTerm;
 
-  // Efeito para sincronizar e limpar o 'initialFilterStatus' no controlador
+  // Sincroniza initialFilterStatus
   useEffect(() => {
     if (initialFilterStatus) {
       setFilterStatus(initialFilterStatus);
@@ -63,13 +54,12 @@ export function GeneralReportView({
     }
   }, [initialFilterStatus, onReportViewed]);
 
-  // Reseta paginação quando os filtros mudam
+  // Reseta paginação
   useEffect(() => {
     setCurrentPage(1);
-  }, [filterPeriod, filterStatus, debouncedReportSearchTerm]);
+  }, [filterPeriod, filterStatus, debouncedReportSearchTerm, selectedPharmacy]);
 
-  
-  // --- Opções de Status ---
+  // Opções de Status
   const statusOptions = useMemo(() => {
     const options = [
       { value: 'all', label: 'Todos' },
@@ -77,18 +67,17 @@ export function GeneralReportView({
       { value: 'Pendente', label: 'Pendente' },
       { value: 'Cancelado', label: 'Cancelado' },
     ];
-    if (initialFilterStatus === 'Vencido' && filterStatus === 'Vencido') {
+    if (initialFilterStatus === 'Vencido' || filterStatus === 'Vencido') {
       options.push({ value: 'Vencido', label: 'Vencido (30d+)' });
     }
     return options;
   }, [initialFilterStatus, filterStatus]);
 
-  
-  // --- Filtros Principais ---
+  // --- Lógica de Filtros ---
   const filteredRecordsForReport = useMemo(() => {
     let filtered = Array.isArray(records) ? [...records] : [];
     
-    // 1. Filtro por Período
+    // Período
     if (filterPeriod !== 'all') {
       const days = parseInt(filterPeriod, 10);
       if (!isNaN(days)) {
@@ -96,16 +85,12 @@ export function GeneralReportView({
         cutoffDate.setDate(cutoffDate.getDate() - days);
         cutoffDate.setHours(0, 0, 0, 0);
         filtered = filtered.filter((r) => {
-          try {
-            return new Date(r.entryDate) >= cutoffDate;
-          } catch (e) {
-            return false;
-          }
+          try { return new Date(r.entryDate) >= cutoffDate; } catch (e) { return false; }
         });
       }
     }
 
-    // 2. Filtro por Status
+    // Status
     const now = new Date().getTime();
     if (filterStatus !== 'all') {
       if (filterStatus === 'Vencido') {
@@ -114,491 +99,310 @@ export function GeneralReportView({
           try {
             const entryTime = new Date(r.entryDate).getTime();
             return (now - entryTime) > MS_IN_30_DAYS;
-          } catch (e) {
-            return false;
-          }
+          } catch (e) { return false; }
         });
       } else {
         filtered = filtered.filter((r) => r.status === filterStatus);
       }
     }
 
-    // 3. Filtro por Busca (Paciente OU Farmácia)
+    // Farmácia
+    if (selectedPharmacy) {
+        filtered = filtered.filter(r => getFarmaciaName(r) === selectedPharmacy);
+    }
+
+    // Busca
     const searchTermLower = debouncedReportSearchTerm.toLowerCase();
     if (searchTermLower) {
       filtered = filtered.filter((r) =>
-        // FIX: Usa um fallback string para buscar no nome do paciente
-        (getPatientNameById(r.patientId) || '')
-          .toLowerCase()
-          .includes(searchTermLower) || 
-        getFarmaciaName(r)
-          .toLowerCase()
-          .includes(searchTermLower) 
+        (getPatientNameById(r.patientId) || '').toLowerCase().includes(searchTermLower) || 
+        getFarmaciaName(r).toLowerCase().includes(searchTermLower) 
       );
     }
     
-    // Ordenação
     return filtered.length > 0
-      ? filtered.sort((a, b) => {
-          try {
-            return new Date(b.entryDate) - new Date(a.entryDate);
-          } catch (e) {
-            return 0;
-          }
-        })
+      ? filtered.sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate))
       : [];
-  }, [
-    records,
-    filterPeriod,
-    filterStatus,
-    debouncedReportSearchTerm,
-    getPatientNameById,
-  ]);
+  }, [records, filterPeriod, filterStatus, selectedPharmacy, debouncedReportSearchTerm, getPatientNameById]);
 
-  const totalPages = useMemo(
-    () => Math.ceil(filteredRecordsForReport.length / itemsPerPage),
-    [filteredRecordsForReport, itemsPerPage]
-  );
-
+  // Paginação
+  const totalPages = useMemo(() => Math.ceil(filteredRecordsForReport.length / itemsPerPage), [filteredRecordsForReport, itemsPerPage]);
   const currentRecordsForReport = useMemo(() => {
     const indexOfLastItem = currentPage * itemsPerPage;
     const indexOfFirstItem = indexOfLastItem - itemsPerPage;
     return filteredRecordsForReport.slice(indexOfFirstItem, indexOfLastItem);
   }, [filteredRecordsForReport, currentPage, itemsPerPage]);
 
-
-  // --- Funções de Ação ---
+  // Exportar PDF
   const handleExportPDF = () => {
-    if (
-      !Array.isArray(filteredRecordsForReport) ||
-      filteredRecordsForReport.length === 0
-    ) {
-      addToast?.('Não há dados para exportar com os filtros selecionados.', 'error');
+    if (!filteredRecordsForReport.length) {
+      addToast?.('Sem dados para exportar.', 'error');
       return;
     }
     try {
       const doc = new jsPDF();
       const reportTitle = 'Relatório Geral de Entradas';
       const statusLabel = statusOptions.find(o => o.value === filterStatus)?.label || 'Todos';
-      const filtersText = `Filtros: Período (${
-        filterPeriod === 'all' ? 'Todos' : `Últimos ${filterPeriod} dias`
-      }), Status (${statusLabel}), Busca (${reportSearchTerm || 'Nenhuma'})`;
+      const pharmacyLabel = selectedPharmacy || 'Todas';
       
-      const generationDate = new Date().toLocaleString('pt-BR', {
-        dateStyle: 'short',
-        timeStyle: 'short',
-      });
-      const generatedBy = user?.name || 'Usuário Desconhecido';
-      const generationInfo = `Gerado em: ${generationDate} por ${generatedBy}`;
+      const filtersText = `Filtros: ${filterPeriod === 'all' ? 'Todo Período' : `${filterPeriod} dias`} | Status: ${statusLabel} | Unidade: ${pharmacyLabel}`;
+      const generationInfo = `Gerado em: ${new Date().toLocaleString('pt-BR')} por ${user?.name || 'Sistema'}`;
 
-      doc.setFontSize(18);
-      doc.text(reportTitle, 105, 22, { align: 'center' });
+      doc.setFontSize(16);
+      doc.text(reportTitle, 14, 20);
       doc.setFontSize(10);
-      doc.setTextColor(80);
-      doc.text(filtersText, 105, 30, { align: 'center' });
+      doc.setTextColor(100);
+      doc.text(filtersText, 14, 28);
       doc.setFontSize(8);
-      doc.setTextColor(120);
-      doc.text(generationInfo, 105, 35, { align: 'center' });
+      doc.text(generationInfo, 14, 33);
 
-      // --- COLUNAS DO PDF (REORDENADAS) ---
-      const tableColumn = [
-        'Paciente', 
-        'Entrada',
-        'Atendido em', 
-        'Medicações (Qtd)', 
-        'Farmácia', // ÚLTIMA COLUNA
-      ]; 
-
-      const tableRows = [];
-
-      filteredRecordsForReport.forEach((record) => {
+      const tableColumn = ['Paciente', 'Data', 'Entrega', 'Medicações', 'Farmácia', 'Status']; 
+      const tableRows = filteredRecordsForReport.map((record) => {
         const farmacia = getFarmaciaName(record); 
-        // FIX: Garante que o nome do paciente não é nulo/vazio no PDF
-        const patientName = getPatientNameById(record.patientId) || 'Paciente Não Encontrado'; 
+        const patientName = getPatientNameById(record.patientId) || 'N/A'; 
+        const date = new Date(record.entryDate).toLocaleDateString('pt-BR');
+        const delivery = record.deliveryDate ? new Date(record.deliveryDate).toLocaleDateString('pt-BR') : '-';
+        
+        const items = Array.isArray(record.medications) 
+           ? record.medications.map(m => `${getMedicationName(m.medicationId, medications)} (${m.quantity})`).join(', ')
+           : '0 itens';
 
-        let entryDateFormatted = 'Inválido';
-        try {
-          const dt = new Date(record.entryDate);
-          if (!isNaN(dt))
-            entryDateFormatted = dt.toLocaleString('pt-BR', {
-              dateStyle: 'short',
-              timeStyle: 'short',
-            });
-        } catch (e) {}
-        
-        let deliveryDateFormatted = '---';
-        if (record.deliveryDate) {
-          try {
-            let dt = new Date(record.deliveryDate + 'T00:00:00');
-            if (isNaN(dt)) dt = new Date(record.deliveryDate);
-            if (!isNaN(dt))
-              deliveryDateFormatted = dt.toLocaleDateString('pt-BR', {
-                day: '2-digit',
-                month: '2-digit',
-                year: 'numeric',
-              });
-            else deliveryDateFormatted = 'Inválido';
-          } catch (e) {
-            deliveryDateFormatted = 'Inválido';
-          }
-        }
-        
-        const medsList = Array.isArray(record.medications)
-          ? record.medications
-              .map(
-                (m) =>
-                  `${
-                    getMedicationName(m.medicationId, medications) || '?'
-                  } (${m.quantity || 'N/A'})`
-              )
-              .join('\n')
-          : '';
-          
-        tableRows.push([
-          patientName,
-          entryDateFormatted,
-          deliveryDateFormatted,
-          medsList,
-          farmacia, // ÚLTIMO ITEM DA LINHA
-        ]);
+        return [patientName, date, delivery, items, farmacia, record.status];
       });
 
       autoTable(doc, {
         head: [tableColumn],
         body: tableRows,
-        startY: 42,
+        startY: 38,
         theme: 'striped',
-        styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
-        headStyles: {
-          fillColor: [41, 128, 185],
-          textColor: [255, 255, 255],
-          fontStyle: 'bold',
-        },
-        // --- ESTILOS DAS COLUNAS PDF (REORDENADOS) ---
-        columnStyles: {
-          0: { cellWidth: 35 }, // Paciente
-          1: { cellWidth: 25 }, // Entrada
-          2: { cellWidth: 25 }, // Atendido em
-          3: { cellWidth: 'auto' }, // Medicações
-          4: { cellWidth: 25 }, // Farmácia
-        },
+        styles: { fontSize: 8, cellPadding: 3 },
+        headStyles: { fillColor: [63, 81, 181], textColor: 255 },
+        columnStyles: { 3: { cellWidth: 'auto' } }
       });
 
+      const finalY = doc.lastAutoTable.finalY + 10;
+      doc.setFontSize(10);
+      doc.text(`Total: ${filteredRecordsForReport.length} registros`, 14, finalY);
+
       doc.output('dataurlnewwindow');
-      addToast?.('Relatório PDF gerado com sucesso!', 'success');
+      addToast?.('PDF gerado!', 'success');
     } catch (err) {
-      console.error('Erro PDF: ', err);
-      addToast?.(`Erro PDF: ${err.message}`, 'error');
+      console.error(err);
+      addToast?.('Erro ao gerar PDF.', 'error');
     }
   };
 
-  // --- Renderização ---
   return (
-    <div className="bg-white rounded-lg shadow p-4 md:p-6 animate-fade-in flex flex-col h-full md:h-[calc(100vh-8rem)]">
-      <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-3 border-b pb-4">
-        <h2 className="text-xl md:text-2xl font-bold text-gray-800">
-          Relatório Geral de Entradas
-        </h2>
-        <button
-          onClick={handleExportPDF}
-          disabled={
-            !Array.isArray(filteredRecordsForReport) ||
-            filteredRecordsForReport.length === 0
-          }
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors w-full md:w-auto cursor-pointer"
-          title="Abrir PDF em nova aba para imprimir ou salvar"
-        >
-          <span className="w-4 h-4">{icons.download}</span> Exportar para
-          PDF
-        </button>
-      </div>
-      {/* Filtros */}
-      <div className="flex flex-col md:flex-row flex-wrap gap-4 items-end mb-4 p-4 bg-gray-50 rounded-lg border">
-        <div className="flex-grow w-full md:w-auto relative">
-          <label
-            className="text-xs font-medium text-gray-700 mb-1 block"
-            htmlFor="report-search-all"
-          >
-            Buscar (Paciente / Farmácia)
-          </label>
-          <input
-            type="text"
-            id="report-search-all"
-            placeholder="Nome ou Farmácia..."
-            value={reportSearchTerm}
-            onChange={(e) => setReportSearchTerm(e.target.value)}
-            className={`w-full p-2 border rounded-lg text-sm pr-8 ${
-              reportSearchTerm
-                ? 'border-indigo-500 ring-1 ring-indigo-500'
-                : 'border-gray-300'
-            }`}
-          />
-          {isSearchingReport && (
-            <div className="absolute right-2 top-7 text-gray-400 w-4 h-4">
-              <svg
-                className="animate-spin h-4 w-4 text-indigo-500"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
+    // Layout Full Screen
+    <div className="flex flex-col h-[calc(100vh-6rem)] w-full bg-white rounded-xl shadow-sm overflow-hidden animate-fade-in">
+      
+      {/* --- HEADER (Fixo) --- */}
+      <div className="flex-none p-4 md:p-6 border-b border-gray-100 bg-white z-10">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
+          <div className="flex items-center gap-3">
+            {onBack && (
+              <button 
+                onClick={onBack}
+                className="p-2 rounded-full hover:bg-gray-100 text-gray-500 transition-colors cursor-pointer"
+                title="Voltar"
               >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                ></circle>
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                ></path>
-              </svg>
+                {icons.arrowLeft || '<-'}
+              </button>
+            )}
+            <div>
+              <h1 className="text-xl md:text-2xl font-bold text-gray-800">Relatório Geral</h1>
+              <p className="text-gray-500 text-xs md:text-sm">Controle completo de movimentações</p>
             </div>
-          )}
+          </div>
+          
+          <button
+            onClick={handleExportPDF}
+            disabled={!filteredRecordsForReport.length}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium disabled:opacity-50 transition-colors w-full md:w-auto justify-center shadow-sm cursor-pointer disabled:cursor-not-allowed"
+          >
+            {icons.download} PDF
+          </button>
         </div>
-        <div className="w-full sm:w-auto">
-          <label
-            className="text-xs font-medium text-gray-700 mb-1 block"
-            htmlFor="report-period-all"
-          >
-            Período
-          </label>
-          <select
-            id="report-period-all"
-            value={filterPeriod}
-            onChange={(e) => setFilterPeriod(e.target.value)}
-            className={`w-full p-2 border rounded-lg text-sm bg-white ${
-              filterPeriod !== 'all'
-                ? 'border-indigo-500 ring-1 ring-indigo-500'
-                : 'border-gray-300'
-            }`}
-          >
-            <option value="all">Todos</option>
-            <option value="7">Últimos 7 dias</option>
-            <option value="30">Últimos 30 dias</option>
-            <option value="90">Últimos 90 dias</option>
-          </select>
-        </div>
-        <div className="w-full sm:w-auto">
-          <label
-            className="text-xs font-medium text-gray-700 mb-1 block"
-            htmlFor="report-status-all"
-          >
-            Status
-          </label>
-          <select
-            id="report-status-all"
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className={`w-full p-2 border rounded-lg text-sm bg-white ${
-              filterStatus !== 'all'
-                ? 'border-indigo-500 ring-1 ring-indigo-500'
-                : 'border-gray-300'
-            }`}
-          >
-            {statusOptions.map(opt => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-        </div>
-        <div className="text-sm text-gray-600 mt-2 md:mt-0 pt-2 md:pt-0">
-          <span className="font-semibold text-gray-800">{filteredRecordsForReport.length}</span> registro(s) encontrado(s).
+
+        {/* --- BARRA DE FILTROS --- */}
+        <div className="flex flex-col gap-3">
+            {/* Status Tabs */}
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                {statusOptions.map((opt) => (
+                <button
+                    key={opt.value}
+                    onClick={() => setFilterStatus(opt.value)}
+                    className={`px-3 py-1.5 rounded-full text-xs md:text-sm font-medium whitespace-nowrap transition-all border cursor-pointer
+                    ${filterStatus === opt.value 
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' 
+                        : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                >
+                    {opt.label}
+                </button>
+                ))}
+            </div>
+
+            {/* Inputs Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                <div className="md:col-span-3">
+                    <select
+                        value={selectedPharmacy}
+                        onChange={(e) => setSelectedPharmacy(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-gray-50 cursor-pointer hover:bg-white transition-colors"
+                    >
+                        <option value="">Todas as Unidades</option>
+                        {distributors.map(dist => (
+                            <option key={dist._id || dist.id} value={dist.name}>{dist.name}</option>
+                        ))}
+                    </select>
+                </div>
+                
+                <div className="md:col-span-3">
+                    <select
+                        value={filterPeriod}
+                        onChange={(e) => setFilterPeriod(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-gray-50 cursor-pointer hover:bg-white transition-colors"
+                    >
+                        <option value="all">Todo o Histórico</option>
+                        <option value="7">Últimos 7 dias</option>
+                        <option value="30">Últimos 30 dias</option>
+                        <option value="90">Últimos 90 dias</option>
+                    </select>
+                </div>
+
+                <div className="md:col-span-6 relative">
+                    <input
+                        type="text"
+                        placeholder="Buscar paciente, farmácia..."
+                        value={reportSearchTerm}
+                        onChange={(e) => setReportSearchTerm(e.target.value)}
+                        className="w-full pl-9 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-gray-50"
+                    />
+                    <span className="absolute left-3 top-2.5 text-gray-400 text-xs">{icons.search}</span>
+                    {isSearchingReport && (
+                        <span className="absolute right-3 top-2.5 w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></span>
+                    )}
+                </div>
+            </div>
+            
+            <div className="flex justify-between items-center text-xs text-gray-500 px-1 mt-1">
+                 <span><b>{filteredRecordsForReport.length}</b> resultados</span>
+                 <span>{selectedPharmacy ? `Filtro: ${selectedPharmacy}` : 'Todas as unidades'}</span>
+            </div>
         </div>
       </div>
 
-      {/* Tabela */}
-      <div className="overflow-x-auto overflow-y-auto flex-grow min-h-0 border border-gray-200 rounded-lg">
-        <table className="min-w-full bg-white text-sm">
-          <thead className="bg-gray-50 sticky top-0">
+      {/* --- CORPO DA TABELA --- */}
+      <div className="flex-grow overflow-auto bg-gray-50/50">
+        <table className="w-full text-left border-collapse min-w-[800px] md:min-w-full">
+          <thead className="bg-gray-100 sticky top-0 z-10 shadow-sm">
             <tr>
-              <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Paciente
-              </th>
-              <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Entrada
-              </th>
-              <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Data Entrega
-              </th>
-              <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Medicações
-              </th>
-              <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Status
-              </th>
-              {/* Coluna Farmácia Movida para o Final */}
-              <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
-                Farmácia
-              </th>
+              <th className="p-4 text-xs font-semibold text-gray-600 uppercase tracking-wider w-1/4">Paciente</th>
+              <th className="p-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Entrada</th>
+              <th className="p-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Entrega</th>
+              <th className="p-4 text-xs font-semibold text-gray-600 uppercase tracking-wider w-1/4">Medicações</th>
+              <th className="p-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Unidade</th>
+              <th className="p-4 text-xs font-semibold text-gray-600 uppercase tracking-wider text-center">Status</th>
             </tr>
           </thead>
-          <tbody
-            className={`divide-y divide-gray-200 ${
-              isSearchingReport
-                ? 'opacity-75 transition-opacity duration-300'
-                : ''
-            }`}
-          >
-            {Array.isArray(currentRecordsForReport) &&
+          <tbody className="divide-y divide-gray-100 bg-white">
+            {currentRecordsForReport.length > 0 ? (
               currentRecordsForReport.map((record) => {
-                const patientName = getPatientNameById(record.patientId) || 'Paciente Não Encontrado';
+                const patientName = getPatientNameById(record.patientId) || 'Não identificado';
                 const farmaciaName = getFarmaciaName(record);
-                const isHighlighted =
-                  debouncedReportSearchTerm &&
-                  (patientName
-                    .toLowerCase()
-                    .includes(debouncedReportSearchTerm.toLowerCase()) || 
-                  farmaciaName
-                    .toLowerCase()
-                    .includes(debouncedReportSearchTerm.toLowerCase()));
+                const isHighlighted = debouncedReportSearchTerm && 
+                   (patientName.toLowerCase().includes(debouncedReportSearchTerm.toLowerCase()) || 
+                    farmaciaName.toLowerCase().includes(debouncedReportSearchTerm.toLowerCase()));
 
                 let deliveryDateFormatted = '---';
                 if (record.status === 'Atendido' && record.deliveryDate) {
-                  try {
-                    let dt = new Date(record.deliveryDate + 'T00:00:00');
-                    if (isNaN(dt)) dt = new Date(record.deliveryDate);
-                    if (!isNaN(dt)) {
-                      deliveryDateFormatted = dt.toLocaleDateString(
-                        'pt-BR',
-                        { day: '2-digit', month: '2-digit', year: 'numeric' }
-                      );
-                    } else {
-                      deliveryDateFormatted = 'Inválido';
-                    }
-                  } catch (e) {
-                    deliveryDateFormatted = 'Inválido';
-                  }
+                    try {
+                        let dt = new Date(record.deliveryDate);
+                        if(!isNaN(dt)) deliveryDateFormatted = dt.toLocaleDateString('pt-BR');
+                    } catch(e){}
                 }
-
-                const isInvalidFarmacia = farmaciaName.includes('Debug:') || farmaciaName.includes('Não Identificada');
 
                 return (
-                  <tr key={record._id || record.id} className="hover:bg-gray-50 transition-colors">
-                    {/* Paciente */}
-                    <td
-                      className={`py-3 px-4 font-medium text-gray-900 ${
-                        isHighlighted ? 'bg-indigo-50' : ''
-                      }`}
-                    >
-                      {patientName}
+                  <tr key={record._id || record.id} className="hover:bg-indigo-50/30 transition-colors group">
+                    <td className={`p-4 font-medium text-sm text-gray-900 ${isHighlighted ? 'bg-yellow-50' : ''}`}>
+                       {patientName}
                     </td>
-                    <td className="py-3 px-4 text-gray-600">
-                      {(() => {
-                        try {
-                          return new Date(record.entryDate).toLocaleString(
-                            'pt-BR',
-                            { dateStyle: 'short', timeStyle: 'short' }
-                          );
-                        } catch (e) {
-                          return 'Inválido';
-                        }
-                      })()}
+                    <td className="p-4 text-sm text-gray-500 whitespace-nowrap">
+                       {new Date(record.entryDate).toLocaleDateString('pt-BR')}
                     </td>
-                    <td
-                      className={`py-3 px-4 text-gray-600 ${
-                        record.status === 'Atendido'
-                          ? 'font-semibold text-gray-800'
-                          : ''
-                      }`}
-                    >
-                      {deliveryDateFormatted}
+                    <td className="p-4 text-sm text-gray-500 whitespace-nowrap">
+                       {deliveryDateFormatted}
                     </td>
-                    <td className="py-3 px-4 text-gray-600">
-                      {Array.isArray(record.medications)
-                        ? record.medications
-                            .map(
-                              (m) =>
-                                `${getMedicationName(
-                                  m.medicationId,
-                                  medications
-                                )} (${m.quantity || 'N/A'})`
-                            )
-                            .join(', ')
-                        : ''}
+                    <td className="p-4 text-sm text-gray-600">
+                       <div className="max-h-20 overflow-y-auto custom-scrollbar">
+                         {Array.isArray(record.medications) ? record.medications.map((m, i) => (
+                             <div key={i} className="mb-0.5 last:mb-0 text-xs">
+                                • {getMedicationName(m.medicationId, medications)} <span className="text-gray-400">({m.quantity})</span>
+                             </div>
+                         )) : '-'}
+                       </div>
                     </td>
-                    
-                    <td className="py-3 px-4">
-                      <StatusBadge status={record.status} />
-                      {record.status === 'Cancelado' && (
-                        <button
-                          onClick={() => onViewReason(record)}
-                          className="mt-1 text-xs text-blue-600 hover:underline cursor-pointer flex items-center gap-1"
-                          title="Ver motivo do cancelamento"
-                        >
-                          <span className="w-4 h-4">{icons.info}</span>
-                          (Ver Motivo)
-                        </button>
-                      )}
+                    <td className="p-4 text-sm text-gray-600">
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-medium border
+                            ${farmaciaName === 'Campina Grande' ? 'bg-blue-50 text-blue-700 border-blue-100' : 
+                              farmaciaName === 'João Paulo' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 
+                              'bg-gray-50 text-gray-600 border-gray-100'}`}>
+                            {farmaciaName}
+                        </span>
                     </td>
-
-                    {/* Farmácia (ÚLTIMA COLUNA) */}
-                    <td className={`py-3 px-4 font-medium text-gray-600`}>
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                        farmaciaName === 'Campina Grande' ? 'bg-blue-100 text-blue-800' : 
-                        farmaciaName === 'João Paulo' ? 'bg-green-100 text-green-800' : 
-                        isInvalidFarmacia ? 'bg-red-100 text-red-800' : 
-                        'bg-gray-100 text-gray-600'
-                      }`}
-                        title={isInvalidFarmacia ? `Valor no Campo: ${farmaciaName}` : farmaciaName}
-                      >
-                        {farmaciaName}
-                      </span>
+                    <td className="p-4 text-center">
+                        <StatusBadge status={record.status} />
+                        {record.status === 'Cancelado' && (
+                            <button 
+                                onClick={() => onViewReason(record)}
+                                className="block mx-auto mt-1 text-[10px] text-red-500 hover:text-red-700 underline cursor-pointer"
+                            >
+                                Ver Motivo
+                            </button>
+                        )}
                     </td>
-
                   </tr>
                 );
-              })}
+              })
+            ) : (
+                <tr>
+                    <td colSpan="6" className="py-20 text-center">
+                        <div className="flex flex-col items-center justify-center text-gray-400">
+                            <span className="text-4xl mb-3 opacity-30">{icons.search || '🔍'}</span>
+                            <p className="text-sm">Nenhum registro encontrado para este filtro.</p>
+                        </div>
+                    </td>
+                </tr>
+            )}
           </tbody>
         </table>
-        {(!Array.isArray(filteredRecordsForReport) ||
-          filteredRecordsForReport.length === 0) && (
-          <p className="text-center text-gray-500 py-6">
-            Nenhuma entrada encontrada para os filtros selecionados.
-          </p>
-        )}
       </div>
-      {/* Paginação */}
-      {Array.isArray(filteredRecordsForReport) &&
-        filteredRecordsForReport.length > itemsPerPage && (
-          <div className="flex justify-between items-center pt-4 border-t mt-auto">
-            <span className="text-sm text-gray-700">
-              Mostrando{' '}
-              {Math.min(
-                (currentPage - 1) * itemsPerPage + 1,
-                filteredRecordsForReport.length
-              )}{' '}
-              a{' '}
-              {Math.min(
-                currentPage * itemsPerPage,
-                filteredRecordsForReport.length
-              )}{' '}
-              de {filteredRecordsForReport.length} registros
+
+      {/* --- PAGINAÇÃO (Rodapé) --- */}
+      {totalPages > 1 && (
+         <div className="flex-none p-4 bg-white border-t border-gray-100 flex justify-between items-center z-10">
+            <span className="text-xs md:text-sm text-gray-500">
+               Pág <b>{currentPage}</b> de <b>{totalPages}</b>
             </span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-                disabled={currentPage === 1}
-                className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
-              >
-                Anterior
-              </button>
-              <span className="text-sm font-medium">
-                Página {currentPage} de {totalPages > 0 ? totalPages : 1}
-              </span>
-              <button
-                onClick={() =>
-                  setCurrentPage((p) => Math.min(p + 1, totalPages))
-                }
-                disabled={currentPage === totalPages || totalPages === 0}
-                className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
-              >
-                Próxima
-              </button>
+            <div className="flex gap-2">
+               <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1.5 text-xs md:text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors cursor-pointer"
+               >
+                  Anterior
+               </button>
+               <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1.5 text-xs md:text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors cursor-pointer"
+               >
+                  Próxima
+               </button>
             </div>
-          </div>
-        )}
+         </div>
+      )}
+
     </div>
   );
 }
