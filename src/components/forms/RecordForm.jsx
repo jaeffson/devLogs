@@ -100,8 +100,6 @@ export default function RecordForm({
   useEffect(() => {
     const today = getLocalDateString();
 
-    // Se for um novo registro, forçamos a data de hoje.
-    // Se for edição, mantemos a data original do registro mas bloqueada.
     if (record) {
       setReferenceDate(
         record.referenceDate
@@ -133,7 +131,7 @@ export default function RecordForm({
             ]
       );
     } else {
-      setReferenceDate(today); // Data travada no dia atual
+      setReferenceDate(today);
       if (patient) setLocalPatient(patient);
       if (!farmaciaOrigin) setFarmaciaOrigin('');
     }
@@ -265,40 +263,70 @@ export default function RecordForm({
     newMeds[index][field] = value;
     setMedications(newMeds);
   };
-const handleSubmit = async () => {
-  // ... validações existentes ...
 
-  setIsSaving(true);
-  try {
-    // CALCULA O VALOR TOTAL SOMANDO TODAS AS MEDICAÇÕES
-    const calculatedTotal = medications.reduce((acc, curr) => acc + (parseFloat(curr.value) || 0), 0);
+  const handleSubmit = async () => {
+    // Validação básica
+    let hasError = false;
+    let newErrors = {};
 
-    const payload = {
-      _id: record?._id || record?.id,
-      patientId: localPatient._id || localPatient.id,
-      profissionalId,
-      referenceDate,
-      observation,
-      status: record?.status || 'Pendente',
-      farmacia: farmaciaOrigin, 
-      pharmacy: farmaciaOrigin, 
-      totalValue: calculatedTotal, // <--- ADICIONE ESTA LINHA
-      medications: medications.map(m => ({
-        medicationId: m.medicationId,
-        quantity: m.quantity,
-        value: parseFloat(m.value) || 0
-      }))
-    };
+    if (!localPatient) {
+      newErrors.patient = 'Selecione um paciente.';
+      hasError = true;
+    }
 
-    await onSave(payload);
-    onClose();
-  } catch (error) {
-    console.error(error);
-    addToast('Erro ao salvar registro', 'error');
-  } finally {
-    setIsSaving(false);
-  }
-};
+    // --- MUDANÇA: Validação Obrigatória da Farmácia ---
+    if (!farmaciaOrigin) {
+      newErrors.farmacia = 'A origem (farmácia) é obrigatória.';
+      hasError = true;
+    }
+    // --------------------------------------------------
+
+    const validMeds = medications.every((m) => m.medicationId);
+    if (!validMeds) {
+      newErrors.medications = 'Preencha todos os medicamentos ou remova as linhas vazias.';
+      hasError = true;
+    }
+
+    if (hasError) {
+      setErrors(newErrors);
+      // Feedback visual rápido se houver erro
+      addToast('Preencha os campos obrigatórios.', 'error');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const calculatedTotal = medications.reduce(
+        (acc, curr) => acc + (parseFloat(curr.value) || 0),
+        0
+      );
+
+      const payload = {
+        _id: record?._id || record?.id,
+        patientId: localPatient._id || localPatient.id,
+        profissionalId,
+        referenceDate,
+        observation,
+        status: record?.status || 'Pendente',
+        farmacia: farmaciaOrigin,
+        pharmacy: farmaciaOrigin,
+        totalValue: calculatedTotal,
+        medications: medications.map((m) => ({
+          medicationId: m.medicationId,
+          quantity: m.quantity,
+          value: parseFloat(m.value) || 0,
+        })),
+      };
+
+      await onSave(payload);
+      onClose();
+    } catch (error) {
+      console.error(error);
+      addToast('Erro ao salvar registro', 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <Modal
@@ -306,298 +334,374 @@ const handleSubmit = async () => {
       onClose={onClose}
       title={record ? 'Editar Registro' : 'Novo Registro'}
     >
-      <div className="space-y-6">
-        {/* 1. SELEÇÃO DE PACIENTE */}
-        <div className="relative">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Paciente
-          </label>
-          {!localPatient ? (
-            <div ref={patientInputRef}>
-              <div className="relative">
-                <span className="absolute left-3 top-3 text-gray-400">
-                  {icons.search}
-                </span>
-                <input
-                  type="text"
-                  className={`w-full pl-10 pr-4 py-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition-all ${errors.patient ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
-                  placeholder="Buscar por nome, CPF ou cartão SUS..."
-                  value={patientSearchTerm}
-                  onChange={(e) => {
-                    setPatientSearchTerm(e.target.value);
-                    setShowPatientList(true);
-                  }}
-                  onFocus={() => setShowPatientList(true)}
-                />
-              </div>
-              {showPatientList && (
-                <div
-                  ref={listRef}
-                  className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-xl border border-gray-100 max-h-60 overflow-y-auto"
-                >
-                  {filteredPatients.map((p) => (
-                    <div
-                      key={p.id || p._id}
-                      onClick={() => handleSelectPatient(p)}
-                      className="p-3 hover:bg-blue-50 cursor-pointer border-b border-gray-50 last:border-0"
-                    >
-                      <p className="font-medium text-gray-800">{p.name}</p>
-                      <p className="text-xs text-gray-500">
-                        CPF: {p.cpf || 'N/A'} • SUS: {p.susCard || 'N/A'}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {errors.patient && (
-                <p className="text-sm text-red-500 mt-1">{errors.patient}</p>
-              )}
-            </div>
-          ) : (
-            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex justify-between items-center">
-              <div>
-                <p className="font-bold text-blue-900">{localPatient.name}</p>
-                <p className="text-sm text-blue-600">
-                  CPF: {localPatient.cpf || 'N/A'}
-                </p>
-              </div>
-              <button
-                onClick={handleClearForm}
-                className="text-blue-400 hover:text-red-500 p-2 cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* 2. REPETIR PRESCRIÇÃO */}
-        {activeRecentRecord && !autoFilled && !record && (
-          <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-lg flex justify-between items-center animate-fadeIn">
-            <div className="text-sm text-emerald-800">
-              <span className="font-bold">Último registro encontrado:</span>{' '}
-              {new Date(activeRecentRecord.entryDate).toLocaleDateString()}
-            </div>
-            <button
-              onClick={repeatLastPrescription}
-              className="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded-md hover:bg-emerald-700 cursor-pointer"
-            >
-              Repetir Prescrição
-            </button>
-          </div>
-        )}
-
-        {/* 3. DATA E FARMÁCIA */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Data (Bloqueada)
-            </label>
-            <input
-              type="date"
-              value={referenceDate}
-              readOnly // TRAVA A DATA
-              className="w-full border border-gray-200 bg-gray-50 text-gray-500 rounded-lg px-4 py-2.5 outline-none cursor-not-allowed"
-              title="A data do registro não pode ser alterada manualmente."
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Origem / Farmácia{' '}
-              {isLoadingDistributors && (
-                <span className="text-xs text-blue-500">(Carregando...)</span>
-              )}
-            </label>
+      {/* Estrutura principal: Flex Column
+        Topo e Meio: Scrollam
+        Fundo: Fixo
+      */}
+      <div className="flex flex-col h-[80vh] md:h-auto md:max-h-[85vh]">
+        
+        {/* ÁREA DE CONTEÚDO SCROLLÁVEL */}
+        <div className="flex-1 overflow-y-auto px-1 md:px-2 pb-6 custom-scrollbar">
+          <div className="space-y-6 pt-2">
+            
+            {/* 1. SELEÇÃO DE PACIENTE */}
             <div className="relative">
-              <select
-                value={farmaciaOrigin}
-                onChange={(e) => {
-                  setFarmaciaOrigin(e.target.value);
-                  setErrors((prev) => ({ ...prev, farmacia: null }));
-                }}
-                className={`w-full border rounded-lg px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white cursor-pointer ${errors.farmacia ? 'border-red-500' : 'border-gray-300'}`}
-                disabled={isLoadingDistributors}
-              >
-                <option value="">Selecione a Origem...</option>
-                {distributorList.length > 0
-                  ? distributorList.map((dist, idx) => (
-                      <option
-                        key={dist._id || dist.id || idx}
-                        value={dist.name}
-                      >
-                        {dist.name}
-                      </option>
-                    ))
-                  : !isLoadingDistributors && (
-                      <option disabled>Nenhuma farmácia cadastrada</option>
-                    )}
-              </select>
-              <div className="absolute right-3 top-3 pointer-events-none text-gray-500">
-                {icons.chevronDown}
-              </div>
-            </div>
-            {errors.farmacia && (
-              <p className="text-xs text-red-500 mt-1">{errors.farmacia}</p>
-            )}
-          </div>
-        </div>
-
-        {/* 4. MEDICAMENTOS */}
-        <div>
-          <div className="flex justify-between items-end mb-2">
-            <label className="block text-sm font-medium text-gray-700">
-              Medicamentos
-            </label>
-            <button
-              onClick={() => setIsMedicationModalOpen(true)}
-              className="text-xs text-blue-600 hover:underline cursor-pointer"
-            >
-              + Cadastrar Novo
-            </button>
-          </div>
-
-          <div className="space-y-3">
-            {medications.map((med, index) => (
-              <div
-                key={med.tempId}
-                className="flex gap-2 items-start animate-fadeIn"
-              >
-                <div className="flex-1 relative">
-                  <div
-                    className={`w-full border rounded-lg px-3 py-2 cursor-pointer flex justify-between items-center ${!med.medicationId && errors.medications ? 'border-red-300' : 'border-gray-300'}`}
-                    onClick={() => {
-                      setOpenMedSelectIndex(
-                        openMedSelectIndex === index ? null : index
-                      );
-                      setMedSearchTerm('');
-                    }}
-                  >
-                    <span
-                      className={`block truncate ${!med.medicationId ? 'text-gray-400' : 'text-gray-800'}`}
-                    >
-                      {med.medicationId
-                        ? medicationsList.find(
-                            (m) => (m._id || m.id) === med.medicationId
-                          )?.name || 'Desconhecido'
-                        : 'Selecione o medicamento...'}
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Paciente <span className="text-red-500">*</span>
+              </label>
+              {!localPatient ? (
+                <div ref={patientInputRef}>
+                  <div className="relative group">
+                    <span className="absolute left-4 top-3.5 text-gray-400 group-focus-within:text-blue-500 transition-colors">
+                      {icons.search}
                     </span>
-                    <span className="text-gray-400 text-xs">▼</span>
+                    <input
+                      type="text"
+                      className={`w-full pl-11 pr-4 py-3 bg-gray-50 border rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all ${
+                        errors.patient
+                          ? 'border-red-500 bg-red-50 focus:ring-red-100'
+                          : 'border-gray-200 focus:border-blue-500'
+                      }`}
+                      placeholder="Buscar por nome, CPF ou cartão SUS..."
+                      value={patientSearchTerm}
+                      onChange={(e) => {
+                        setPatientSearchTerm(e.target.value);
+                        setShowPatientList(true);
+                      }}
+                      onFocus={() => setShowPatientList(true)}
+                    />
                   </div>
-
-                  {openMedSelectIndex === index && (
-                    <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
-                      <input
-                        autoFocus
-                        className="w-full p-2 border-b border-gray-100 text-sm outline-none"
-                        placeholder="Filtrar..."
-                        value={medSearchTerm}
-                        onChange={(e) => setMedSearchTerm(e.target.value)}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      {filteredMedications.map((m) => (
-                        <div
-                          key={m.id || m._id}
-                          className="p-2 hover:bg-blue-50 text-sm cursor-pointer"
-                          onClick={() => {
-                            updateMedication(
-                              index,
-                              'medicationId',
-                              m.id || m._id
-                            );
-                            setOpenMedSelectIndex(null);
-                          }}
-                        >
-                          {m.name}
+                  {showPatientList && (
+                    <div
+                      ref={listRef}
+                      className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-2xl border border-gray-100 max-h-60 overflow-y-auto custom-scrollbar"
+                    >
+                      {filteredPatients.length > 0 ? (
+                        filteredPatients.map((p) => (
+                          <div
+                            key={p.id || p._id}
+                            onClick={() => handleSelectPatient(p)}
+                            className="p-3 hover:bg-blue-50 cursor-pointer border-b border-gray-50 last:border-0 transition-colors"
+                          >
+                            <p className="font-medium text-gray-800">{p.name}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              CPF: {p.cpf || 'N/A'} • SUS: {p.susCard || 'N/A'}
+                            </p>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="p-4 text-center text-gray-500 text-sm">
+                          Nenhum paciente encontrado.
                         </div>
-                      ))}
+                      )}
                     </div>
                   )}
+                  {errors.patient && (
+                    <p className="text-sm text-red-500 mt-1 pl-1">
+                      {errors.patient}
+                    </p>
+                  )}
                 </div>
-
-                <div className="w-32">
-                  <select
-                    value={med.quantity}
-                    onChange={(e) =>
-                      updateMedication(index, 'quantity', e.target.value)
-                    }
-                    className="w-full border border-gray-300 rounded-lg px-2 py-2 text-sm outline-none cursor-pointer"
+              ) : (
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-100 flex justify-between items-center shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+                      {icons.user || '👤'}
+                    </div>
+                    <div>
+                      <p className="font-bold text-gray-800 text-base">
+                        {localPatient.name}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        CPF: {localPatient.cpf || 'N/A'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleClearForm}
+                    className="text-gray-400 hover:text-red-500 hover:bg-white p-2 rounded-full transition-all shadow-sm"
+                    title="Remover paciente"
                   >
-                    {quantityOptions.map((q) => (
-                      <option key={q} value={q}>
-                        {q}
-                      </option>
-                    ))}
-                  </select>
+                    ✕
+                  </button>
                 </div>
+              )}
+            </div>
 
-                <div className="w-24">
-                  <input
-                    type="number"
-                    placeholder="R$ 0,00"
-                    value={med.value}
-                    onChange={(e) =>
-                      updateMedication(index, 'value', e.target.value)
-                    }
-                    className="w-full border border-gray-300 rounded-lg px-2 py-2 text-sm outline-none"
-                  />
+            {/* 2. REPETIR PRESCRIÇÃO (Banner) */}
+            {activeRecentRecord && !autoFilled && !record && (
+              <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-3 animate-fadeIn">
+                <div className="flex items-center gap-2 text-sm text-emerald-800">
+                  <span className="text-emerald-500 text-lg">↺</span>
+                  <div>
+                    <span className="font-bold">Último registro encontrado:</span>{' '}
+                    {new Date(activeRecentRecord.entryDate).toLocaleDateString()}
+                  </div>
                 </div>
-
                 <button
-                  onClick={() => removeMedicationRow(index)}
-                  className={`p-2 text-gray-400 hover:text-red-500 cursor-pointer ${medications.length === 1 ? 'opacity-0 pointer-events-none' : ''}`}
+                  onClick={repeatLastPrescription}
+                  className="w-full sm:w-auto text-xs font-semibold bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 shadow-md shadow-emerald-200 transition-all"
                 >
-                  {icons.trash}
+                  Repetir Prescrição
                 </button>
               </div>
-            ))}
+            )}
+
+            {/* 3. DATA E FARMÁCIA */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Data de Referência
+                </label>
+                <input
+                  type="date"
+                  value={referenceDate}
+                  readOnly
+                  className="w-full border border-gray-200 bg-gray-100 text-gray-500 rounded-xl px-4 py-3 outline-none cursor-not-allowed font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Origem / Farmácia{' '}
+                  <span className="text-red-500">*</span> {/* Indicador de Obrigatório */}
+                  {isLoadingDistributors && (
+                    <span className="text-xs text-blue-500 font-normal ml-1 animate-pulse">
+                      (Carregando...)
+                    </span>
+                  )}
+                </label>
+                <div className="relative">
+                  <select
+                    value={farmaciaOrigin}
+                    onChange={(e) => {
+                      setFarmaciaOrigin(e.target.value);
+                      setErrors((prev) => ({ ...prev, farmacia: null }));
+                    }}
+                    className={`w-full border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-100 appearance-none bg-white cursor-pointer transition-all ${
+                      errors.farmacia
+                        ? 'border-red-500 focus:border-red-500'
+                        : 'border-gray-200 focus:border-blue-500'
+                    }`}
+                    disabled={isLoadingDistributors}
+                  >
+                    <option value="">Selecione a Origem...</option>
+                    {distributorList.length > 0 ? (
+                      distributorList.map((dist, idx) => (
+                        <option
+                          key={dist._id || dist.id || idx}
+                          value={dist.name}
+                        >
+                          {dist.name}
+                        </option>
+                      ))
+                    ) : (
+                      !isLoadingDistributors && <option disabled>Nenhuma farmácia cadastrada</option>
+                    )}
+                  </select>
+                  <div className="absolute right-4 top-3.5 pointer-events-none text-gray-400">
+                    {icons.chevronDown}
+                  </div>
+                </div>
+                {errors.farmacia && (
+                  <p className="text-xs text-red-500 mt-1 pl-1">
+                    {errors.farmacia}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <hr className="border-gray-100" />
+
+            {/* 4. MEDICAMENTOS */}
+            <div>
+              <div className="flex justify-between items-center mb-4">
+                <label className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                  Medicamentos
+                  <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">
+                    {medications.length}
+                  </span>
+                </label>
+                <button
+                  onClick={() => setIsMedicationModalOpen(true)}
+                  className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                >
+                  + Novo Item no Estoque
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {medications.map((med, index) => (
+                  <div
+                    key={med.tempId}
+                    className="flex flex-col sm:flex-row gap-3 items-start sm:items-center bg-gray-50/80 p-3 rounded-xl border border-gray-100 group hover:border-blue-200 transition-all animate-fadeIn"
+                  >
+                    {/* Select Medicamento */}
+                    <div className="flex-1 w-full relative">
+                      <div
+                        className={`w-full bg-white border rounded-lg px-3 py-2.5 cursor-pointer flex justify-between items-center shadow-sm hover:border-blue-300 transition-all ${
+                          !med.medicationId && errors.medications
+                            ? 'border-red-300'
+                            : 'border-gray-200'
+                        }`}
+                        onClick={() => {
+                          setOpenMedSelectIndex(
+                            openMedSelectIndex === index ? null : index
+                          );
+                          setMedSearchTerm('');
+                        }}
+                      >
+                        <span
+                          className={`block truncate text-sm font-medium ${
+                            !med.medicationId ? 'text-gray-400' : 'text-gray-700'
+                          }`}
+                        >
+                          {med.medicationId
+                            ? medicationsList.find(
+                                (m) => (m._id || m.id) === med.medicationId
+                              )?.name || 'Desconhecido'
+                            : 'Selecione o medicamento...'}
+                        </span>
+                        <span className="text-gray-400 text-xs ml-2">▼</span>
+                      </div>
+
+                      {openMedSelectIndex === index && (
+                        <div className="absolute z-20 w-full bg-white border border-gray-200 rounded-lg shadow-xl mt-1 max-h-56 overflow-y-auto custom-scrollbar">
+                          <div className="sticky top-0 bg-white p-2 border-b border-gray-100">
+                            <input
+                              autoFocus
+                              className="w-full bg-gray-50 border border-gray-200 rounded-md px-3 py-1.5 text-sm outline-none focus:border-blue-400"
+                              placeholder="Filtrar..."
+                              value={medSearchTerm}
+                              onChange={(e) => setMedSearchTerm(e.target.value)}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </div>
+                          {filteredMedications.map((m) => (
+                            <div
+                              key={m.id || m._id}
+                              className="px-4 py-2.5 hover:bg-blue-50 text-sm text-gray-700 cursor-pointer border-b border-gray-50 last:border-0"
+                              onClick={() => {
+                                updateMedication(
+                                  index,
+                                  'medicationId',
+                                  m.id || m._id
+                                );
+                                setOpenMedSelectIndex(null);
+                              }}
+                            >
+                              {m.name}
+                            </div>
+                          ))}
+                          {filteredMedications.length === 0 && (
+                            <div className="p-3 text-center text-xs text-gray-400">
+                              Nenhum resultado.
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex gap-2 w-full sm:w-auto">
+                      {/* Quantidade */}
+                      <div className="w-1/2 sm:w-32">
+                        <select
+                          value={med.quantity}
+                          onChange={(e) =>
+                            updateMedication(index, 'quantity', e.target.value)
+                          }
+                          className="w-full bg-white border border-gray-200 rounded-lg px-2 py-2.5 text-sm outline-none cursor-pointer focus:border-blue-400"
+                        >
+                          {quantityOptions.map((q) => (
+                            <option key={q} value={q}>
+                              {q}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Valor */}
+                      <div className="w-1/2 sm:w-28 relative">
+                        <span className="absolute left-2.5 top-2.5 text-xs text-gray-400">R$</span>
+                        <input
+                          type="number"
+                          placeholder="0,00"
+                          value={med.value}
+                          onChange={(e) =>
+                            updateMedication(index, 'value', e.target.value)
+                          }
+                          className="w-full pl-7 pr-2 py-2.5 bg-white border border-gray-200 rounded-lg text-sm outline-none focus:border-blue-400"
+                        />
+                      </div>
+
+                      {/* Deletar */}
+                      <button
+                        onClick={() => removeMedicationRow(index)}
+                        className={`p-2.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all cursor-pointer ${
+                          medications.length === 1 ? 'opacity-0 pointer-events-none' : ''
+                        }`}
+                        title="Remover item"
+                      >
+                        {icons.trash}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                onClick={addMedicationRow}
+                className="mt-4 w-full py-2 border-2 border-dashed border-blue-100 text-blue-500 rounded-xl text-sm font-semibold hover:bg-blue-50 hover:border-blue-300 transition-all flex justify-center items-center gap-2 cursor-pointer"
+              >
+                <span>+</span> Adicionar outro medicamento
+              </button>
+              
+              {errors.medications && (
+                <p className="text-sm text-center text-red-500 mt-2 bg-red-50 py-1 rounded">
+                  {errors.medications}
+                </p>
+              )}
+            </div>
+
+            {/* 5. OBSERVAÇÕES */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Observações
+              </label>
+              <textarea
+                rows="3"
+                value={observation}
+                onChange={(e) => setObservation(e.target.value)}
+                className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all text-sm"
+                placeholder="Insira detalhes adicionais sobre o atendimento..."
+              />
+            </div>
           </div>
-
-          <button
-            onClick={addMedicationRow}
-            className="mt-3 text-sm text-blue-600 font-medium hover:text-blue-700 flex items-center gap-1 cursor-pointer"
-          >
-            + Adicionar outro medicamento
-          </button>
-          {errors.medications && (
-            <p className="text-xs text-red-500 mt-2">{errors.medications}</p>
-          )}
         </div>
 
-        {/* 5. OBSERVAÇÕES */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Observações (Opcional)
-          </label>
-          <textarea
-            rows="3"
-            value={observation}
-            onChange={(e) => setObservation(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Detalhes adicionais..."
-          />
-        </div>
-
-        {/* AÇÕES */}
-        <div className="flex gap-3 pt-4 border-t border-gray-100">
+        {/* RODAPÉ FIXO DE AÇÕES */}
+        <div className="p-4 md:p-6 border-t border-gray-100 bg-white rounded-b-xl z-10 flex gap-3 shadow-top">
           <button
             onClick={onClose}
             disabled={isSaving}
-            className="flex-1 py-3 border border-gray-300 rounded-xl font-medium text-gray-700 hover:bg-gray-50 cursor-pointer"
+            className="flex-1 py-3.5 border border-gray-200 rounded-xl font-semibold text-gray-600 hover:bg-gray-50 hover:text-gray-800 transition-colors cursor-pointer"
           >
             Cancelar
           </button>
           <button
             onClick={handleSubmit}
             disabled={isSaving}
-            className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 shadow-lg shadow-blue-200 flex justify-center items-center gap-2 cursor-pointer"
+            className="flex-1 py-3.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-200 hover:shadow-blue-300 active:scale-[0.99] transition-all flex justify-center items-center gap-2 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
           >
             {isSaving ? (
-              <ClipLoader size={20} color="#fff" />
+              <div className="flex items-center gap-2">
+                <ClipLoader size={18} color="#fff" />
+                <span>Salvando...</span>
+              </div>
             ) : record ? (
               'Salvar Alterações'
             ) : (
-              'Criar Registro'
+              'Confirmar Registro'
             )}
           </button>
         </div>

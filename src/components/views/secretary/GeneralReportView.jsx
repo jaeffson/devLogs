@@ -1,4 +1,5 @@
 // src/components/views/secretary/GeneralReportView.jsx
+// (ATUALIZADO: Adicionado seletor de Ano nos filtros locais)
 
 import React, { useState, useMemo, useEffect } from 'react';
 import jsPDF from 'jspdf';
@@ -36,6 +37,7 @@ export function GeneralReportView({
   
   // --- Estados ---
   const [filterPeriod, setFilterPeriod] = useState('all');
+  const [filterYear, setFilterYear] = useState(new Date().getFullYear()); // NOVO: Estado do Ano
   const [filterStatus, setFilterStatus] = useState(initialFilterStatus || 'all');
   const [reportSearchTerm, setReportSearchTerm] = useState('');
   const [selectedPharmacy, setSelectedPharmacy] = useState(''); 
@@ -54,10 +56,10 @@ export function GeneralReportView({
     }
   }, [initialFilterStatus, onReportViewed]);
 
-  // Reseta paginação
+  // Reseta paginação quando filtros mudam
   useEffect(() => {
     setCurrentPage(1);
-  }, [filterPeriod, filterStatus, debouncedReportSearchTerm, selectedPharmacy]);
+  }, [filterPeriod, filterStatus, debouncedReportSearchTerm, selectedPharmacy, filterYear]);
 
   // Opções de Status
   const statusOptions = useMemo(() => {
@@ -77,7 +79,18 @@ export function GeneralReportView({
   const filteredRecordsForReport = useMemo(() => {
     let filtered = Array.isArray(records) ? [...records] : [];
     
-    // Período
+    // 1. Filtro de Ano (NOVO)
+    if (filterYear) {
+      filtered = filtered.filter(r => {
+        try {
+          return new Date(r.entryDate).getFullYear() === parseInt(filterYear);
+        } catch (e) {
+          return false;
+        }
+      });
+    }
+
+    // 2. Período (Dias)
     if (filterPeriod !== 'all') {
       const days = parseInt(filterPeriod, 10);
       if (!isNaN(days)) {
@@ -90,7 +103,7 @@ export function GeneralReportView({
       }
     }
 
-    // Status
+    // 3. Status
     const now = new Date().getTime();
     if (filterStatus !== 'all') {
       if (filterStatus === 'Vencido') {
@@ -106,12 +119,12 @@ export function GeneralReportView({
       }
     }
 
-    // Farmácia
+    // 4. Farmácia
     if (selectedPharmacy) {
         filtered = filtered.filter(r => getFarmaciaName(r) === selectedPharmacy);
     }
 
-    // Busca
+    // 5. Busca
     const searchTermLower = debouncedReportSearchTerm.toLowerCase();
     if (searchTermLower) {
       filtered = filtered.filter((r) =>
@@ -123,7 +136,7 @@ export function GeneralReportView({
     return filtered.length > 0
       ? filtered.sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate))
       : [];
-  }, [records, filterPeriod, filterStatus, selectedPharmacy, debouncedReportSearchTerm, getPatientNameById]);
+  }, [records, filterPeriod, filterStatus, selectedPharmacy, debouncedReportSearchTerm, getPatientNameById, filterYear]);
 
   // Paginação
   const totalPages = useMemo(() => Math.ceil(filteredRecordsForReport.length / itemsPerPage), [filteredRecordsForReport, itemsPerPage]);
@@ -145,7 +158,7 @@ export function GeneralReportView({
       const statusLabel = statusOptions.find(o => o.value === filterStatus)?.label || 'Todos';
       const pharmacyLabel = selectedPharmacy || 'Todas';
       
-      const filtersText = `Filtros: ${filterPeriod === 'all' ? 'Todo Período' : `${filterPeriod} dias`} | Status: ${statusLabel} | Unidade: ${pharmacyLabel}`;
+      const filtersText = `Ano: ${filterYear} | Filtros: ${filterPeriod === 'all' ? 'Todo Período' : `${filterPeriod} dias`} | Status: ${statusLabel} | Unidade: ${pharmacyLabel}`;
       const generationInfo = `Gerado em: ${new Date().toLocaleString('pt-BR')} por ${user?.name || 'Sistema'}`;
 
       doc.setFontSize(16);
@@ -161,13 +174,19 @@ export function GeneralReportView({
         const farmacia = getFarmaciaName(record); 
         const patientName = getPatientNameById(record.patientId) || 'N/A'; 
         const date = new Date(record.entryDate).toLocaleDateString('pt-BR');
-        const delivery = record.deliveryDate ? new Date(record.deliveryDate).toLocaleDateString('pt-BR') : '-';
+        
+        let deliveryFormatted = '-';
+        if (record.deliveryDate) {
+           const dObj = new Date(record.deliveryDate);
+           dObj.setMinutes(dObj.getMinutes() + dObj.getTimezoneOffset());
+           deliveryFormatted = dObj.toLocaleDateString('pt-BR');
+        }
         
         const items = Array.isArray(record.medications) 
            ? record.medications.map(m => `${getMedicationName(m.medicationId, medications)} (${m.quantity})`).join(', ')
            : '0 itens';
 
-        return [patientName, date, delivery, items, farmacia, record.status];
+        return [patientName, date, deliveryFormatted, items, farmacia, record.status];
       });
 
       autoTable(doc, {
@@ -192,11 +211,20 @@ export function GeneralReportView({
     }
   };
 
+  // Gera lista de anos (Atual - 3 até Atual + 2)
+  const availableYears = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    const years = [];
+    for (let i = currentYear - 3; i <= currentYear + 2; i++) {
+        years.push(i);
+    }
+    return years.reverse(); // Do mais recente para o mais antigo
+  }, []);
+
   return (
-    // Layout Full Screen
     <div className="flex flex-col h-[calc(100vh-6rem)] w-full bg-white rounded-xl shadow-sm overflow-hidden animate-fade-in">
       
-      {/* --- HEADER (Fixo) --- */}
+      {/* --- HEADER --- */}
       <div className="flex-none p-4 md:p-6 border-b border-gray-100 bg-white z-10">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
           <div className="flex items-center gap-3">
@@ -244,6 +272,19 @@ export function GeneralReportView({
 
             {/* Inputs Grid */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                {/* Filtro de Ano (NOVO) */}
+                <div className="md:col-span-2">
+                   <select
+                        value={filterYear}
+                        onChange={(e) => setFilterYear(parseInt(e.target.value))}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-gray-50 cursor-pointer hover:bg-white transition-colors"
+                    >
+                        {availableYears.map(year => (
+                            <option key={year} value={year}>{year}</option>
+                        ))}
+                    </select>
+                </div>
+
                 <div className="md:col-span-3">
                     <select
                         value={selectedPharmacy}
@@ -270,7 +311,7 @@ export function GeneralReportView({
                     </select>
                 </div>
 
-                <div className="md:col-span-6 relative">
+                <div className="md:col-span-4 relative">
                     <input
                         type="text"
                         placeholder="Buscar paciente, farmácia..."
@@ -286,7 +327,7 @@ export function GeneralReportView({
             </div>
             
             <div className="flex justify-between items-center text-xs text-gray-500 px-1 mt-1">
-                 <span><b>{filteredRecordsForReport.length}</b> resultados</span>
+                 <span><b>{filteredRecordsForReport.length}</b> resultados em <b>{filterYear}</b></span>
                  <span>{selectedPharmacy ? `Filtro: ${selectedPharmacy}` : 'Todas as unidades'}</span>
             </div>
         </div>
@@ -318,7 +359,10 @@ export function GeneralReportView({
                 if (record.status === 'Atendido' && record.deliveryDate) {
                     try {
                         let dt = new Date(record.deliveryDate);
-                        if(!isNaN(dt)) deliveryDateFormatted = dt.toLocaleDateString('pt-BR');
+                        if(!isNaN(dt)) {
+                             dt.setMinutes(dt.getMinutes() + dt.getTimezoneOffset());
+                             deliveryDateFormatted = dt.toLocaleDateString('pt-BR');
+                        }
                     } catch(e){}
                 }
 
@@ -378,7 +422,7 @@ export function GeneralReportView({
         </table>
       </div>
 
-      {/* --- PAGINAÇÃO (Rodapé) --- */}
+      {/* --- PAGINAÇÃO --- */}
       {totalPages > 1 && (
          <div className="flex-none p-4 bg-white border-t border-gray-100 flex justify-between items-center z-10">
             <span className="text-xs md:text-sm text-gray-500">
