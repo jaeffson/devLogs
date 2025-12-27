@@ -1,5 +1,5 @@
 // src/layouts/MainLayout.jsx
-// (CORRIGIDO: Passando filterYear e dados via context para o Outlet)
+// (VISUAL REFACTOR: Solid Backgrounds + Premium Glass Finish)
 
 import React, {
   useState,
@@ -37,7 +37,7 @@ import {
 import { formatUserName } from '../utils/helpers';
 import { icons } from '../utils/icons';
 
-// --- Helpers de Clima e Data ---
+// --- Helpers de Clima e Data (Lógica Preservada) ---
 function getWeatherInfo(code, isDay = true) {
   const weatherMap = {
     0: { text: 'Céu limpo', icon: isDay ? WiDaySunny : WiNightClear },
@@ -119,74 +119,54 @@ function useWeather(latitude, longitude) {
   return { weather, error };
 }
 
-// --- Mobile Bottom Navigation Bar ---
+// --- Mobile Bottom Navigation (Solid + Blur) ---
 const MobileBottomNav = ({ menuItems, location, handleOpenDrawer }) => {
   const primaryItems = menuItems.slice(0, 4);
-  const bgColors = [
-    'bg-indigo-200/50',
-    'bg-blue-200/50',
-    'bg-pink-200/50',
-    'bg-green-200/50',
-  ];
-
+  
   const isCurrentPathActive = (path) =>
     location.pathname === path ||
     (path !== '/' && location.pathname.startsWith(path));
 
-  const getIconClass = (path) => {
-    const isActive = isCurrentPathActive(path);
-    return isActive
-      ? 'text-indigo-700'
-      : 'text-gray-500 group-hover:text-indigo-600';
-  };
-
-  const getActiveBgClass = (path, index) => {
-    const isActive = isCurrentPathActive(path);
-    const baseColor = bgColors[index % bgColors.length];
-    return isActive ? baseColor : 'bg-transparent group-hover:bg-gray-50';
-  };
-
   return (
-    <nav className="fixed bottom-0 left-0 right-0 h-16 bg-white z-50 md:hidden shadow-2xl rounded-t-2xl overflow-hidden">
-      <div className="flex justify-around items-center h-full max-w-lg mx-auto">
-        {primaryItems.map((item, index) => {
+    <nav 
+      // MUDANÇA AQUI: bg-white/95 e dark:bg-slate-900/95 para fundo mais sólido
+      className="fixed bottom-0 left-0 right-0 h-20 z-50 md:hidden pb-safe transition-all duration-300
+                 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl backdrop-saturate-200
+                 border-t border-gray-200 dark:border-slate-800 shadow-[0_-8px_30px_rgba(0,0,0,0.08)]"
+      aria-label="Navegação móvel"
+    >
+      <div className="flex justify-around items-center h-full max-w-lg mx-auto px-2">
+        {primaryItems.map((item) => {
           const isActive = isCurrentPathActive(item.path);
           return (
             <Link
               key={item.path}
               to={item.path}
-              className="flex flex-col items-center justify-center w-1/4 h-full group transition-all duration-300 cursor-pointer"
+              className={`flex flex-col items-center justify-center w-full h-14 rounded-2xl group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 active:scale-95 transition-all duration-200
+                ${isActive ? 'bg-indigo-50 dark:bg-indigo-500/20' : 'hover:bg-gray-100 dark:hover:bg-slate-800'}`}
               aria-current={isActive ? 'page' : undefined}
-              title={item.label}
             >
-              <div
-                className={`w-14 h-10 flex items-center justify-center rounded-2xl transition-all duration-300 
-                ${getActiveBgClass(item.path, index)}`}
-              >
-                <span
-                  className={`w-6 h-6 transition-colors duration-300 ${getIconClass(item.path)}`}
-                >
-                  {item.icon}
-                </span>
-              </div>
+              <span className={`text-2xl mb-0.5 transition-colors duration-200 ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`}>
+                {item.icon}
+              </span>
+              <span className={`text-[10px] font-bold transition-colors duration-200 ${isActive ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-500 dark:text-slate-400'}`}>
+                 {item.label}
+              </span>
             </Link>
           );
         })}
 
         <button
           onClick={handleOpenDrawer}
-          className="flex flex-col items-center justify-center w-1/4 h-full group transition-colors cursor-pointer"
-          title="Mais Opções"
+          className="flex flex-col items-center justify-center w-full h-14 rounded-2xl group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 active:scale-95 transition-all duration-200 hover:bg-gray-100 dark:hover:bg-slate-800"
+          aria-label="Abrir menu lateral"
         >
-          <div
-            className={`w-14 h-10 flex items-center justify-center rounded-2xl transition-all duration-300 bg-transparent group-hover:bg-gray-50`}
-          >
-            <span
-              className={`w-6 h-6 text-gray-500 group-hover:text-indigo-600`}
-            >
-              {icons.menu}
-            </span>
-          </div>
+          <span className="text-2xl mb-0.5 text-slate-400 dark:text-slate-500 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+            {icons.menu}
+          </span>
+          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 group-hover:text-indigo-700 dark:group-hover:text-indigo-300 transition-colors">
+            Menu
+          </span>
         </button>
       </div>
     </nav>
@@ -218,7 +198,7 @@ export default function MainLayout({
   const idleTimerRef = useRef(null);
   const collapseTimerRef = useRef(null);
 
-  // --- LÓGICA DE AUTO-COLAPSO (Desktop) ---
+  // --- LÓGICA PRESERVADA: Auto-Colapso ---
   const handleCollapseSidebar = useCallback(() => {
     if (!isMouseOverSidebar) {
       setIsSidebarCollapsed(true);
@@ -256,7 +236,7 @@ export default function MainLayout({
     };
   }, [resetCollapseTimer]);
 
-  // --- LÓGICA DE TIMER DE INATIVIDADE ---
+  // --- LÓGICA PRESERVADA: Timer de Inatividade ---
   const logoutOnIdle = useCallback(() => {
     handleLogout();
     navigate('/login');
@@ -292,12 +272,12 @@ export default function MainLayout({
     };
   }, [resetIdleTimer]);
 
-  // --- LÓGICA DE MENUS ---
+  // --- LÓGICA PRESERVADA: Menus por Role ---
   const getRoleName = (role) => {
     const names = {
       profissional: 'Profissional',
       secretario: 'Secretaria',
-      admin: 'Admin',
+      admin: 'Administrador',
     };
     return names[role] || role;
   };
@@ -342,7 +322,7 @@ export default function MainLayout({
     }
   }, [user?.role]);
 
-  // --- Efeitos de Fechar Dropdown ---
+  // --- Efeitos ---
   useEffect(() => {
     function handleClickOutside(event) {
       if (profileRef.current && !profileRef.current.contains(event.target)) {
@@ -364,80 +344,102 @@ export default function MainLayout({
   };
 
   return (
-    <div className="relative min-h-screen md:h-screen md:flex md:overflow-hidden bg-gray-100 pb-16 md:pb-0">
-      {/* 1. OVERLAY Mobile */}
+    <div className="relative min-h-screen md:h-screen md:flex md:overflow-hidden bg-gray-50 dark:bg-slate-950 transition-colors duration-300">
+      
+      {/* Overlay Mobile (Suavizado) */}
       {isSidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 md:hidden transition-opacity duration-300"
+          className="fixed inset-0 bg-white/20 dark:bg-slate-900/40 backdrop-blur-md z-40 md:hidden transition-all duration-500 ease-in-out"
           onClick={() => setIsSidebarOpen(false)}
           aria-hidden="true"
         />
       )}
 
-      {/* 2. SIDEBAR */}
+      {/* SIDEBAR (Desktop & Drawer Mobile) */}
       <aside
+        // MUDANÇA AQUI: Fundo mais sólido (bg-white/95) para destacar como "bloco"
         className={`
           fixed inset-y-0 left-0 flex-shrink-0 flex-col z-50 
-          bg-slate-900 shadow-2xl transition-all duration-300 ease-in-out
-          hidden md:flex md:static md:translate-x-0 
-          ${isSidebarCollapsed ? 'md:w-20' : 'md:w-64'}
-          ${isSidebarOpen ? 'w-11/12 max-w-xs translate-x-0 flex' : 'hidden -translate-x-full'}
+          bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl backdrop-saturate-150 
+          border-r border-gray-200 dark:border-slate-800
+          shadow-2xl md:shadow-[4px_0_24px_rgba(0,0,0,0.02)] transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)]
+          hidden md:flex md:static 
+          ${isSidebarCollapsed ? 'md:w-[72px]' : 'md:w-72'}
+          ${isSidebarOpen ? 'w-[85vw] max-w-xs translate-x-0 flex' : 'hidden -translate-x-full md:translate-x-0'}
         `}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
+        aria-label="Menu Principal"
       >
-        <div className="p-4 border-b border-slate-700 flex justify-between items-center h-16">
-          <div
-            className={`overflow-hidden transition-all duration-300 ${isSidebarCollapsed ? 'md:w-0' : 'md:w-auto'}`}
-          >
-            <h1 className="text-2xl font-bold text-white whitespace-nowrap">
-              Medlogs
+        {/* Header da Sidebar */}
+        <div className="flex-shrink-0 flex items-center h-20 px-4 border-b border-gray-100 dark:border-slate-800">
+          <div className={`flex items-center gap-3 overflow-hidden transition-all duration-300 ${isSidebarCollapsed ? 'md:w-0 opacity-0' : 'md:w-auto opacity-100'}`}>
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-blue-700 flex items-center justify-center text-white shadow-lg shadow-indigo-500/30 shrink-0">
+               <span className="font-bold text-lg tracking-tight">M</span>
+            </div>
+            <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100 whitespace-nowrap tracking-tight">
+              MedLogs
             </h1>
           </div>
 
+          <div className={`${isSidebarCollapsed ? 'w-full flex justify-center' : 'ml-auto'}`}>
+             <button
+              className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-2.5 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 transition-all active:scale-95 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none"
+              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              aria-label={isSidebarCollapsed ? "Expandir menu" : "Colapsar menu"}
+            >
+              <span className="w-5 h-5 block">
+                {isSidebarCollapsed ? icons.chevronRight : icons.chevronLeft}
+              </span>
+            </button>
+          </div>
+          
           <button
-            className="hidden md:block text-slate-400 hover:text-white p-1 transition-colors"
-            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-          >
-            <span className="w-5 h-5">
-              {isSidebarCollapsed ? icons.chevronRight : icons.chevronLeft}
-            </span>
-          </button>
-
-          <button
-            className="md:hidden text-slate-400 hover:text-white p-1 transition-colors"
+            className="md:hidden ml-auto text-slate-400 hover:text-slate-600 p-2 rounded-lg active:scale-90 transition-transform"
             onClick={() => setIsSidebarOpen(false)}
           >
             <span className="w-6 h-6">{icons.close}</span>
           </button>
         </div>
 
-        <nav className="flex-grow p-4 overflow-y-auto">
+        {/* Links de Navegação */}
+        <nav className="flex-grow p-4 overflow-y-auto overflow-x-hidden space-y-1.5 custom-scrollbar">
           {menuItems.map((item) => {
             const isActive =
               location.pathname === item.path ||
               (item.path !== '/' && location.pathname.startsWith(item.path));
+            
             return (
               <Link
                 key={item.path}
                 to={item.path}
                 onClick={handleLinkClick}
                 title={isSidebarCollapsed ? item.label : undefined}
-                className={`relative w-full text-left p-3 rounded-xl text-sm transition-all duration-300 mb-2 flex items-center 
-                          ${isSidebarCollapsed ? 'md:justify-center' : 'md:justify-start'}
+                className={`relative group w-full flex items-center p-3.5 rounded-xl text-sm font-medium transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 active:scale-[0.98]
+                          ${isSidebarCollapsed ? 'justify-center' : 'justify-start'}
                           ${
                             isActive
-                              ? 'bg-indigo-600 text-white font-semibold shadow-inner shadow-indigo-800/50'
-                              : 'text-slate-300 hover:bg-indigo-700/50 hover:text-white group hover:shadow-lg hover:shadow-indigo-500/10'
+                              ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 shadow-sm ring-1 ring-indigo-500/10'
+                              : 'text-slate-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200'
                           }`}
               >
+                {/* Indicador Ativo Sutíl */}
+                {isActive && (
+                   <div className="absolute left-0.5 top-3 bottom-3 w-1 bg-indigo-600 rounded-full" />
+                )}
+
                 <span
-                  className={`w-5 h-5 flex-shrink-0 text-lg transition-transform ${isSidebarCollapsed ? 'md:mx-auto' : 'md:mr-4'}`}
+                  className={`w-6 h-6 flex-shrink-0 text-xl transition-all duration-300 
+                    ${isActive ? 'text-indigo-600 dark:text-indigo-400 scale-110' : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300'}
+                    ${isSidebarCollapsed ? '' : 'mr-3.5'}
+                  `}
                 >
                   {item.icon}
                 </span>
+                
                 <span
-                  className={`transition-opacity whitespace-nowrap overflow-hidden duration-300 ${isSidebarCollapsed ? 'md:opacity-0 md:w-0' : 'md:opacity-100 md:w-auto'}`}
+                  className={`whitespace-nowrap overflow-hidden transition-all duration-300 font-medium
+                  ${isSidebarCollapsed ? 'md:w-0 md:opacity-0 hidden' : 'md:w-auto md:opacity-100 block'}`}
                 >
                   {item.label}
                 </span>
@@ -445,59 +447,70 @@ export default function MainLayout({
             );
           })}
         </nav>
+        
+        {/* Footer Sidebar */}
+        {!isSidebarCollapsed && (
+            <div className="p-5 border-t border-gray-100 dark:border-slate-800 text-xs font-bold text-slate-400 dark:text-slate-600 text-center uppercase tracking-widest">
+                MedLogs System
+            </div>
+        )}
       </aside>
 
       {/* --- CONTEÚDO PRINCIPAL --- */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* HEADER ATUALIZADO */}
-        <header className="bg-white shadow-sm px-6 flex justify-between items-center flex-shrink-0 z-10 h-16">
+      <div className="flex-1 flex flex-col overflow-hidden bg-gray-50 dark:bg-slate-950 transition-colors duration-300">
+        
+        {/* HEADER */}
+        <header className="sticky top-0 z-30 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-gray-200 dark:border-slate-800 px-4 md:px-8 flex justify-between items-center h-16 md:h-20 transition-colors duration-300">
           
-          {/* Lado Esquerdo: Toggle Mobile + Cidade/Data Limpo */}
+          {/* Esquerda: Mobile Toggle + Contexto */}
           <div className="flex items-center gap-4">
             <button
-              className="text-gray-600 hover:text-gray-900 md:hidden p-1 cursor-pointer"
+              className="text-slate-500 dark:text-slate-400 md:hidden p-2 -ml-2 rounded-xl active:bg-gray-100 dark:active:bg-slate-800 transition-colors active:scale-95"
               onClick={() => setIsSidebarOpen(true)}
+              aria-label="Abrir menu"
             >
-              <span className="w-6 h-6">{icons.menu}</span>
+              <span className="w-7 h-7 block">{icons.menu}</span>
             </button>
 
-            <div className="hidden md:flex flex-col justify-center">
-              <h2 className="text-base font-bold text-gray-800 leading-none">
+            <div className="hidden md:flex flex-col">
+              <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 leading-tight tracking-tight">
                 {fixedLocationName}
               </h2>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-xs font-medium text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
-                   {weather ? `${weather.temp}°C` : '--'}
-                </span>
-                <span className="text-xs text-gray-500 capitalize">
+              <div className="flex items-center gap-2.5 mt-0.5">
+                <div className="flex items-center text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20 px-2 py-0.5 rounded-md">
+                    <span className="text-lg mr-1.5">{weather?.IconComponent && <weather.IconComponent />}</span>
+                    <span className="text-sm font-bold">{weather ? `${weather.temp}°C` : '--'}</span>
+                </div>
+                <span className="text-xs font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                   {formattedDate}
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Lado Direito: Seletor de Ano + Perfil */}
-          <div className="flex items-center gap-4 md:gap-6">
+          {/* Direita: Ações + Perfil */}
+          <div className="flex items-center gap-3 md:gap-5">
             
-            {/* Seletor de Ano Moderno */}
+            {/* Seletor de Ano */}
             {(user?.role === 'admin' || user?.role === 'secretario') && (
-              <div className="hidden sm:flex items-center">
+              <div className="hidden sm:block">
                 <div className="relative group">
                     <select
                       value={filterYear}
                       onChange={(e) => setFilterYear(parseInt(e.target.value))}
-                      className="appearance-none cursor-pointer bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 text-sm font-medium rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-24 p-2 pl-3 transition-colors outline-none"
+                      className="appearance-none cursor-pointer bg-gray-100/50 dark:bg-slate-800/50 hover:bg-white dark:hover:bg-slate-700 border border-gray-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm font-semibold rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 block w-28 py-2 pl-3.5 pr-8 transition-all outline-none shadow-sm"
+                      aria-label="Filtrar por ano"
                     >
                       {[...Array(2)].map((_, i) => {
                         const year = new Date().getFullYear() + 1 - i;
                         return (
                           <option key={year} value={year}>
-                            Ano {year}
+                            {year}
                           </option>
                         );
                       })}
                     </select>
-                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-slate-500">
                       <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
                         <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/>
                       </svg>
@@ -506,71 +519,82 @@ export default function MainLayout({
               </div>
             )}
 
-            {/* Dropdown de Perfil */}
+            {/* Perfil Dropdown */}
             <div className="relative" ref={profileRef}>
               <button
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
-                className="flex items-center gap-3 text-sm font-medium text-gray-700 rounded-full hover:bg-gray-50 p-1 pr-2 transition-colors cursor-pointer border border-transparent hover:border-gray-200"
+                className="flex items-center gap-3 pl-1 pr-2 py-1 rounded-full hover:bg-gray-100/80 dark:hover:bg-slate-800/50 transition-all cursor-pointer border border-transparent focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none active:scale-95"
+                aria-expanded={isProfileOpen}
+                aria-haspopup="true"
               >
-                <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center text-sm font-bold shadow-sm">
+                <div className="w-10 h-10 rounded-full bg-indigo-600 dark:bg-indigo-500 text-white flex items-center justify-center text-sm font-bold shadow-md ring-2 ring-white dark:ring-slate-800">
                   {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
                 </div>
                 <div className="hidden md:flex flex-col items-start text-xs">
-                    <span className="font-bold text-gray-800 leading-none mb-0.5">{formatUserName(user?.name)}</span>
-                    <span className="text-gray-500 font-normal">{getRoleName(user?.role)}</span>
+                    <span className="font-bold text-slate-700 dark:text-slate-200 leading-none mb-1">{formatUserName(user?.name)}</span>
+                    <span className="text-slate-500 dark:text-slate-400 font-medium px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800">{getRoleName(user?.role)}</span>
                 </div>
                 <span
-                  className={`hidden md:block transition-transform text-gray-400 w-4 h-4 ${isProfileOpen ? 'rotate-180' : ''}`}
+                  className={`hidden md:block transition-transform duration-300 text-slate-400 w-4 h-4 ${isProfileOpen ? 'rotate-180' : ''}`}
                 >
                   {icons.chevronDown}
                 </span>
               </button>
 
               {isProfileOpen && (
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl py-2 z-50 border border-gray-100 ring-1 ring-black ring-opacity-5">
-                  <div className="px-4 py-3 border-b border-gray-50">
-                    <p className="text-sm font-semibold text-gray-900">
+                <div className="absolute right-0 mt-3 w-72 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-2xl shadow-2xl py-2 z-50 border border-gray-100 dark:border-slate-800 ring-1 ring-black/5 animate-in fade-in slide-in-from-top-3 duration-200 origin-top-right">
+                  <div className="px-6 py-5 border-b border-gray-100 dark:border-slate-800">
+                    <p className="text-sm font-bold text-slate-900 dark:text-white">
                       {user?.name}
                     </p>
-                    <p className="text-xs text-gray-500 truncate">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-1 font-medium">
                       {user?.email}
                     </p>
                   </div>
-                  <Link
-                    to="/profile"
-                    onClick={() => setIsProfileOpen(false)}
-                    className="flex items-center gap-3 w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                  >
-                    <span className="w-4 h-4">{icons.user}</span>
-                    <span>Perfil</span>
-                  </Link>
-                  {(user?.role === 'admin' || user?.role === 'secretario') && (
+                  
+                  <div className="py-2 px-2">
                     <Link
-                      to="/settings"
-                      onClick={() => setIsProfileOpen(false)}
-                      className="flex items-center gap-3 w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                        to="/profile"
+                        onClick={() => setIsProfileOpen(false)}
+                        className="flex items-center gap-3 w-full text-left px-4 py-3 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors group"
                     >
-                      <span className="w-4 h-4">{icons.settings}</span>
-                      <span>Ajustes</span>
+                        <span className="w-5 h-5 text-slate-400 group-hover:text-indigo-500">{icons.user}</span>
+                        <span>Perfil do Usuário</span>
                     </Link>
-                  )}
-                  <div className="border-t border-gray-50 my-1"></div>
-                  <button
-                    onClick={handleLogoutClick}
-                    className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-3 transition-colors cursor-pointer"
-                  >
-                    <span className="w-4 h-4">{icons.logout}</span>
-                    <span>Sair</span>
-                  </button>
+                    {(user?.role === 'admin' || user?.role === 'secretario') && (
+                        <Link
+                        to="/settings"
+                        onClick={() => setIsProfileOpen(false)}
+                        className="flex items-center gap-3 w-full text-left px-4 py-3 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors group"
+                        >
+                        <span className="w-5 h-5 text-slate-400 group-hover:text-indigo-500">{icons.settings}</span>
+                        <span>Ajustes do Sistema</span>
+                        </Link>
+                    )}
+                  </div>
+
+                  <div className="border-t border-gray-100 dark:border-slate-800 my-1 mx-2"></div>
+                  
+                  <div className="px-2 pb-2">
+                    <button
+                        onClick={handleLogoutClick}
+                        className="w-full text-left px-4 py-3 rounded-xl text-sm font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 flex items-center gap-3 transition-colors cursor-pointer"
+                    >
+                        <span className="w-5 h-5">{icons.logout}</span>
+                        <span>Sair da Conta</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
           </div>
         </header>
 
-        <main className="flex-grow p-4 md:p-6 overflow-auto bg-gray-50/50">
-          {/* AQUI ESTAVA O PROBLEMA: Agora passamos o contexto para os filhos */}
-          <Outlet context={{ filterYear, records, annualBudget, user }} />
+        {/* Scrollable Content */}
+        <main className="flex-grow p-4 md:p-8 overflow-auto scroll-smooth">
+           <div className="max-w-7xl mx-auto w-full h-full pb-20 md:pb-0">
+               <Outlet context={{ filterYear, records, annualBudget, user }} />
+           </div>
         </main>
       </div>
 

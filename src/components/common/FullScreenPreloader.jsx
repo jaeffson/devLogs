@@ -14,7 +14,7 @@ export function FullScreenPreloader() {
         
         {/* Mensagem de Carregamento */}
         <p className="mt-6 text-lg font-semibold text-gray-700 max-w-xs text-center">
-          Por favor, tenha mais um pouco de paciência, o sistema irá carregar.
+         Sistema Carregando, Por favor aguarde...
         </p>
       </div>
     </div>

@@ -262,7 +262,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
       const msg = Array.isArray(serverMessage)
         ? serverMessage[0]
         : serverMessage;
-      setError(msg || 'Erro de autenticação. Verifique os dados.');
+      setError(msg || 'Email ou senha inválidos.');
     } finally {
       setIsLoading(false);
     }
@@ -389,7 +389,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
             {/* Input Email */}
             <div className="space-y-1.5">
               <label className="text-[11px] font-bold text-gray-700 uppercase tracking-widest ml-1">
-                E-mail Profissional
+                E-mail
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">

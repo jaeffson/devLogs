@@ -1,4 +1,4 @@
-// src/components/common/Modal.jsx (Arquivo Único)
+// src/components/common/Modal.jsx
 
 import React, { useState } from 'react';
 
@@ -7,12 +7,12 @@ import React, { useState } from 'react';
 const CloseIcon = (
   <svg
     xmlns="http://www.w3.org/2000/svg"
-    width="24"
-    height="24"
+    width="20"
+    height="20"
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
-    strokeWidth="2"
+    strokeWidth="2.5"
     strokeLinecap="round"
     strokeLinejoin="round"
   >
@@ -24,7 +24,7 @@ const CloseIcon = (
 // Componente auxiliar para o Ícone do Spinner
 const SpinnerIcon = () => (
   <svg 
-      className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" 
+      className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" 
       xmlns="http://www.w3.org/2000/svg" 
       fill="none" 
       viewBox="0 0 24 24"
@@ -50,19 +50,22 @@ const SpinnerIcon = () => (
 export function Modal({ children, onClose }) {
   return (
     <div
-      // Adicionado p-4 para garantir padding em telas pequenas e centralização
-      className="fixed inset-0 bg-[#ececeec2] bg-opacity-75 flex justify-center items-center z-50 p-4 transition-opacity duration-300 ease-in-out" 
+      // ATUALIZADO: Overlay com backdrop-blur para efeito "vidro" moderno e cor slate escura para foco total
+      className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-center items-center z-50 p-4 transition-all duration-300 ease-in-out" 
       role="dialog"
       aria-modal="true"
     >
       <div 
-         // FIX: Largura responsiva. w-full no mobile, max-w-lg no desktop.
-         // Mantido p-[24px] para preservar o padding original.
-         className="bg-white rounded-xl shadow-2xl w-full max-w-lg md:max-w-xl lg:max-w-3xl relative animate-fade-in-up overflow-hidden p-[24px]"
+         // ATUALIZADO: 
+         // - rounded-2xl para suavidade
+         // - shadow-2xl difusa para elevação elegante
+         // - border sutil para definição em telas de baixo contraste
+         className="bg-white rounded-2xl shadow-2xl border border-white/20 w-full max-w-lg md:max-w-xl lg:max-w-2xl relative animate-fade-in-up overflow-hidden p-6 md:p-8 transform transition-all"
       >
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400"
+          // ATUALIZADO: Cursor pointer, hover state mais evidente, foco acessível
+          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-2 rounded-full transition-all duration-200 ease-in-out cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 active:scale-90"
           aria-label="Fechar modal"
         >
           {CloseIcon}
@@ -75,7 +78,7 @@ export function Modal({ children, onClose }) {
 
 // --- 2. Confirm Modal (Com Lógica do Spinner) ---
 
-export function ConfirmModal({ // Exportação nomeada para ser acessada no arquivo de destino
+export function ConfirmModal({
   message,
   onConfirm,
   onClose,
@@ -87,32 +90,41 @@ export function ConfirmModal({ // Exportação nomeada para ser acessada no arqu
   const [isLoading, setIsLoading] = useState(false); 
 
   const handleConfirm = async () => {
-    setIsLoading(true); // Ativa o spinner
+    setIsLoading(true); 
     
     try {
-      // O 'await' pausa aqui, mantendo o spinner visível
       await onConfirm();
     } catch (error) {
       console.error("Erro na ação de confirmação:", error);
     } finally {
-      setIsLoading(false); // Desativa o spinner
+      setIsLoading(false); 
     }
   };
 
   return (
-    <Modal onClose={onClose}> {/* Usa o Modal definido acima */}
-      <div className="pb-4 border-b border-gray-200 mb-4">
-        <h2 className="text-lg font-semibold text-gray-800">{title}</h2>
+    <Modal onClose={onClose}>
+      {/* Cabeçalho Limpo: Removi a borda inferior dura para um visual mais fluido */}
+      <div className="mb-3">
+        <h2 className={`text-xl font-bold tracking-tight ${isDestructive ? 'text-red-600' : 'text-slate-800'}`}>
+          {title}
+        </h2>
       </div>
-      <p className="text-gray-600 mb-6 text-sm">{message}</p>
-      <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 mt-6">
+      
+      {/* Corpo do Texto: Tipografia mais legível e cor suave para leitura prolongada */}
+      <p className="text-slate-600 mb-8 text-base leading-relaxed">
+        {message}
+      </p>
+
+      {/* Footer de Ações */}
+      <div className="flex justify-end gap-3 pt-0 mt-6">
         
         {/* Botão Cancelar */}
         <button
           type="button"
           onClick={onClose}
           disabled={isLoading} 
-          className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 font-medium text-sm transition-colors duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed"
+          // ATUALIZADO: Estilo "Ghost" refinado, cursor pointer, interação de escala
+          className="cursor-pointer px-5 py-2.5 bg-white text-slate-700 border border-slate-200 rounded-xl hover:bg-slate-50 hover:border-slate-300 hover:text-slate-900 focus:outline-none focus:ring-4 focus:ring-slate-100 font-medium text-sm transition-all duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 shadow-sm"
         >
           {cancelText}
         </button>
@@ -122,10 +134,11 @@ export function ConfirmModal({ // Exportação nomeada para ser acessada no arqu
           type="button"
           onClick={handleConfirm}
           disabled={isLoading} 
-          className={`px-4 py-2 rounded-md font-medium text-sm text-white transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed ${
+          // ATUALIZADO: Cores institucionais vibrantes, sombra colorida suave (glow), cursor pointer
+          className={`cursor-pointer px-5 py-2.5 rounded-xl font-semibold text-sm text-white shadow-md transition-all duration-200 ease-in-out focus:outline-none focus:ring-4 flex items-center justify-center disabled:opacity-70 disabled:cursor-not-allowed active:scale-95 ${
             isDestructive
-              ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500'
-              : 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500'
+              ? 'bg-red-600 hover:bg-red-700 hover:shadow-red-200 focus:ring-red-100'
+              : 'bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-200 focus:ring-indigo-100'
           }`}
         >
           {isLoading && <SpinnerIcon />} 
@@ -136,5 +149,4 @@ export function ConfirmModal({ // Exportação nomeada para ser acessada no arqu
   );
 }
 
-// Exportação principal do arquivo
 export default Modal;
