@@ -1,5 +1,4 @@
 // src/layouts/MainLayout.jsx
-// (VISUAL REFACTOR: Solid Backgrounds + Premium Glass Finish)
 
 import React, {
   useState,
@@ -36,6 +35,7 @@ import {
 // --- Imports de Componentes e Utils ---
 import { formatUserName } from '../utils/helpers';
 import { icons } from '../utils/icons';
+import LGPDBanner from '../components/common/LGPDBanner'; // Import já estava aqui
 
 // --- Helpers de Clima e Data (Lógica Preservada) ---
 function getWeatherInfo(code, isDay = true) {
@@ -127,9 +127,9 @@ const MobileBottomNav = ({ menuItems, location, handleOpenDrawer }) => {
     location.pathname === path ||
     (path !== '/' && location.pathname.startsWith(path));
 
+
   return (
     <nav 
-      // MUDANÇA AQUI: bg-white/95 e dark:bg-slate-900/95 para fundo mais sólido
       className="fixed bottom-0 left-0 right-0 h-20 z-50 md:hidden pb-safe transition-all duration-300
                  bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl backdrop-saturate-200
                  border-t border-gray-200 dark:border-slate-800 shadow-[0_-8px_30px_rgba(0,0,0,0.08)]"
@@ -357,7 +357,6 @@ export default function MainLayout({
 
       {/* SIDEBAR (Desktop & Drawer Mobile) */}
       <aside
-        // MUDANÇA AQUI: Fundo mais sólido (bg-white/95) para destacar como "bloco"
         className={`
           fixed inset-y-0 left-0 flex-shrink-0 flex-col z-50 
           bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl backdrop-saturate-150 
@@ -603,6 +602,10 @@ export default function MainLayout({
         location={location}
         handleOpenDrawer={() => setIsSidebarOpen(true)}
       />
+
+      {/* --- INSERÇÃO DO BANNER LGPD --- */}
+      <LGPDBanner />
+      
     </div>
   );
 }

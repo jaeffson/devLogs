@@ -1,5 +1,5 @@
 // src/components/views/secretary/GeneralReportView.jsx
-// (ATUALIZADO: Adicionado seletor de Ano nos filtros locais)
+// (ATUALIZADO: Correção de Farmácia Não Identificada em Produção)
 
 import React, { useState, useMemo, useEffect } from 'react';
 import jsPDF from 'jspdf';
@@ -11,13 +11,36 @@ import useDebounce from '../../../hooks/useDebounce';
 const MS_IN_30_DAYS = 30 * 24 * 60 * 60 * 1000;
 
 // --- HELPER: Mapeia o campo de localização para um nome de Farmácia ---
-const getFarmaciaName = (record) => {
-  const loc = String(record?.location || record?.farmacia || record?.pharmacy || record?.origin || '').toLowerCase().trim();
+// ATUALIZADO: Agora aceita a lista de distribuidores para cruzar IDs se necessário
+const getFarmaciaName = (record, distributors = []) => {
+  // 1. Tenta extrair o dado bruto de vários campos possíveis (compatibilidade legado/prod)
+  let raw = record?.location || 
+            record?.farmacia || 
+            record?.pharmacy || 
+            record?.origin || 
+            record?.unidade || 
+            record?.distributor?.name || 
+            record?.distributor || 
+            '';
+
+  // 2. Verifica se temos um ID e tenta encontrar na lista de distribuidores (Correção Produção)
+  if (distributors && distributors.length > 0) {
+    // Tenta encontrar pelo ID do distribuidor ou se o 'raw' for igual ao ID
+    const found = distributors.find(d => 
+      d._id === record?.distributorId || 
+      d._id === raw || 
+      d.id === raw || 
+      d.name === raw
+    );
+    if (found) return found.name;
+  }
+
+  // 3. Fallback: Verificação por String (Lógica Original)
+  const loc = String(raw).toLowerCase().trim();
   
   if (loc.includes('campina grande') || loc.includes('campina') || loc.includes('grande') || loc.includes('farmacia a') || loc === 'a' || loc === 'cg') return 'Campina Grande';
   if (loc.includes('joao paulo') || loc.includes('joão paulo') || loc.includes('joao') || loc.includes('joão') || loc.includes('paulo') || loc.includes('farmacia b') || loc === 'b' || loc === 'jp') return 'João Paulo';
 
-  
   return 'Não Identificada';
 };
 
@@ -37,7 +60,7 @@ export function GeneralReportView({
   
   // --- Estados ---
   const [filterPeriod, setFilterPeriod] = useState('all');
-  const [filterYear, setFilterYear] = useState(new Date().getFullYear()); // NOVO: Estado do Ano
+  const [filterYear, setFilterYear] = useState(new Date().getFullYear());
   const [filterStatus, setFilterStatus] = useState(initialFilterStatus || 'all');
   const [reportSearchTerm, setReportSearchTerm] = useState('');
   const [selectedPharmacy, setSelectedPharmacy] = useState(''); 
@@ -79,7 +102,7 @@ export function GeneralReportView({
   const filteredRecordsForReport = useMemo(() => {
     let filtered = Array.isArray(records) ? [...records] : [];
     
-    // 1. Filtro de Ano (NOVO)
+    // 1. Filtro de Ano
     if (filterYear) {
       filtered = filtered.filter(r => {
         try {
@@ -119,24 +142,24 @@ export function GeneralReportView({
       }
     }
 
-    // 4. Farmácia
+    // 4. Farmácia (ATUALIZADO: Passa distributors para o helper)
     if (selectedPharmacy) {
-        filtered = filtered.filter(r => getFarmaciaName(r) === selectedPharmacy);
+        filtered = filtered.filter(r => getFarmaciaName(r, distributors) === selectedPharmacy);
     }
 
-    // 5. Busca
+    // 5. Busca (ATUALIZADO: Passa distributors para o helper)
     const searchTermLower = debouncedReportSearchTerm.toLowerCase();
     if (searchTermLower) {
       filtered = filtered.filter((r) =>
         (getPatientNameById(r.patientId) || '').toLowerCase().includes(searchTermLower) || 
-        getFarmaciaName(r).toLowerCase().includes(searchTermLower) 
+        getFarmaciaName(r, distributors).toLowerCase().includes(searchTermLower) 
       );
     }
     
     return filtered.length > 0
       ? filtered.sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate))
       : [];
-  }, [records, filterPeriod, filterStatus, selectedPharmacy, debouncedReportSearchTerm, getPatientNameById, filterYear]);
+  }, [records, filterPeriod, filterStatus, selectedPharmacy, debouncedReportSearchTerm, getPatientNameById, filterYear, distributors]);
 
   // Paginação
   const totalPages = useMemo(() => Math.ceil(filteredRecordsForReport.length / itemsPerPage), [filteredRecordsForReport, itemsPerPage]);
@@ -171,7 +194,8 @@ export function GeneralReportView({
 
       const tableColumn = ['Paciente', 'Data', 'Entrega', 'Medicações', 'Farmácia', 'Status']; 
       const tableRows = filteredRecordsForReport.map((record) => {
-        const farmacia = getFarmaciaName(record); 
+        // ATUALIZADO: Passa distributors para o helper
+        const farmacia = getFarmaciaName(record, distributors); 
         const patientName = getPatientNameById(record.patientId) || 'N/A'; 
         const date = new Date(record.entryDate).toLocaleDateString('pt-BR');
         
@@ -272,7 +296,7 @@ export function GeneralReportView({
 
             {/* Inputs Grid */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-                {/* Filtro de Ano (NOVO) */}
+                {/* Filtro de Ano */}
                 <div className="md:col-span-2">
                    <select
                         value={filterYear}
@@ -350,7 +374,10 @@ export function GeneralReportView({
             {currentRecordsForReport.length > 0 ? (
               currentRecordsForReport.map((record) => {
                 const patientName = getPatientNameById(record.patientId) || 'Não identificado';
-                const farmaciaName = getFarmaciaName(record);
+                
+                // ATUALIZADO: Passa distributors para o helper
+                const farmaciaName = getFarmaciaName(record, distributors);
+                
                 const isHighlighted = debouncedReportSearchTerm && 
                    (patientName.toLowerCase().includes(debouncedReportSearchTerm.toLowerCase()) || 
                     farmaciaName.toLowerCase().includes(debouncedReportSearchTerm.toLowerCase()));

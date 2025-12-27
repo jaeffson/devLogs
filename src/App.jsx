@@ -15,11 +15,10 @@ import AdminSettingsPage from './pages/AdminSettingsPage';
 import MedicationsPage from './pages/MedicationsPage';
 import SecretarySettingsPage from './pages/SecretarySettingsPage';
 import AdminReportsPage from '../src/pages/AdminReportsPage';
-
-// --- Imports de Componentes Comuns ---
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 import { FullScreenPreloader } from './components/common/FullScreenPreloader';
-import { getMedicationName } from './utils/helpers'; 
-import WelcomeModal from './components/WelcomeModal/WelcomeModal.jsx'; 
+import { getMedicationName } from './utils/helpers';
+import WelcomeModal from './components/WelcomeModal/WelcomeModal.jsx';
 
 export default function App() {
   const [user, setUser] = useState(() => {
@@ -36,10 +35,10 @@ export default function App() {
   const [patients, setPatients] = useState([]);
   const [records, setRecords] = useState([]);
   const [medications, setMedications] = useState([]);
-  const [users, setUsers] = useState([]); 
-  
-  const [annualBudget, setAnnualBudget] = useState(5000.0); 
-  const [activityLog, setActivityLog] = useState([]); 
+  const [users, setUsers] = useState([]);
+
+  const [annualBudget, setAnnualBudget] = useState(5000.0);
+  const [activityLog, setActivityLog] = useState([]);
 
   const [filterYear, setFilterYear] = useState(new Date().getFullYear());
 
@@ -50,27 +49,31 @@ export default function App() {
     if (type === 'success') toast.success(message);
     else if (type === 'error') toast.error(message);
     else toast(message);
-  }, []); 
+  }, []);
 
   const addLog = useCallback(async (userName, action) => {
     const logData = { user: userName || 'Sistema', action };
-    const tempLog = { ...logData, id: Date.now(), timestamp: new Date().toISOString() };
+    const tempLog = {
+      ...logData,
+      id: Date.now(),
+      timestamp: new Date().toISOString(),
+    };
     setActivityLog((prev) => [tempLog, ...prev].slice(0, 100));
     try {
       await api.post('/logs', logData);
     } catch (error) {
-      console.error("Erro ao salvar log:", error);
+      console.error('Erro ao salvar log:', error);
     }
-  }, []); 
+  }, []);
 
   const normalizeData = useCallback((dataArray) => {
     if (!Array.isArray(dataArray)) return [];
     return dataArray.map((item) => ({
       ...item,
-      id: item._id || item.id, 
-      timestamp: item.createdAt || item.timestamp, 
+      id: item._id || item.id,
+      timestamp: item.createdAt || item.timestamp,
     }));
-  }, []); 
+  }, []);
 
   // --- Recargas de Dados ---
   const refetchPatients = useCallback(async () => {
@@ -80,7 +83,7 @@ export default function App() {
     } catch (error) {
       console.error('Falha ao recarregar pacientes:', error);
     }
-  }, [normalizeData]); 
+  }, [normalizeData]);
 
   const refetchRecords = useCallback(async () => {
     try {
@@ -118,12 +121,12 @@ export default function App() {
     } catch (error) {
       console.error('Falha ao carregar orçamento:', error);
     }
-  }, []); 
+  }, []);
 
   const refetchLogs = useCallback(async () => {
     try {
       const response = await api.get('/logs');
-      setActivityLog(normalizeData(response.data)); 
+      setActivityLog(normalizeData(response.data));
     } catch (error) {
       console.error('Falha ao carregar logs:', error);
     }
@@ -136,34 +139,51 @@ export default function App() {
         refetchRecords(),
         refetchMedications(),
         refetchUsers(),
-        refetchBudget(), 
+        refetchBudget(),
         refetchLogs(),
       ]);
     } catch (error) {
       console.error('Falha Crítica no Promise.all:', error);
-      addToast('Erro ao carregar dados iniciais. Verifique se o backend local está rodando.', 'error');
+      addToast(
+        'Erro ao carregar dados iniciais. Verifique se o backend local está rodando.',
+        'error'
+      );
     } finally {
-      setIsInitializing(false); 
+      setIsInitializing(false);
     }
-  }, [refetchPatients, refetchRecords, refetchMedications, refetchUsers, refetchBudget, refetchLogs, addToast]); 
+  }, [
+    refetchPatients,
+    refetchRecords,
+    refetchMedications,
+    refetchUsers,
+    refetchBudget,
+    refetchLogs,
+    addToast,
+  ]);
 
-  const handleUpdateBudget = useCallback((newBudgetValue) => {
-    const numericBudget = parseFloat(newBudgetValue);
-    if (!isNaN(numericBudget) && numericBudget >= 0) {
-      setAnnualBudget(numericBudget);
-      addLog(user?.name, `atualizou o orçamento.`);
-    } else {
-      addToast('Valor de orçamento inválido recebido.', 'error');
-    }
-  }, [user, addLog, addToast]); 
+  const handleUpdateBudget = useCallback(
+    (newBudgetValue) => {
+      const numericBudget = parseFloat(newBudgetValue);
+      if (!isNaN(numericBudget) && numericBudget >= 0) {
+        setAnnualBudget(numericBudget);
+        addLog(user?.name, `atualizou o orçamento.`);
+      } else {
+        addToast('Valor de orçamento inválido recebido.', 'error');
+      }
+    },
+    [user, addLog, addToast]
+  );
 
-  const handleLogin = useCallback((userData) => {
-    localStorage.setItem('user', JSON.stringify(userData));
-    setUser(userData);
-    addLog(userData.name, 'fez login.');
-    setIsInitializing(true); 
-    navigate('/dashboard', { replace: true });
-  }, [navigate, addLog]); 
+  const handleLogin = useCallback(
+    (userData) => {
+      localStorage.setItem('user', JSON.stringify(userData));
+      setUser(userData);
+      addLog(userData.name, 'fez login.');
+      setIsInitializing(true);
+      navigate('/dashboard', { replace: true });
+    },
+    [navigate, addLog]
+  );
 
   const handleLogout = useCallback(() => {
     setIsLoggingOut(true);
@@ -174,7 +194,7 @@ export default function App() {
       setIsLoggingOut(false);
       navigate('/login', { replace: true });
     }, 500);
-  }, [user, navigate, addLog]); 
+  }, [user, navigate, addLog]);
 
   useEffect(() => {
     if (user && isInitializing) fetchInitialData();
@@ -193,16 +213,16 @@ export default function App() {
     if (user) {
       const hasSeenModal = localStorage.getItem('hasSeenWelcomeModal');
       if (!hasSeenModal) {
-        const modalTimer = setTimeout(() => setShowWelcomeModal(true), 800); 
+        const modalTimer = setTimeout(() => setShowWelcomeModal(true), 800);
         return () => clearTimeout(modalTimer);
       }
     }
-  }, [user]); 
+  }, [user]);
 
   const handleAcceptCookies = useCallback(() => {
     localStorage.setItem('cookieConsent', 'true');
     setShowCookieBanner(false);
-  }, []); 
+  }, []);
 
   const handleCloseWelcomeModal = () => {
     setShowWelcomeModal(false);
@@ -214,12 +234,12 @@ export default function App() {
   }
 
   // Helper para verificar se é profissional (aceitando várias escritas)
-  const isProfessionalUser = user && (
-    user.role === 'profissional' || 
-    user.role === 'Profissional' || 
-    user.role === 'admin' || 
-    user.role === 'Professional'
-  );
+  const isProfessionalUser =
+    user &&
+    (user.role === 'profissional' ||
+      user.role === 'Profissional' ||
+      user.role === 'admin' ||
+      user.role === 'Professional');
 
   const commonPageProps = {
     user,
@@ -232,13 +252,13 @@ export default function App() {
     users,
     setUsers: refetchUsers,
     addToast,
-    addLog, 
+    addLog,
     annualBudget,
-    handleUpdateBudget, 
-    activityLog, 
+    handleUpdateBudget,
+    activityLog,
     getMedicationName,
-    filterYear,       
-    setFilterYear,    
+    filterYear,
+    setFilterYear,
   };
 
   return (
@@ -246,13 +266,43 @@ export default function App() {
       {showWelcomeModal && <WelcomeModal onClose={handleCloseWelcomeModal} />}
 
       <Routes>
-        <Route path="/login" element={!user ? <LoginPage onLogin={handleLogin} setUsers={setUsers} addToast={addToast} addLog={addLog} MOCK_USERS={users} /> : <Navigate to="/dashboard" replace />} />
+        <Route
+          path="/login"
+          element={
+            !user ? (
+              <LoginPage
+                onLogin={handleLogin}
+                setUsers={setUsers}
+                addToast={addToast}
+                addLog={addLog}
+                MOCK_USERS={users}
+              />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )
+          }
+        />
 
-        <Route path="/" element={user ? <MainLayout user={user} handleLogout={handleLogout} {...commonPageProps} /> : <Navigate to="/login" replace />}>
+        <Route
+          path="/"
+          element={
+            user ? (
+              <MainLayout
+                user={user}
+                handleLogout={handleLogout}
+                {...commonPageProps}
+              />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        >
           <Route index element={<Navigate to="/dashboard" replace />} />
 
           {/* Rota do Dashboard Geral */}
-          <Route path="dashboard" element={
+          <Route
+            path="dashboard"
+            element={
               user?.role === 'secretario' ? (
                 <SecretaryDashboardPage {...commonPageProps} />
               ) : (
@@ -260,52 +310,107 @@ export default function App() {
               )
             }
           />
-
-          {/* CORREÇÃO AQUI: Usando a verificação isProfessionalUser mais abrangente */}
+          <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+        
           {isProfessionalUser && (
             <>
-              <Route path="patients" element={<ProfessionalDashboardPage {...commonPageProps} activeTabForced="patients" />} />
-              <Route path="history" element={<ProfessionalDashboardPage {...commonPageProps} activeTabForced="historico" />} />
-              <Route path="deliveries" element={<ProfessionalDashboardPage {...commonPageProps} activeTabForced="deliveries" />} />
-              <Route path="medications" element={<MedicationsPage {...commonPageProps} />} />
+              <Route
+                path="patients"
+                element={
+                  <ProfessionalDashboardPage
+                    {...commonPageProps}
+                    activeTabForced="patients"
+                  />
+                }
+              />
+              <Route
+                path="history"
+                element={
+                  <ProfessionalDashboardPage
+                    {...commonPageProps}
+                    activeTabForced="historico"
+                  />
+                }
+              />
+              <Route
+                path="deliveries"
+                element={
+                  <ProfessionalDashboardPage
+                    {...commonPageProps}
+                    activeTabForced="deliveries"
+                  />
+                }
+              />
+              <Route
+                path="medications"
+                element={<MedicationsPage {...commonPageProps} />}
+              />
             </>
           )}
 
           {user?.role === 'secretario' && (
             <>
-              <Route path="deliveries" element={<SecretaryDashboardPage {...commonPageProps} activeTabForced="deliveries" />} />
-              <Route path="reports-general" element={<SecretaryDashboardPage {...commonPageProps} activeTabForced="all_history" />} />
-              <Route path="patient-history" element={<SecretaryDashboardPage {...commonPageProps} activeTabForced="records" />} />
-              <Route path="settings" element={<SecretarySettingsPage {...commonPageProps} />} />
+              <Route
+                path="deliveries"
+                element={
+                  <SecretaryDashboardPage
+                    {...commonPageProps}
+                    activeTabForced="deliveries"
+                  />
+                }
+              />
+              <Route
+                path="reports-general"
+                element={
+                  <SecretaryDashboardPage
+                    {...commonPageProps}
+                    activeTabForced="all_history"
+                  />
+                }
+              />
+              <Route
+                path="patient-history"
+                element={
+                  <SecretaryDashboardPage
+                    {...commonPageProps}
+                    activeTabForced="records"
+                  />
+                }
+              />
+              <Route
+                path="settings"
+                element={<SecretarySettingsPage {...commonPageProps} />}
+              />
             </>
           )}
 
           {user?.role === 'admin' && (
-            <Route path="settings" element={<AdminSettingsPage {...commonPageProps} />} />
+            <Route
+              path="settings"
+              element={<AdminSettingsPage {...commonPageProps} />}
+            />
           )}
 
           {(user?.role === 'admin' || user?.role === 'secretario') && (
-            <Route path="reports" element={<AdminReportsPage {...commonPageProps} />} />
+            <Route
+              path="reports"
+              element={<AdminReportsPage {...commonPageProps} />}
+            />
           )}
 
-          <Route path="*" element={
+          <Route
+            path="*"
+            element={
               <div className="text-center p-6 bg-white rounded shadow">
                 <h2>Página não encontrada</h2>
-                <Link to="/dashboard" className="text-emerald-600">Voltar ao Dashboard</Link>
+                <Link to="/dashboard" className="text-emerald-600">
+                  Voltar ao Dashboard
+                </Link>
               </div>
             }
           />
         </Route>
       </Routes>
-
-      {showCookieBanner && (
-        <div className="fixed bottom-0 left-0 right-0 bg-gray-800 text-white p-4 shadow-lg animate-fade-in-up z-[9990]">
-          <div className="max-w-4xl mx-auto flex flex-col md:flex-row justify-between items-center gap-3">
-            <p className="text-sm text-center md:text-left">🍪 Usamos cookies para garantir que você tenha a melhor experiência em nosso site.</p>
-            <button onClick={handleAcceptCookies} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-5 rounded-lg text-sm flex-shrink-0">Entendi e Aceitar</button>
-          </div>
-        </div>
-      )}
     </>
   );
 }
