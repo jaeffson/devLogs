@@ -16,7 +16,7 @@ const getFarmaciaName = (record) => {
   
   if (loc.includes('campina grande') || loc.includes('campina') || loc.includes('grande') || loc.includes('farmacia a') || loc === 'a' || loc === 'cg') return 'Campina Grande';
   if (loc.includes('joao paulo') || loc.includes('joão paulo') || loc.includes('joao') || loc.includes('joão') || loc.includes('paulo') || loc.includes('farmacia b') || loc === 'b' || loc === 'jp') return 'João Paulo';
-  if (loc.length > 0) return `Debug: ${loc.toUpperCase()}`;
+
   
   return 'Não Identificada';
 };
