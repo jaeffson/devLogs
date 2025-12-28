@@ -47,5 +47,12 @@ export const deleteDistributor = async (id) => {
     const response = await api.delete(`/distributors/${id}`);
     return response.data;
 };
+export const changeUserPassword = async (data) => {
+    // Envia { currentPassword, newPassword } para o backend
+    // NOTA: Confirme se a rota '/auth/change-password' é a correta no seu backend.
+    // Pode ser '/users/change-password' ou apenas '/change-password' dependendo da sua API.
+    const response = await api.post('/auth/change-password', data);
+    return response.data;
+};
 
 export default api;

@@ -16,6 +16,7 @@ import MedicationsPage from './pages/MedicationsPage';
 import SecretarySettingsPage from './pages/SecretarySettingsPage';
 import AdminReportsPage from '../src/pages/AdminReportsPage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
+import Profile from './pages/Profile.jsx';
 import { FullScreenPreloader } from './components/common/FullScreenPreloader';
 import { getMedicationName } from './utils/helpers';
 import WelcomeModal from './components/WelcomeModal/WelcomeModal.jsx';
@@ -298,7 +299,7 @@ export default function App() {
           }
         >
           <Route index element={<Navigate to="/dashboard" replace />} />
-
+          <Route path="profile" element={<Profile />} />
           {/* Rota do Dashboard Geral */}
           <Route
             path="dashboard"
