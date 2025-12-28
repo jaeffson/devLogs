@@ -35,9 +35,9 @@ import {
 // --- Imports de Componentes e Utils ---
 import { formatUserName } from '../utils/helpers';
 import { icons } from '../utils/icons';
-import LGPDBanner from '../components/common/LGPDBanner'; // Import já estava aqui
+import LGPDBanner from '../components/common/LGPDBanner';
 
-// --- Helpers de Clima e Data (Lógica Preservada) ---
+// --- Helpers de Clima e Data ---
 function getWeatherInfo(code, isDay = true) {
   const weatherMap = {
     0: { text: 'Céu limpo', icon: isDay ? WiDaySunny : WiNightClear },
@@ -119,14 +119,13 @@ function useWeather(latitude, longitude) {
   return { weather, error };
 }
 
-// --- Mobile Bottom Navigation (Solid + Blur) ---
+// --- Mobile Bottom Navigation ---
 const MobileBottomNav = ({ menuItems, location, handleOpenDrawer }) => {
   const primaryItems = menuItems.slice(0, 4);
   
   const isCurrentPathActive = (path) =>
     location.pathname === path ||
     (path !== '/' && location.pathname.startsWith(path));
-
 
   return (
     <nav 
@@ -198,7 +197,7 @@ export default function MainLayout({
   const idleTimerRef = useRef(null);
   const collapseTimerRef = useRef(null);
 
-  // --- LÓGICA PRESERVADA: Auto-Colapso ---
+  // --- Auto-Colapso ---
   const handleCollapseSidebar = useCallback(() => {
     if (!isMouseOverSidebar) {
       setIsSidebarCollapsed(true);
@@ -236,7 +235,7 @@ export default function MainLayout({
     };
   }, [resetCollapseTimer]);
 
-  // --- LÓGICA PRESERVADA: Timer de Inatividade ---
+  // --- Timer de Inatividade ---
   const logoutOnIdle = useCallback(() => {
     handleLogout();
     navigate('/login');
@@ -272,7 +271,7 @@ export default function MainLayout({
     };
   }, [resetIdleTimer]);
 
-  // --- LÓGICA PRESERVADA: Menus por Role ---
+  // --- Menus por Role ---
   const getRoleName = (role) => {
     const names = {
       profissional: 'Profissional',
@@ -346,10 +345,10 @@ export default function MainLayout({
   return (
     <div className="relative min-h-screen md:h-screen md:flex md:overflow-hidden bg-gray-50 dark:bg-slate-950 transition-colors duration-300">
       
-      {/* Overlay Mobile (Suavizado) */}
+      {/* Overlay Mobile */}
       {isSidebarOpen && (
         <div
-          className="fixed inset-0 bg-white/20 dark:bg-slate-900/40 backdrop-blur-md z-40 md:hidden transition-all duration-500 ease-in-out"
+          className="fixed inset-0 bg-white/20 dark:bg-slate-900/40 backdrop-blur-md z-[55] md:hidden transition-all duration-500 ease-in-out"
           onClick={() => setIsSidebarOpen(false)}
           aria-hidden="true"
         />
@@ -358,13 +357,15 @@ export default function MainLayout({
       {/* SIDEBAR (Desktop & Drawer Mobile) */}
       <aside
         className={`
-          fixed inset-y-0 left-0 flex-shrink-0 flex-col z-50 
+          fixed inset-y-0 left-0 flex-shrink-0 flex-col z-[60] 
           bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl backdrop-saturate-150 
           border-r border-gray-200 dark:border-slate-800
           shadow-2xl md:shadow-[4px_0_24px_rgba(0,0,0,0.02)] transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)]
-          hidden md:flex md:static 
+          md:flex md:static 
           ${isSidebarCollapsed ? 'md:w-[72px]' : 'md:w-72'}
-          ${isSidebarOpen ? 'w-[85vw] max-w-xs translate-x-0 flex' : 'hidden -translate-x-full md:translate-x-0'}
+          ${isSidebarOpen 
+            ? 'flex translate-x-0 w-[85vw] max-w-xs' 
+            : 'hidden md:flex -translate-x-full md:translate-x-0'}
         `}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -422,7 +423,6 @@ export default function MainLayout({
                               : 'text-slate-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200'
                           }`}
               >
-                {/* Indicador Ativo Sutíl */}
                 {isActive && (
                    <div className="absolute left-0.5 top-3 bottom-3 w-1 bg-indigo-600 rounded-full" />
                 )}
@@ -490,14 +490,14 @@ export default function MainLayout({
           {/* Direita: Ações + Perfil */}
           <div className="flex items-center gap-3 md:gap-5">
             
-            {/* Seletor de Ano */}
+            {/* Seletor de Ano - Visível em Mobile e Desktop */}
             {(user?.role === 'admin' || user?.role === 'secretario') && (
-              <div className="hidden sm:block">
+              <div className="block mr-1 md:mr-0">
                 <div className="relative group">
                     <select
                       value={filterYear}
                       onChange={(e) => setFilterYear(parseInt(e.target.value))}
-                      className="appearance-none cursor-pointer bg-gray-100/50 dark:bg-slate-800/50 hover:bg-white dark:hover:bg-slate-700 border border-gray-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm font-semibold rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 block w-28 py-2 pl-3.5 pr-8 transition-all outline-none shadow-sm"
+                      className="appearance-none cursor-pointer bg-gray-100/50 dark:bg-slate-800/50 hover:bg-white dark:hover:bg-slate-700 border border-gray-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm font-semibold rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 block w-24 md:w-28 py-2 pl-3 md:pl-3.5 pr-7 md:pr-8 transition-all outline-none shadow-sm"
                       aria-label="Filtrar por ano"
                     >
                       {[...Array(2)].map((_, i) => {
@@ -509,7 +509,7 @@ export default function MainLayout({
                         );
                       })}
                     </select>
-                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-slate-500">
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
                       <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
                         <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/>
                       </svg>
@@ -603,7 +603,6 @@ export default function MainLayout({
         handleOpenDrawer={() => setIsSidebarOpen(true)}
       />
 
-      {/* --- INSERÇÃO DO BANNER LGPD --- */}
       <LGPDBanner />
       
     </div>

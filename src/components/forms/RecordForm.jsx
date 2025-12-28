@@ -27,6 +27,17 @@ const quantityOptions = [
   '1tb',
 ];
 
+// --- FUNÇÃO AUXILIAR PARA CÁLCULOS ---
+// Extrai o primeiro número encontrado na string.
+// Ex: "2cxs" -> 2. "10 caixas" -> 10. "Caixa" -> 1 (padrão).
+const getQuantityMultiplier = (quantityString) => {
+  if (!quantityString) return 1;
+  const match = String(quantityString).match(/^(\d+)/); 
+  // Pega números no começo da string, ex: "10 caixas"
+  // Se for float (ex: 0.5), use match com ponto se necessário, mas aqui assumimos inteiros principais ou ajustamos conforme uso
+  return match ? parseFloat(match[0]) : 1;
+};
+
 export default function RecordForm({
   patient,
   patients = [],
@@ -43,11 +54,14 @@ export default function RecordForm({
   const [localPatient, setLocalPatient] = useState(patient || null);
   const [referenceDate, setReferenceDate] = useState('');
   const [observation, setObservation] = useState('');
+  
+  // Estado das medicações incluindo o Unitário para cálculo visual
   const [medications, setMedications] = useState([
     {
       medicationId: '',
       quantity: quantityOptions[0],
-      value: '',
+      unitValue: '', // Valor Unitário (Visual/Cálculo)
+      value: '',     // Valor Total (Salvo no Banco)
       tempId: Date.now(),
     },
   ]);
@@ -110,13 +124,24 @@ export default function RecordForm({
       setLocalPatient(patient || null);
       setFarmaciaOrigin(record.farmacia || record.pharmacy || '');
 
+      // Ao editar, recriamos o unitário baseado no total salvo / quantidade
       const existingMeds =
-        record.medications?.map((m, i) => ({
-          medicationId: m.medicationId || '',
-          quantity: m.quantity || quantityOptions[0],
-          value: m.value || '',
-          tempId: m.recordMedId || m.id || `edit-${i}`,
-        })) || [];
+        record.medications?.map((m, i) => {
+          const multiplier = getQuantityMultiplier(m.quantity || quantityOptions[0]);
+          const totalVal = parseFloat(m.value) || 0;
+          // Se tiver total e qtd, descobre o unitário
+          const calculatedUnit = multiplier > 0 && totalVal > 0 
+            ? (totalVal / multiplier).toFixed(2) 
+            : '';
+
+          return {
+            medicationId: m.medicationId || '',
+            quantity: m.quantity || quantityOptions[0],
+            unitValue: calculatedUnit,
+            value: m.value || '',
+            tempId: m.recordMedId || m.id || `edit-${i}`,
+          };
+        }) || [];
 
       setMedications(
         existingMeds.length > 0
@@ -125,6 +150,7 @@ export default function RecordForm({
               {
                 medicationId: '',
                 quantity: quantityOptions[0],
+                unitValue: '',
                 value: '',
                 tempId: Date.now(),
               },
@@ -178,12 +204,20 @@ export default function RecordForm({
 
   const repeatLastPrescription = () => {
     if (!activeRecentRecord || !activeRecentRecord.medications) return;
-    const copiedMeds = activeRecentRecord.medications.map((m, i) => ({
-      medicationId: m.medicationId || m.id || m._id,
-      quantity: m.quantity || quantityOptions[0],
-      value: m.value || '',
-      tempId: Date.now() + i,
-    }));
+    
+    const copiedMeds = activeRecentRecord.medications.map((m, i) => {
+      const multiplier = getQuantityMultiplier(m.quantity || quantityOptions[0]);
+      const totalVal = parseFloat(m.value) || 0;
+      
+      return {
+        medicationId: m.medicationId || m.id || m._id,
+        quantity: m.quantity || quantityOptions[0],
+        unitValue: multiplier > 0 && totalVal > 0 ? (totalVal / multiplier).toFixed(2) : '',
+        value: m.value || '',
+        tempId: Date.now() + i,
+      };
+    });
+
     setMedications(copiedMeds);
     setAutoFilled(true);
     addToast('Medicações carregadas!', 'success');
@@ -218,6 +252,7 @@ export default function RecordForm({
       {
         medicationId: '',
         quantity: quantityOptions[0],
+        unitValue: '',
         value: '',
         tempId: Date.now(),
       },
@@ -231,6 +266,7 @@ export default function RecordForm({
       {
         medicationId: '',
         quantity: quantityOptions[0],
+        unitValue: '',
         value: '',
         tempId: Date.now(),
       },
@@ -246,6 +282,7 @@ export default function RecordForm({
       {
         medicationId: '',
         quantity: quantityOptions[0],
+        unitValue: '',
         value: '',
         tempId: Date.now(),
       },
@@ -258,14 +295,54 @@ export default function RecordForm({
     }
   };
 
-  const updateMedication = (index, field, value) => {
+  // --- LÓGICA DE ATUALIZAÇÃO E CÁLCULO ---
+  const updateMedication = (index, field, newValue) => {
     const newMeds = [...medications];
-    newMeds[index][field] = value;
+    const currentMed = newMeds[index];
+
+    if (field === 'medicationId') {
+      currentMed.medicationId = newValue;
+    } 
+    
+    // Se mudar QUANTIDADE (agora aceita texto livre)
+    else if (field === 'quantity') {
+      currentMed.quantity = newValue;
+      // Tenta extrair numero: "2 caixas" -> 2
+      const multiplier = getQuantityMultiplier(newValue);
+      const uVal = parseFloat(currentMed.unitValue) || 0;
+      
+      // Se tiver valor unitário, calcula o total
+      if (uVal > 0) {
+        currentMed.value = (uVal * multiplier).toFixed(2);
+      }
+    } 
+    
+    // Se mudar VALOR UNITÁRIO
+    else if (field === 'unitValue') {
+      currentMed.unitValue = newValue;
+      const multiplier = getQuantityMultiplier(currentMed.quantity);
+      const uVal = parseFloat(newValue) || 0;
+      
+      // Calcula total: unitário * multiplicador
+      currentMed.value = (uVal * multiplier).toFixed(2);
+    } 
+    
+    // Se mudar VALOR TOTAL (override manual)
+    else if (field === 'value') {
+      currentMed.value = newValue;
+      const multiplier = getQuantityMultiplier(currentMed.quantity);
+      const tVal = parseFloat(newValue) || 0;
+      
+      // Recalcula o unitário (reverso) para manter coerência
+      if (multiplier > 0 && tVal > 0) {
+        currentMed.unitValue = (tVal / multiplier).toFixed(2);
+      }
+    }
+
     setMedications(newMeds);
   };
 
   const handleSubmit = async () => {
-    // Validação básica
     let hasError = false;
     let newErrors = {};
 
@@ -274,12 +351,10 @@ export default function RecordForm({
       hasError = true;
     }
 
-    // --- MUDANÇA: Validação Obrigatória da Farmácia ---
     if (!farmaciaOrigin) {
       newErrors.farmacia = 'A origem (farmácia) é obrigatória.';
       hasError = true;
     }
-    // --------------------------------------------------
 
     const validMeds = medications.every((m) => m.medicationId);
     if (!validMeds) {
@@ -289,7 +364,6 @@ export default function RecordForm({
 
     if (hasError) {
       setErrors(newErrors);
-      // Feedback visual rápido se houver erro
       addToast('Preencha os campos obrigatórios.', 'error');
       return;
     }
@@ -313,8 +387,8 @@ export default function RecordForm({
         totalValue: calculatedTotal,
         medications: medications.map((m) => ({
           medicationId: m.medicationId,
-          quantity: m.quantity,
-          value: parseFloat(m.value) || 0,
+          quantity: m.quantity,         // Envia a string exata (ex: "10 caixas")
+          value: parseFloat(m.value) || 0, // Envia o total calculado
         })),
       };
 
@@ -334,17 +408,11 @@ export default function RecordForm({
       onClose={onClose}
       title={record ? 'Editar Registro' : 'Novo Registro'}
     >
-      {/* Estrutura principal: Flex Column
-        Topo e Meio: Scrollam
-        Fundo: Fixo
-      */}
       <div className="flex flex-col h-[80vh] md:h-auto md:max-h-[85vh]">
-        
-        {/* ÁREA DE CONTEÚDO SCROLLÁVEL */}
         <div className="flex-1 overflow-y-auto px-1 md:px-2 pb-6 custom-scrollbar">
           <div className="space-y-6 pt-2">
             
-            {/* 1. SELEÇÃO DE PACIENTE */}
+            {/* SELEÇÃO DE PACIENTE */}
             <div className="relative">
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Paciente <span className="text-red-500">*</span>
@@ -428,7 +496,7 @@ export default function RecordForm({
               )}
             </div>
 
-            {/* 2. REPETIR PRESCRIÇÃO (Banner) */}
+            {/* REPETIR PRESCRIÇÃO */}
             {activeRecentRecord && !autoFilled && !record && (
               <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-3 animate-fadeIn">
                 <div className="flex items-center gap-2 text-sm text-emerald-800">
@@ -447,7 +515,7 @@ export default function RecordForm({
               </div>
             )}
 
-            {/* 3. DATA E FARMÁCIA */}
+            {/* DATA E FARMÁCIA */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -464,7 +532,7 @@ export default function RecordForm({
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Origem / Farmácia{' '}
-                  <span className="text-red-500">*</span> {/* Indicador de Obrigatório */}
+                  <span className="text-red-500">*</span>
                   {isLoadingDistributors && (
                     <span className="text-xs text-blue-500 font-normal ml-1 animate-pulse">
                       (Carregando...)
@@ -513,7 +581,7 @@ export default function RecordForm({
 
             <hr className="border-gray-100" />
 
-            {/* 4. MEDICAMENTOS */}
+            {/* LISTA DE MEDICAMENTOS (ATUALIZADA) */}
             <div>
               <div className="flex justify-between items-center mb-4">
                 <label className="text-sm font-bold text-gray-800 flex items-center gap-2">
@@ -534,9 +602,9 @@ export default function RecordForm({
                 {medications.map((med, index) => (
                   <div
                     key={med.tempId}
-                    className="flex flex-col sm:flex-row gap-3 items-start sm:items-center bg-gray-50/80 p-3 rounded-xl border border-gray-100 group hover:border-blue-200 transition-all animate-fadeIn"
+                    className="flex flex-col xl:flex-row gap-3 items-start xl:items-center bg-gray-50/80 p-3 rounded-xl border border-gray-100 group hover:border-blue-200 transition-all animate-fadeIn"
                   >
-                    {/* Select Medicamento */}
+                    {/* 1. SELECT DO MEDICAMENTO */}
                     <div className="flex-1 w-full relative">
                       <div
                         className={`w-full bg-white border rounded-lg px-3 py-2.5 cursor-pointer flex justify-between items-center shadow-sm hover:border-blue-300 transition-all ${
@@ -602,39 +670,61 @@ export default function RecordForm({
                       )}
                     </div>
 
-                    <div className="flex gap-2 w-full sm:w-auto">
-                      {/* Quantidade */}
-                      <div className="w-1/2 sm:w-32">
-                        <select
+                    <div className="flex flex-wrap sm:flex-nowrap gap-2 w-full xl:w-auto items-center">
+                      
+                      {/* 2. QUANTIDADE FLEXÍVEL (DATALIST) */}
+                      <div className="w-full sm:w-32 relative">
+                        <input
+                          type="text"
+                          list={`quantity-options-${index}`} 
                           value={med.quantity}
-                          onChange={(e) =>
-                            updateMedication(index, 'quantity', e.target.value)
-                          }
-                          className="w-full bg-white border border-gray-200 rounded-lg px-2 py-2.5 text-sm outline-none cursor-pointer focus:border-blue-400"
-                        >
+                          onChange={(e) => updateMedication(index, 'quantity', e.target.value)}
+                          placeholder="Qtd..."
+                          className="w-full bg-white border border-gray-200 rounded-lg px-2 py-2.5 text-sm outline-none focus:border-blue-400 placeholder-gray-400"
+                        />
+                        {/* Lista de Sugestões Híbrida */}
+                        <datalist id={`quantity-options-${index}`}>
                           {quantityOptions.map((q) => (
-                            <option key={q} value={q}>
-                              {q}
-                            </option>
+                            <option key={q} value={q} />
                           ))}
-                        </select>
+                        </datalist>
                       </div>
 
-                      {/* Valor */}
-                      <div className="w-1/2 sm:w-28 relative">
-                        <span className="absolute left-2.5 top-2.5 text-xs text-gray-400">R$</span>
+                      {/* 3. VALOR UNITÁRIO (NOVO) */}
+                      <div className="w-1/2 sm:w-24 relative group/unit">
+                        <span className="absolute left-2 top-2.5 text-xs text-gray-400">Uni.</span>
                         <input
                           type="number"
-                          placeholder="0,00"
+                          placeholder="0.00"
+                          value={med.unitValue}
+                          onChange={(e) =>
+                            updateMedication(index, 'unitValue', e.target.value)
+                          }
+                          className="w-full pl-9 pr-2 py-2.5 bg-white border border-gray-200 rounded-lg text-sm outline-none focus:border-blue-400 text-gray-700"
+                        />
+                         <div className="hidden group-hover/unit:block absolute bottom-full left-0 mb-1 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-90 whitespace-nowrap z-10">
+                           Valor Unitário (ex: 100)
+                         </div>
+                      </div>
+
+                      {/* 4. VALOR TOTAL (CALCULADO) */}
+                      <div className="w-1/2 sm:w-28 relative group/total">
+                        <span className="absolute left-2.5 top-2.5 text-xs text-gray-400 font-bold">R$</span>
+                        <input
+                          type="number"
+                          placeholder="Total"
                           value={med.value}
                           onChange={(e) =>
                             updateMedication(index, 'value', e.target.value)
                           }
-                          className="w-full pl-7 pr-2 py-2.5 bg-white border border-gray-200 rounded-lg text-sm outline-none focus:border-blue-400"
+                          className="w-full pl-8 pr-2 py-2.5 bg-blue-50 border border-blue-200 rounded-lg text-sm font-semibold text-blue-800 outline-none focus:border-blue-500"
                         />
+                         <div className="hidden group-hover/total:block absolute bottom-full left-0 mb-1 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-90 whitespace-nowrap z-10">
+                           Total (Qtd x Unitário)
+                         </div>
                       </div>
 
-                      {/* Deletar */}
+                      {/* REMOVER LINHA */}
                       <button
                         onClick={() => removeMedicationRow(index)}
                         className={`p-2.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all cursor-pointer ${
@@ -663,7 +753,7 @@ export default function RecordForm({
               )}
             </div>
 
-            {/* 5. OBSERVAÇÕES */}
+            {/* OBSERVAÇÕES */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Observações
@@ -679,7 +769,7 @@ export default function RecordForm({
           </div>
         </div>
 
-        {/* RODAPÉ FIXO DE AÇÕES */}
+        {/* RODAPÉ */}
         <div className="p-4 md:p-6 border-t border-gray-100 bg-white rounded-b-xl z-10 flex gap-3 shadow-top">
           <button
             onClick={onClose}
