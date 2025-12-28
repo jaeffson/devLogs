@@ -13,29 +13,33 @@ const MS_IN_30_DAYS = 30 * 24 * 60 * 60 * 1000;
 // --- HELPER: Mapeia o campo de localização para um nome de Farmácia ---
 // ATUALIZADO: Agora aceita a lista de distribuidores para cruzar IDs se necessário
 const getFarmaciaName = (record, distributors = []) => {
-  // 1. Tenta extrair o dado bruto de vários campos possíveis (compatibilidade legado/prod)
+  // 1. Tenta verificar se já existe um objeto populado com nome (comum em produção)
+  if (record?.distributor?.name) return record.distributor.name;
+  if (record?.unidade?.name) return record.unidade.name;
+
+  // 2. Verifica se temos um ID e tenta encontrar na lista de distribuidores (Correção Produção)
+  if (distributors && distributors.length > 0) {
+    // Pega possíveis campos que podem conter o ID
+    const possibleId = record?.distributorId || record?.distributor || record?.location || record?.farmacia;
+    
+    // Tenta encontrar na lista de distribuidores pelo ID
+    const found = distributors.find(d => 
+      d._id === possibleId || 
+      d.id === possibleId ||
+      d.name === possibleId // Caso o ID seja o próprio nome
+    );
+    if (found) return found.name;
+  }
+
+  // 3. Fallback: Verificação por String (Lógica Original para compatibilidade)
+  // Pega o dado bruto de vários campos possíveis
   let raw = record?.location || 
             record?.farmacia || 
             record?.pharmacy || 
             record?.origin || 
             record?.unidade || 
-            record?.distributor?.name || 
-            record?.distributor || 
             '';
 
-  // 2. Verifica se temos um ID e tenta encontrar na lista de distribuidores (Correção Produção)
-  if (distributors && distributors.length > 0) {
-    // Tenta encontrar pelo ID do distribuidor ou se o 'raw' for igual ao ID
-    const found = distributors.find(d => 
-      d._id === record?.distributorId || 
-      d._id === raw || 
-      d.id === raw || 
-      d.name === raw
-    );
-    if (found) return found.name;
-  }
-
-  // 3. Fallback: Verificação por String (Lógica Original)
   const loc = String(raw).toLowerCase().trim();
   
   if (loc.includes('campina grande') || loc.includes('campina') || loc.includes('grande') || loc.includes('farmacia a') || loc === 'a' || loc === 'cg') return 'Campina Grande';
@@ -296,7 +300,7 @@ export function GeneralReportView({
 
             {/* Inputs Grid */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-                {/* Filtro de Ano */}
+                {/* Filtro de Ano (NOVO) */}
                 <div className="md:col-span-2">
                    <select
                         value={filterYear}
