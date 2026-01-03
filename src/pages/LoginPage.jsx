@@ -4,6 +4,8 @@
 import React, { useState } from 'react';
 import api from '../services/api';
 import logo from '../assents/medlogs-logo.png';
+import { FiX, FiCheckCircle, FiAlertCircle, FiArrowRight } from 'react-icons/fi'; 
+import { requestPasswordReset } from '../services/api';
 
 // --- Ícones SVG (Lucide Style) ---
 const Icons = {
@@ -173,7 +175,12 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
   const [isLoading, setIsLoading] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState(0);
-  const [rememberMe, setRememberMe] = useState(false);
+  
+  // --- Estados do Modal "Esqueceu a Senha" ---
+  const [isForgotOpen, setIsForgotOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotStatus, setForgotStatus] = useState({ type: '', message: '' });
 
   const checkPasswordStrength = (pwd) => {
     let strength = 0;
@@ -268,6 +275,30 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
     }
   };
 
+  // --- Função para Enviar Email de Recuperação ---
+  const handleForgotSubmit = async (e) => {
+    e.preventDefault();
+    setForgotLoading(true);
+    setForgotStatus({ type: '', message: '' });
+
+    try {
+      await requestPasswordReset(forgotEmail);
+      setForgotStatus({ 
+        type: 'success', 
+        message: 'Se o e-mail existir, enviamos um link de recuperação!' 
+      });
+      setForgotEmail(''); 
+    } catch (error) {
+      console.error(error);
+      setForgotStatus({ 
+        type: 'error', 
+        message: 'Erro ao processar. Tente novamente mais tarde.' 
+      });
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
   const getStrengthColor = () => {
     if (passwordStrength <= 2) return 'bg-red-500';
     if (passwordStrength === 3) return 'bg-yellow-500';
@@ -295,9 +326,11 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
           {/* Elemento flutuante de design */}
           <div
             className="absolute top-0 left-0 w-full h-full opacity-10"
-            style={{ backgroundImage: "url('data:image/svg+xml;base64,...')" }}
+            style={{
+              backgroundImage: "url('data:image/svg+xml;base64,...')", // (Seu padrão SVG estava aqui)
+            }}
           ></div>
-
+          
           <div className="relative z-10 text-center">
             {/* LOGO MEDLOGS COM EFEITO DE BORDA BRANCA E DESTAQUE */}
             <div className="mb-6 relative w-24 h-24 mx-auto">
@@ -320,8 +353,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
 
             <div className="mt-12 p-4 border border-blue-500/50 bg-blue-600/20 rounded-xl">
               <p className="text-sm font-light italic">
-                "A saúde saiu do papel. Seu futuro é digital e focado no
-                paciente."
+                "A saúde saiu do papel. Seu futuro é digital e focado no paciente."
               </p>
             </div>
 
@@ -334,13 +366,9 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
 
         {/* --- COLUNA DIREITA (Formulário) --- */}
         <div className="w-full lg:w-7/12 bg-white p-8 md:p-12 flex flex-col justify-center">
-          {/* Logo no Mobile - MANTIDO PARA O CASO DE TELAS PEQUENAS */}
+          {/* Logo no Mobile */}
           <div className="flex justify-center lg:hidden mb-6">
-            <img
-              src={logo}
-              alt="MedLogs Logo"
-              className="w-12 h-12 object-contain"
-            />
+            <img src={logo} alt="MedLogs Logo" className="w-12 h-12 object-contain" />
           </div>
 
           {/* TÍTULO PRINCIPAL COM LOGO */}
@@ -370,193 +398,153 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
                 <label className="text-[11px] font-bold text-gray-700 uppercase tracking-widest ml-1">
                   Nome Completo
                 </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
+                <div className="relative group">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-600 transition-colors">
                     <Icons.User />
                   </div>
                   <input
                     type="text"
+                    className="w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 focus:bg-white transition-all outline-none placeholder:text-gray-400 text-gray-800"
+                    placeholder="Ex: Dr. João Silva"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3 bg-white border border-gray-300 rounded-lg text-slate-800 text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all placeholder:text-slate-400"
-                    placeholder="Ex: Dr. João Silva"
-                    disabled={isLoading}
                   />
                 </div>
               </div>
             )}
 
             {/* Input Email */}
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 group">
               <label className="text-[11px] font-bold text-gray-700 uppercase tracking-widest ml-1">
-                E-mail
+                E-mail Profissional
               </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
+              <div className="relative transition-all duration-300 group-focus-within:scale-[1.01]">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-600 transition-colors">
                   <Icons.Mail />
                 </div>
                 <input
                   type="email"
+                  className="w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 focus:bg-white transition-all outline-none placeholder:text-gray-400 text-gray-800"
+                  placeholder="nome@clinica.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 bg-white border border-gray-300 rounded-lg text-slate-800 text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all placeholder:text-slate-400"
-                  placeholder="nome@clinica.com"
-                  disabled={isLoading}
                 />
               </div>
             </div>
 
-            {/* Input Senha */}
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-center px-1">
-                <label className="text-[11px] font-bold text-gray-700 uppercase tracking-widest">
-                  Senha
-                </label>
-                {isLoginView && (
-                  <button
-                    type="button"
-                    className="text-xs text-blue-600 hover:text-blue-800 font-semibold hover:underline transition-colors cursor-pointer"
-                  >
-                    Esqueceu a senha?
-                  </button>
-                )}
+            {/* Input Senha com Força e Link Esqueceu a Senha */}
+            <div className="space-y-1.5 relative group">
+              {/* Header do Input: Label + Link de Recuperação */}
+              <div className="flex justify-between items-center">
+                  <label className="text-[11px] font-bold text-gray-700 uppercase tracking-widest ml-1">
+                    Senha de Acesso
+                  </label>
+                  {isLoginView && (
+                    <button
+                      type="button"
+                      onClick={() => setIsForgotOpen(true)}
+                      className="text-[11px] font-bold text-blue-600 hover:text-indigo-700 cursor-pointer transition-colors"
+                    >
+                      Esqueceu a senha?
+                    </button>
+                  )}
               </div>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
+              
+              <div className="relative transition-all duration-300 group-focus-within:scale-[1.01]">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-600 transition-colors">
                   <Icons.Lock />
                 </div>
                 <input
                   type={passwordVisible ? 'text' : 'password'}
+                  className="w-full pl-11 pr-12 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 focus:bg-white transition-all outline-none placeholder:text-gray-400 text-gray-800"
+                  placeholder="••••••••"
                   value={password}
                   onChange={handlePasswordChange}
-                  className="w-full pl-12 pr-12 py-3 bg-white border border-gray-300 rounded-lg text-slate-800 text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all placeholder:text-slate-400"
-                  placeholder="••••••••"
-                  disabled={isLoading}
                 />
                 <button
                   type="button"
                   onClick={() => setPasswordVisible(!passwordVisible)}
-                  className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-blue-600 cursor-pointer transition-colors outline-none"
-                  tabIndex="-1"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-600 transition-colors focus:outline-none cursor-pointer"
                 >
                   {passwordVisible ? <Icons.EyeOff /> : <Icons.Eye />}
                 </button>
               </div>
 
-              {/* Força da Senha */}
-              {!isLoginView && password && (
-                <div className="flex items-center gap-2 mt-2 px-1 animate-fade-in">
-                  <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full transition-all duration-500 ${getStrengthColor()}`}
-                      style={{ width: `${(passwordStrength / 5) * 100}%` }}
-                    ></div>
+              {/* Barra de Força da Senha (Apenas Registo) */}
+              {!isLoginView && password.length > 0 && (
+                <div className="mt-2 animate-fade-in">
+                  <div className="flex items-center gap-1 mb-1">
+                    <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full transition-all duration-500 ${getStrengthColor()}`}
+                        style={{ width: `${(passwordStrength / 5) * 100}%` }}
+                      ></div>
+                    </div>
+                    <span className="text-[10px] font-bold text-gray-500 uppercase">
+                      {getStrengthLabel()}
+                    </span>
                   </div>
-                  <span className="text-[10px] font-bold text-slate-500 uppercase min-w-[3rem] text-right">
-                    {getStrengthLabel()}
-                  </span>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    <div className={`text-[10px] flex items-center gap-1 ${password.length >= 6 ? 'text-emerald-600' : 'text-gray-400'}`}>
+                       <Icons.CheckCircle /> 6+ Caracteres
+                    </div>
+                    <div className={`text-[10px] flex items-center gap-1 ${/[A-Z]/.test(password) ? 'text-emerald-600' : 'text-gray-400'}`}>
+                       <Icons.CheckCircle /> Maiúscula
+                    </div>
+                    <div className={`text-[10px] flex items-center gap-1 ${/\d/.test(password) ? 'text-emerald-600' : 'text-gray-400'}`}>
+                       <Icons.CheckCircle /> Número
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* Seletor de Função (Cards) */}
+            {/* Select Cargo (Apenas Registo) */}
             {!isLoginView && (
-              <div className="space-y-2 animate-fade-in pt-2">
+              <div className="space-y-1.5 animate-fade-in">
                 <label className="text-[11px] font-bold text-gray-700 uppercase tracking-widest ml-1">
-                  Perfil de Acesso
+                  Função / Cargo
                 </label>
-                <div className="grid grid-cols-2 gap-4">
-                  {[
-                    {
-                      id: 'profissional',
-                      label: 'Profissional',
-                      icon: <Icons.User />,
-                    },
-                    {
-                      id: 'secretario',
-                      label: 'Secretário(a)',
-                      icon: <Icons.Briefcase />,
-                    },
-                  ].map((option) => {
-                    const isSelected = role === option.id;
-                    return (
-                      <div
-                        key={option.id}
-                        onClick={() => !isLoading && setRole(option.id)}
-                        className={`
-                          cursor-pointer relative p-3 rounded-lg border-2 transition-all duration-200 flex flex-col items-center gap-2 text-center select-none
-                          ${
-                            isSelected
-                              ? // Estilo aprimorado para seleção profissional
-                                'border-blue-600 bg-blue-50 text-blue-800 shadow-md shadow-blue-200/50'
-                              : 'border-gray-200 bg-white text-slate-500 hover:border-blue-300 hover:bg-slate-50 hover:text-blue-600'
-                          }
-                        `}
-                      >
-                        {isSelected && (
-                          <div className="absolute top-2 right-2 text-blue-600 scale-75">
-                            <Icons.CheckCircle />
-                          </div>
-                        )}
-                        <div
-                          className={`transform transition-transform ${isSelected ? 'scale-110' : ''}`}
-                        >
-                          {option.icon}
-                        </div>
-                        <span className="text-xs font-bold tracking-wide">
-                          {option.label}
-                        </span>
-                      </div>
-                    );
-                  })}
+                <div className="relative group">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-600 transition-colors">
+                    <Icons.Briefcase />
+                  </div>
+                  <select
+                    value={role}
+                    onChange={(e) => setRole(e.target.value)}
+                    className="w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 focus:bg-white transition-all outline-none text-gray-800 appearance-none cursor-pointer"
+                  >
+                    <option value="profissional">Profissional de Saúde</option>
+                    <option value="secretario">Secretaria / Recepção</option>
+                    <option value="admin">Administrador do Sistema</option>
+                  </select>
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="m6 9 6 6 6-6" />
+                    </svg>
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* Checkbox Manter Conectado */}
-            {isLoginView && (
-              <label className="flex items-center gap-2.5 cursor-pointer group mt-2">
-                <div
-                  className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all duration-200 ${rememberMe ? 'bg-blue-600 border-blue-600' : 'bg-white border-slate-300 group-hover:border-blue-400'}`}
-                >
-                  {rememberMe && (
-                    <svg
-                      className="w-3.5 h-3.5 text-white"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                  )}
-                  <input
-                    type="checkbox"
-                    className="hidden"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                  />
-                </div>
-                <span className="text-sm text-slate-600 font-medium group-hover:text-slate-800 transition-colors">
-                  Manter-me conectado
-                </span>
-              </label>
-            )}
-
-            {/* Botão de Ação Principal */}
+            {/* Botão de Ação */}
             <button
               type="submit"
               disabled={isLoading}
               className={`
-                w-full py-3.5 px-4 rounded-lg font-bold text-white shadow-lg text-sm tracking-wide uppercase
-                flex items-center justify-center gap-3 transition-all duration-300 mt-6 cursor-pointer
+                w-full py-4 rounded-xl text-white font-bold text-sm tracking-wide transition-all duration-300 transform active:scale-[0.98] shadow-lg cursor-pointer flex items-center justify-center gap-3
                 ${
                   isLoading
-                    ? 'bg-slate-400 cursor-not-allowed'
+                    ? 'bg-blue-400 cursor-not-allowed'
                     : 'bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 hover:shadow-lg hover:shadow-blue-500/40 active:shadow-none'
                 }
               `}
@@ -595,8 +583,85 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
 
       {/* Footer Minimalista */}
       <div className="absolute bottom-4 text-center text-[11px] text-slate-400 font-medium tracking-wide">
-        <p>MEDLOGS • SISTEMA DE GESTÃO INTELIGENTE</p>
+        <p>&copy; 2025 MedLogs. Todos os direitos reservados.</p>
       </div>
+
+      {/* --- MODAL ESQUECEU A SENHA --- */}
+      {isForgotOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl border border-gray-100 relative animate-in zoom-in-95 duration-300">
+            
+            <button 
+              onClick={() => setIsForgotOpen(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition-colors cursor-pointer"
+            >
+              <FiX className="w-5 h-5" />
+            </button>
+
+            <div className="text-center mb-6">
+              <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-3 text-xl">
+                <Icons.Lock />
+              </div>
+              <h3 className="text-xl font-bold text-slate-800">Recuperar Senha</h3>
+              <p className="text-sm text-slate-500 mt-1">
+                Digite seu email para receber as instruções.
+              </p>
+            </div>
+
+            <form onSubmit={handleForgotSubmit} className="space-y-4">
+               {/* Mensagem de Feedback */}
+               {forgotStatus.message && (
+                <div className={`p-3 rounded-xl flex items-start gap-2 text-sm ${
+                  forgotStatus.type === 'success' 
+                    ? 'bg-emerald-50 text-emerald-700' 
+                    : 'bg-red-50 text-red-700'
+                }`}>
+                  <span className="mt-0.5 text-base shrink-0">
+                    {forgotStatus.type === 'success' ? <FiCheckCircle /> : <FiAlertCircle />}
+                  </span>
+                  <span>{forgotStatus.message}</span>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-600 ml-1">Email Cadastrado</label>
+                <div className="relative">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
+                      <Icons.Mail />
+                    </div>
+                    <input 
+                      type="email" 
+                      required
+                      value={forgotEmail}
+                      onChange={(e) => setForgotEmail(e.target.value)}
+                      className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-gray-800 placeholder-slate-400"
+                      placeholder="exemplo@email.com"
+                    />
+                </div>
+              </div>
+
+              <button 
+                type="submit" 
+                disabled={forgotLoading}
+                className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 rounded-xl shadow-lg transition-all active:scale-95 disabled:opacity-70 cursor-pointer"
+              >
+                 {forgotLoading ? (
+                    <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        <span>Enviando...</span>
+                    </>
+                 ) : (
+                    <>
+                        <span>Enviar Link</span>
+                        <FiArrowRight />
+                    </>
+                 )}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

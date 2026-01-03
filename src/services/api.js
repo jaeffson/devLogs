@@ -54,5 +54,11 @@ export const changeUserPassword = async (data) => {
     const response = await api.post('/auth/change-password', data);
     return response.data;
 };
+// --- FUNÇÃO DE RECUPERAÇÃO DE SENHA ---
+export const requestPasswordReset = async (email) => {
+    // Envia o email para o backend
+    const response = await api.post('/auth/forgot-password', { email });
+    return response.data;
+};
 
 export default api;
