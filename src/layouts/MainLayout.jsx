@@ -36,6 +36,7 @@ import {
 import { formatUserName } from '../utils/helpers';
 import { icons } from '../utils/icons';
 import LGPDBanner from '../components/common/LGPDBanner';
+import OfflineAlert from '../components/common/OfflineAlert';
 
 // --- Helpers de Clima e Data ---
 function getWeatherInfo(code, isDay = true) {
@@ -344,7 +345,7 @@ export default function MainLayout({
 
   return (
     <div className="relative min-h-screen md:h-screen md:flex md:overflow-hidden bg-gray-50 dark:bg-slate-950 transition-colors duration-300">
-      
+      <OfflineAlert />
       {/* Overlay Mobile */}
       {isSidebarOpen && (
         <div
