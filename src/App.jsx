@@ -1,10 +1,9 @@
 // src/App.jsx
-// (CORRIGIDO: Liberação das rotas para todas as variações de 'Profissional')
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Routes, Route, Navigate, useNavigate, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import api from './services/api'; // Instância configurada
+import api from './services/api';
+import { useSyncManager } from './hooks/useSyncManager';
 
 // --- Imports das Páginas e Layouts ---
 import LoginPage from './pages/LoginPage';
@@ -21,7 +20,9 @@ import { FullScreenPreloader } from './components/common/FullScreenPreloader';
 import { getMedicationName } from './utils/helpers';
 import WelcomeModal from './components/WelcomeModal/WelcomeModal.jsx';
 
+
 export default function App() {
+  useSyncManager()
   const [user, setUser] = useState(() => {
     const storedUser = localStorage.getItem('user');
     return storedUser ? JSON.parse(storedUser) : null;
