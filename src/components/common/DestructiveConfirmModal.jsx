@@ -1,88 +1,111 @@
 // src/components/common/DestructiveConfirmModal.jsx
-// (ATUALIZADO: Adicionado ClipLoader e lógica de isSubmitting)
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Modal } from './Modal';
 import { icons } from '../../utils/icons'; 
-// NOVO: Importa o ClipLoader
 import { ClipLoader } from 'react-spinners'; 
 
 export function DestructiveConfirmModal({
-  message,
-  confirmText, 
-  onConfirm,
+  isOpen, // Recebe isOpen caso o Modal precise
   onClose,
+  onConfirm,
+  title = "Excluir Item", // Valor padrão
+  message = "Tem certeza que deseja excluir? Esta ação não pode ser desfeita.", // Valor padrão
+  confirmText, 
 }) {
   const [inputValue, setInputValue] = useState('');
-  const [isConfirmed, setIsConfirmed] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false); // NOVO: Estado de envio
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    setIsConfirmed(inputValue.toLowerCase() === confirmText.toLowerCase());
-  }, [inputValue, confirmText]);
+  // Validação em tempo real (sem useEffect para evitar atrasos)
+  const isConfirmed = confirmText 
+    ? inputValue.toLowerCase() === confirmText.toLowerCase()
+    : true; // Se não tiver texto de confirmação, é sempre true
 
   const handleConfirmAndClose = async () => {
-    if (!isConfirmed) return;
+    if (!isConfirmed || isSubmitting) return;
 
     setIsSubmitting(true); 
     try {
-        await onConfirm(); // Assume que onConfirm faz a chamada API e fecha o modal no sucesso, ou
-        onClose(); // Se onConfirm não fechar o modal
+        // 1. Aguarda a exclusão (O pai deve retornar uma Promise!)
+        await onConfirm(); 
+        
+        // 2. Fecha o modal somente após o sucesso
+        onClose(); 
     } catch (error) {
-        console.error("Erro na exclusão destrutiva:", error);
-    } finally {
-        setIsSubmitting(false);
+        console.error("Erro na exclusão:", error);
+        // Se der erro, paramos o loader para o usuário tentar de novo
+        setIsSubmitting(false); 
     }
   };
 
+  // Reseta o input quando o modal fecha/abre (opcional, mas boa prática)
+  if (!isOpen && inputValue) setInputValue('');
+
   return (
-    <Modal onClose={onClose}>
-      <div className="p-2">
-        <div className="flex justify-center mb-4">
-          <span className="w-14 h-14 text-red-500 bg-red-100 rounded-full flex items-center justify-center">
-            <span className="w-8 h-8">{icons.trash}</span> 
-          </span>
+    <Modal onClose={isSubmitting ? undefined : onClose}>
+      <div className="p-4 md:p-6">
+        {/* Ícone de Lixeira */}
+        <div className="flex justify-center mb-5">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center animate-pulse-slow">
+            <span className="text-red-600 w-8 h-8">
+                {icons.trash || <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>}
+            </span> 
+          </div>
         </div>
 
-        <h2 className="text-xl font-bold text-center text-gray-800 mb-3">Ação Destrutiva</h2>
-        <p className="text-center text-gray-600 mb-4">{message}</p>
+        <h2 className="text-xl md:text-2xl font-bold text-center text-gray-800 mb-3">
+            {title}
+        </h2>
+        
+        <p className="text-center text-gray-600 mb-6 leading-relaxed">
+            {message}
+        </p>
 
-        <div className="space-y-2">
-          <label htmlFor="confirm-input" className="text-sm font-medium text-gray-700">
-            Para confirmar, digite "<strong>{confirmText}</strong>" no campo abaixo:
-          </label>
-          <input
-            type="text"
-            id="confirm-input"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-red-500"
-            autoFocus
-            disabled={isSubmitting} // Desabilita o input
-          />
-        </div>
+        {/* Input de Confirmação (Só aparece se confirmText for passado) */}
+        {confirmText && (
+          <div className="space-y-3 mb-6 bg-red-50 p-4 rounded-lg border border-red-100">
+            <label htmlFor="confirm-input" className="block text-sm text-red-800">
+              Digite <span className="font-bold select-all">"{confirmText}"</span> para confirmar:
+            </label>
+            <input
+              type="text"
+              id="confirm-input"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white"
+              placeholder={confirmText}
+              autoComplete="off"
+              disabled={isSubmitting}
+            />
+          </div>
+        )}
 
-        <div className="flex justify-end gap-4 pt-6 mt-4 border-t">
+        {/* Botões de Ação */}
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 mt-2 border-t border-gray-100 pt-5">
           <button 
             type="button" 
             onClick={onClose} 
-            className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 text-gray-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={isSubmitting} // Desabilita o Cancelar
+            className="w-full sm:w-auto px-5 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-200 transition-colors disabled:opacity-50"
+            disabled={isSubmitting}
           >
             Cancelar
           </button>
+          
           <button 
             type="button" 
             onClick={handleConfirmAndClose}
-            disabled={!isConfirmed || isSubmitting} // Desabilita se não confirmado ou se estiver enviando
-            className="px-4 py-2 bg-red-600 text-white rounded-lg font-medium transition-opacity
-                       disabled:opacity-40 disabled:cursor-not-allowed
-                       hover:bg-red-700 flex items-center justify-center gap-2"
+            disabled={!isConfirmed || isSubmitting}
+            className={`
+                w-full sm:w-auto px-5 py-2.5 rounded-lg font-medium text-white flex items-center justify-center gap-2 transition-all shadow-sm
+                ${(!isConfirmed || isSubmitting)
+                    ? 'bg-red-300 cursor-not-allowed' 
+                    : 'bg-red-600 hover:bg-red-700 hover:shadow-md active:scale-95'
+                }
+            `}
           >
             {isSubmitting ? (
                 <>
-                    {/* ClipLoader */}
-                    <ClipLoader color="#ffffff" size={20} />
+                    <ClipLoader color="#ffffff" size={18} />
                     <span>Excluindo...</span>
                 </>
             ) : (

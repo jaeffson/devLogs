@@ -50,21 +50,16 @@ const SpinnerIcon = () => (
 export function Modal({ children, onClose }) {
   return (
     <div
-      // ATUALIZADO: Overlay com backdrop-blur para efeito "vidro" moderno e cor slate escura para foco total
+      // ATUALIZADO: Overlay com backdrop-blur para efeito "vidro" moderno
       className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-center items-center z-50 p-4 transition-all duration-300 ease-in-out" 
       role="dialog"
       aria-modal="true"
     >
       <div 
-         // ATUALIZADO: 
-         // - rounded-2xl para suavidade
-         // - shadow-2xl difusa para elevação elegante
-         // - border sutil para definição em telas de baixo contraste
          className="bg-white rounded-2xl shadow-2xl border border-white/20 w-full max-w-lg md:max-w-xl lg:max-w-2xl relative animate-fade-in-up overflow-hidden p-6 md:p-8 transform transition-all"
       >
         <button
           onClick={onClose}
-          // ATUALIZADO: Cursor pointer, hover state mais evidente, foco acessível
           className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-2 rounded-full transition-all duration-200 ease-in-out cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 active:scale-90"
           aria-label="Fechar modal"
         >
@@ -76,7 +71,7 @@ export function Modal({ children, onClose }) {
   );
 }
 
-// --- 2. Confirm Modal (Com Lógica do Spinner) ---
+// --- 2. Confirm Modal (CORRIGIDO) ---
 
 export function ConfirmModal({
   message,
@@ -93,9 +88,15 @@ export function ConfirmModal({
     setIsLoading(true); 
     
     try {
+      // 1. Executa a ação (aguarda o backend/api)
       await onConfirm();
+      
+      // 2. CORREÇÃO: Fecha o modal após o sucesso!
+      onClose(); 
+
     } catch (error) {
       console.error("Erro na ação de confirmação:", error);
+      // Aqui você pode adicionar um toast de erro se quiser
     } finally {
       setIsLoading(false); 
     }
@@ -103,38 +104,31 @@ export function ConfirmModal({
 
   return (
     <Modal onClose={onClose}>
-      {/* Cabeçalho Limpo: Removi a borda inferior dura para um visual mais fluido */}
       <div className="mb-3">
         <h2 className={`text-xl font-bold tracking-tight ${isDestructive ? 'text-red-600' : 'text-slate-800'}`}>
           {title}
         </h2>
       </div>
       
-      {/* Corpo do Texto: Tipografia mais legível e cor suave para leitura prolongada */}
       <p className="text-slate-600 mb-8 text-base leading-relaxed">
         {message}
       </p>
 
-      {/* Footer de Ações */}
       <div className="flex justify-end gap-3 pt-0 mt-6">
         
-        {/* Botão Cancelar */}
         <button
           type="button"
           onClick={onClose}
           disabled={isLoading} 
-          // ATUALIZADO: Estilo "Ghost" refinado, cursor pointer, interação de escala
           className="cursor-pointer px-5 py-2.5 bg-white text-slate-700 border border-slate-200 rounded-xl hover:bg-slate-50 hover:border-slate-300 hover:text-slate-900 focus:outline-none focus:ring-4 focus:ring-slate-100 font-medium text-sm transition-all duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 shadow-sm"
         >
           {cancelText}
         </button>
         
-        {/* Botão Confirmar */}
         <button
           type="button"
           onClick={handleConfirm}
           disabled={isLoading} 
-          // ATUALIZADO: Cores institucionais vibrantes, sombra colorida suave (glow), cursor pointer
           className={`cursor-pointer px-5 py-2.5 rounded-xl font-semibold text-sm text-white shadow-md transition-all duration-200 ease-in-out focus:outline-none focus:ring-4 flex items-center justify-center disabled:opacity-70 disabled:cursor-not-allowed active:scale-95 ${
             isDestructive
               ? 'bg-red-600 hover:bg-red-700 hover:shadow-red-200 focus:ring-red-100'
