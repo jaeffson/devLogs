@@ -1,6 +1,5 @@
 // src/components/forms/PatientForm.jsx
 
-
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../common/Modal';
 import { ClipLoader } from 'react-spinners';
@@ -10,7 +9,7 @@ import { ClipLoader } from 'react-spinners';
 // Formata CPF: 000.000.000-00
 const formatCPF = (cpf) => {
   if (!cpf) return '';
-  const cleaned = String(cpf).replace(/\D/g, ''); 
+  const cleaned = String(cpf).replace(/\D/g, '');
   const match = cleaned.match(/^(\d{0,3})(\d{0,3})(\d{0,3})(\d{0,2})$/);
   if (!match) return cleaned;
   let formatted = match[1];
@@ -54,7 +53,7 @@ export default function PatientForm({
   patient,
   onSave,
   onClose,
-  checkDuplicate,
+  checkDuplicate, // Mantido para compatibilidade, mas ignorado no submit
   addToast,
 }) {
   // --- Estado do Formulário ---
@@ -74,7 +73,7 @@ export default function PatientForm({
       setFormData({
         name: patient.name || '',
         cpf: formatCPF(patient.cpf) || '',
-        susCard: formatSUS(patient.susCard) || '', // Aplica máscara ao carregar
+        susCard: formatSUS(patient.susCard) || '',
         observations: patient.observations || '',
         generalNotes: patient.generalNotes || '',
         status: patient.status || 'Ativo',
@@ -105,6 +104,7 @@ export default function PatientForm({
 
     // Limpa erros visuais ao digitar
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: null }));
+
     // Se preencheu um, limpa o erro global de "obrigatório um dos dois"
     if (
       (name === 'cpf' || name === 'susCard') &&
@@ -135,65 +135,56 @@ export default function PatientForm({
     // 3. Validação Estrita de Tamanho (SUS)
     // Se tiver algo digitado, TEM que ter 15 dígitos
     if (cleanSUS.length > 0 && cleanSUS.length !== 15) {
-      // Se o erro do CPF já não existir, coloca o erro do SUS aqui (ou cria um campo de erro próprio pro SUS se preferir)
       if (!newErrors.cpf) {
         newErrors.cpf = `SUS incompleto. Digitados: ${cleanSUS.length}/15`;
       } else {
-        // Se já tem erro no CPF, concatena
         newErrors.cpf += ` | SUS incompleto (${cleanSUS.length}/15)`;
       }
     }
 
     // 4. Validação de Obrigatoriedade (Pelo menos um)
     if (cleanCPF.length === 0 && cleanSUS.length === 0) {
-      newErrors.cpf =
-        'É necessário informar um CPF válido ou um Cartão SUS válido.';
+      // Se ambos estiverem vazios
+      newErrors.cpf = 'É necessário informar o CPF ou o Cartão SUS.';
     }
 
-    return newErrors;
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setErrors({});
 
-    // 1. Executa validações
-    const formErrors = validateForm();
-    if (Object.keys(formErrors).length > 0) {
-      setErrors(formErrors);
-      return;
+    if (!validateForm()) return;
+
+    const cleanCPF = String(formData.cpf).replace(/\D/g, '');
+    const cleanSUS = String(formData.susCard).replace(/\D/g, '');
+
+    // --- CORREÇÃO DO ERRO EM PRODUÇÃO ---
+    // A verificação local (checkDuplicate) foi desativada temporariamente.
+    // Isso evita que dados em cache (falso positivo) bloqueiem o cadastro.
+    // O sistema agora confia exclusivamente na validação do Backend (MongoDB)
+    // para garantir unicidade.
+
+    /* if (typeof checkDuplicate === 'function') {
+       const isDuplicate = checkDuplicate({
+         cpf: cleanCPF,
+         susCard: cleanSUS,
+         currentId: formData.id,
+       });
+       if (isDuplicate) {
+         setErrors({
+           cpf: 'Já existe um paciente cadastrado com este CPF ou Cartão SUS (Verificação Local).',
+         });
+         return;
+       }
     }
+    */
 
-    const cleanCPF = String(formData.cpf || '').replace(/\D/g, '');
-    const cleanSus = String(formData.susCard || '').replace(/\D/g, '');
-
-    // 2. Prepara NULL se vazio (para o banco online não dar erro)
-    const cpfToCheck = cleanCPF.length === 11 ? cleanCPF : null;
-    const susToCheck = cleanSus.length === 15 ? cleanSus : null;
-
-    // 3. Verifica Duplicidade (Backend check)
-    if (typeof checkDuplicate === 'function') {
-      if (cpfToCheck || susToCheck) {
-        const isDuplicate = checkDuplicate({
-          cpf: cpfToCheck,
-          susCard: susToCheck,
-          currentId: formData.id,
-        });
-
-        if (isDuplicate) {
-          setErrors({
-            cpf: 'Já existe um paciente cadastrado com este CPF ou Cartão SUS.',
-          });
-          return;
-        }
-      }
-    }
-
-    // 4. Monta objeto final
     const dataToSave = {
       ...formData,
-      cpf: cpfToCheck ? formatCPF(cpfToCheck) : null, // Salva formatado ou null
-      susCard: susToCheck ? formatSUS(susToCheck) : null, // Salva formatado ou null
+      cpf: cleanCPF || null, // Envia null se vazio para não quebrar Unique Index Sparse
+      susCard: cleanSUS || null,
     };
 
     if (patient?._id) {
@@ -201,13 +192,20 @@ export default function PatientForm({
     }
 
     setIsSaving(true);
+
     try {
       await onSave(dataToSave);
       onClose();
     } catch (error) {
       console.error(error);
-      if (error.response?.data?.message?.includes('duplicate')) {
-        setErrors({ cpf: 'Erro no servidor: Dados duplicados (CPF/SUS).' });
+      // Se o backend retornar erro de duplicidade, mostramos aqui:
+      if (
+        error.response?.data?.message?.includes('duplicate') ||
+        error.response?.status === 409
+      ) {
+        setErrors({
+          cpf: 'Erro: Este CPF ou Cartão SUS já existe no banco de dados.',
+        });
       } else {
         addToast?.('Erro ao salvar o paciente.', 'error');
       }
@@ -235,8 +233,8 @@ export default function PatientForm({
           noValidate
           className="flex flex-col flex-1 min-h-0"
         >
-          <div className="flex-1 overflow-y-auto px-6 py-6 space-y-5 scroll-smooth custom-scrollbar">
-            {/* Nome */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            {/* Nome Completo */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1.5">
                 Nome Completo <span className="text-red-500">*</span>
@@ -246,89 +244,125 @@ export default function PatientForm({
                 name="name"
                 value={formData.name}
                 onChange={handleChange}
-                placeholder="Ex: Maria da Silva"
-                className={`w-full px-4 py-2.5 rounded-lg border text-gray-700 bg-gray-50 focus:bg-white transition-all duration-200 outline-none focus:ring-2 ${
-                  errors.name
-                    ? 'border-red-300 ring-red-100 focus:border-red-500 focus:ring-red-200'
-                    : 'border-gray-200 focus:border-indigo-500 focus:ring-indigo-100'
-                }`}
-                disabled={isSaving}
+                className={`w-full px-4 py-2.5 rounded-lg border bg-gray-50 focus:bg-white text-gray-900 transition-colors
+                  ${
+                    errors.name
+                      ? 'border-red-300 focus:border-red-500 focus:ring-4 focus:ring-red-500/10'
+                      : 'border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10'
+                  }`}
+                placeholder="Ex: João da Silva"
               />
               {errors.name && (
-                <p className="text-red-500 text-xs mt-1.5 font-medium">
+                <p className="mt-1.5 text-sm text-red-500 font-medium animate-pulse">
                   {errors.name}
                 </p>
               )}
             </div>
 
             {/* Grid CPF e SUS */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* CPF */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                  CPF (11 dígitos)
+                  CPF
                 </label>
                 <input
                   type="text"
                   name="cpf"
-                  maxLength={14} 
                   value={formData.cpf}
                   onChange={handleChange}
+                  maxLength={14}
+                  className={`w-full px-4 py-2.5 rounded-lg border bg-gray-50 focus:bg-white text-gray-900 transition-colors
+                    ${
+                      errors.cpf
+                        ? 'border-red-300 focus:border-red-500 focus:ring-4 focus:ring-red-500/10'
+                        : 'border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10'
+                    }`}
                   placeholder="000.000.000-00"
-                  className={`w-full px-4 py-2.5 rounded-lg border text-gray-700 bg-gray-50 focus:bg-white transition-all duration-200 outline-none focus:ring-2 ${
-                    errors.cpf && errors.cpf.includes('CPF')
-                      ? 'border-red-300 ring-red-100 focus:border-red-500 focus:ring-red-200'
-                      : 'border-gray-200 focus:border-indigo-500 focus:ring-indigo-100'
-                  }`}
-                  disabled={isSaving}
                 />
               </div>
 
+              {/* Cartão SUS */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                  Cartão SUS (15 dígitos)
+                  Cartão SUS
                 </label>
                 <input
                   type="text"
                   name="susCard"
-                  maxLength={18} 
                   value={formData.susCard}
                   onChange={handleChange}
+                  maxLength={18}
+                  className={`w-full px-4 py-2.5 rounded-lg border bg-gray-50 focus:bg-white text-gray-900 transition-colors
+                     ${
+                       errors.cpf
+                         ? 'border-red-300 focus:border-red-500 focus:ring-4 focus:ring-red-500/10'
+                         : 'border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10'
+                     }`}
                   placeholder="000.0000.0000.0000"
-                  className={`w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-gray-50 focus:bg-white text-gray-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all duration-200 ${
-                    errors.cpf && errors.cpf.includes('SUS')
-                      ? 'border-red-300 ring-red-100'
-                      : ''
-                  }`}
-                  disabled={isSaving}
                 />
               </div>
             </div>
 
-            {/* Mensagem de Erro Unificada para CPF/SUS */}
+            {/* Mensagem de Erro Unificada (CPF/SUS) */}
             {errors.cpf && (
               <div className="p-3 bg-red-50 border border-red-100 rounded-lg">
-                <p className="text-red-600 text-sm font-medium flex items-center gap-2">
-                  ⚠️ {errors.cpf}
+                <p className="text-sm text-red-600 font-medium text-center">
+                  {errors.cpf}
                 </p>
               </div>
             )}
 
+            {/* Status (Select) */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                Status
+              </label>
+              <div className="relative">
+                <select
+                  name="status"
+                  value={formData.status}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-gray-50 focus:bg-white text-gray-700 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 appearance-none cursor-pointer"
+                >
+                  <option value="Ativo">Ativo</option>
+                  <option value="Inativo">Inativo</option>
+                  <option value="Óbito">Óbito</option>
+                </select>
+                <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-gray-500">
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M19 9l-7 7-7-7"
+                    />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
             {/* Observações */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                Observações Clínicas
+                Observações Clínicas / Alertas
               </label>
               <textarea
                 name="observations"
                 value={formData.observations}
                 onChange={handleChange}
                 rows="3"
-                className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-gray-50 focus:bg-white text-gray-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all duration-200 resize-none"
-                disabled={isSaving}
+                className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-gray-50 focus:bg-white text-gray-700 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-colors resize-none"
+                placeholder="Ex: Diabético, Hipertenso, Alérgico a Dipirona..."
               />
             </div>
 
-            {/* Notas Gerais */}
+            {/* Notas Administrativas */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1.5">
                 Notas Administrativas
@@ -338,35 +372,13 @@ export default function PatientForm({
                 value={formData.generalNotes}
                 onChange={handleChange}
                 rows="2"
-                className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-gray-50 focus:bg-white text-gray-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all duration-200 resize-none"
-                disabled={isSaving}
+                className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-gray-50 focus:bg-white text-gray-700 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-colors resize-none"
+                placeholder="Ex: Documentação pendente, familiar de contato..."
               />
             </div>
-
-            {/* Status */}
-            {patient && (
-              <div className="bg-blue-50/50 p-4 rounded-lg border border-blue-100">
-                <label className="block text-sm font-semibold text-blue-900 mb-2">
-                  Status do Paciente
-                </label>
-                <div className="relative">
-                  <select
-                    name="status"
-                    value={formData.status}
-                    onChange={handleChange}
-                    className="w-full appearance-none px-4 py-2.5 rounded-lg border border-blue-200 bg-white text-gray-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none cursor-pointer"
-                    disabled={isSaving}
-                  >
-                    <option value="Ativo">Ativo</option>
-                    <option value="Inativo">Inativo</option>
-                    <option value="Pendente">Pendente</option>
-                  </select>
-                </div>
-              </div>
-            )}
           </div>
 
-          {/* Rodapé */}
+          {/* Rodapé com Botões */}
           <div className="flex-shrink-0 px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3 z-10">
             <button
               type="button"
@@ -381,13 +393,13 @@ export default function PatientForm({
               type="submit"
               disabled={isSaving}
               className={`
-                                flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg text-white font-medium h-11 shadow-sm transition-all
-                                ${
-                                  isSaving
-                                    ? 'bg-indigo-400 cursor-not-allowed'
-                                    : 'bg-indigo-600 hover:bg-indigo-700 active:scale-95 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 cursor-pointer'
-                                }
-                            `}
+                flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg text-white font-medium h-11 shadow-sm transition-all
+                ${
+                  isSaving
+                    ? 'bg-indigo-400 cursor-not-allowed'
+                    : 'bg-indigo-600 hover:bg-indigo-700 active:scale-95 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 cursor-pointer'
+                }
+              `}
             >
               {isSaving ? (
                 <>
