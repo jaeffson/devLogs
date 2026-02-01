@@ -19,10 +19,10 @@ import Profile from './pages/Profile.jsx';
 import { FullScreenPreloader } from './components/common/FullScreenPreloader';
 import { getMedicationName } from './utils/helpers';
 import WelcomeModal from './components/WelcomeModal/WelcomeModal.jsx';
-
+import ResetPasswordPage from './pages/ResetPasswordPage';
 
 export default function App() {
-  useSyncManager()
+  useSyncManager();
   const [user, setUser] = useState(() => {
     const storedUser = localStorage.getItem('user');
     return storedUser ? JSON.parse(storedUser) : null;
@@ -313,7 +313,7 @@ export default function App() {
             }
           />
           <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
-        
+
           {isProfessionalUser && (
             <>
               <Route
@@ -412,6 +412,9 @@ export default function App() {
             }
           />
         </Route>
+
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
       </Routes>
     </>
   );

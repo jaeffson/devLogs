@@ -8,7 +8,6 @@ const api = axios.create({
   baseURL: apiUrl,
 });
 
-// Adiciona o Token de segurança em cada pedido
 api.interceptors.request.use((config) => {
   const storedUser = localStorage.getItem('user');
   if (storedUser) {
@@ -23,8 +22,6 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// --- AQUI ESTÃO AS FUNÇÕES QUE FALTAVAM ---
-// Elas são criadas AQUI no Front para poderem chamar o Back
 
 export const getDistributors = async () => {
     // O front pede ao back: "Me dê a lista"
@@ -33,7 +30,7 @@ export const getDistributors = async () => {
 };
 
 export const saveDistributor = async (data) => {
-    // O front envia ao back: "Salve isso"
+    // O front envia ao back:
     const response = await api.post('/distributors', data);
     return response.data;
 };
@@ -48,9 +45,7 @@ export const deleteDistributor = async (id) => {
     return response.data;
 };
 export const changeUserPassword = async (data) => {
-    // Envia { currentPassword, newPassword } para o backend
-    // NOTA: Confirme se a rota '/auth/change-password' é a correta no seu backend.
-    // Pode ser '/users/change-password' ou apenas '/change-password' dependendo da sua API.
+
     const response = await api.post('/auth/change-password', data);
     return response.data;
 };
@@ -60,5 +55,6 @@ export const requestPasswordReset = async (email) => {
     const response = await api.post('/auth/forgot-password', { email });
     return response.data;
 };
+
 
 export default api;
