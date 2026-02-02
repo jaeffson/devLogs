@@ -1,9 +1,6 @@
 // src/pages/ProfessionalDashboardPage.jsx
-// (ATUALIZADO: Otimização de Performance, UI/UX Moderno e Logs de Atividade Corrigidos)
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-
 import api from '../services/api';
 import { ConfirmModal } from '../components/common/Modal';
 import PatientForm from '../components/forms/PatientForm';
@@ -336,7 +333,6 @@ export default function ProfessionalDashboardPage({
   };
 
   const handleSaveRecord = async (formData) => {
-    // IMPORTANTE: formData já vem do RecordForm com { farmacia: '...', medications: [...], etc }
     try {
       if (editingRecord) {
         // --- MODO EDIÇÃO ---
@@ -352,8 +348,6 @@ export default function ProfessionalDashboardPage({
         addToast('Registro atualizado com sucesso!', 'success');
       } else {
         // --- MODO NOVO REGISTRO ---
-
-        // Enviamos o formData completo (incluindo o campo farmacia selecionado no modal)
         const response = await api.post('/records', formData);
 
         // Adiciona o novo registro no topo da lista

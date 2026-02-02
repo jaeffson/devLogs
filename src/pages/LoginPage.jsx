@@ -255,12 +255,12 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
               </div>
               <div className="flex items-center gap-3 bg-white/5 p-3 rounded-lg border border-white/10">
                  <div className="bg-blue-500/20 p-2 rounded-full"><Icons.CheckCircle /></div>
-                 <span className="text-xs font-medium">Histórico de Pacientes Seguro</span>
+                 <span className="text-xs font-medium">Histórico de Pacientes </span>
               </div>
             </div>
 
             <div className="mt-12 text-xs text-blue-300/80">
-              &copy; 2025 MedLogs - Todos os direitos reservados.
+              &copy;2026 MedLogs - Todos os direitos reservados.
               <p>Versão 4.5.0</p>
             </div>
           </div>
@@ -312,7 +312,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
 
             {/* Email */}
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Email Corporativo</label>
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Email </label>
               <div className="relative group">
                 <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors">
                   <Icons.Mail />
