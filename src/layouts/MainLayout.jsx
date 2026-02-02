@@ -293,7 +293,7 @@ export default function MainLayout({
 
     const secretaryMenu = [
       { path: '/dashboard', label: 'Dashboard', icon: icons.dashboard },
-      { path: '/patient-history', label: 'Histórico', icon: icons.history },
+      { path: '/patient-history', label: 'Usuários', icon: icons.history },
       { path: '/reports-general', label: 'Relatórios', icon: icons.clipboard },
       { path: '/settings', label: 'Ajustes', icon: icons.settings },
     ];
