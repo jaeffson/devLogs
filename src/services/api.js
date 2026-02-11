@@ -20,7 +20,17 @@ api.interceptors.request.use(
     // Tenta pegar o token de todas as formas possíveis que seu login pode ter salvo
     const rawToken = localStorage.getItem('token');
     const storedUser = localStorage.getItem('user');
+    // Dentro de api.interceptors.request.use...
+    // ... código de busca do token ...
 
+    console.log('--- DEBUG TOKEN ---');
+    console.log('User no Storage:', storedUser);
+    console.log('Token encontrado:', token);
+
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+// ...
     if (rawToken) {
       token = rawToken;
     } else if (storedUser) {
