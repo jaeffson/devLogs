@@ -1,121 +1,108 @@
+// src/services/api.js
 import axios from 'axios';
-import toast from 'react-hot-toast';
 
-// Define a URL base
-const apiUrl = import.meta.env.VITE_API_URL || 'https://backendmedlog-4.onrender.com/api';
+// 1. Definição da URL Base
+const apiUrl =
+  import.meta.env.VITE_API_URL || 'https://backendmedlog-4.onrender.com/api';
 
 const api = axios.create({
   baseURL: apiUrl,
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
-// Interceptor para adicionar o Token automaticamente
-api.interceptors.request.use((config) => {
-  const storedUser = localStorage.getItem('user');
-  if (storedUser) {
-    try {
-      const parsedUser = JSON.parse(storedUser);
-      const token = parsedUser.token || parsedUser;
-      if (token) config.headers.Authorization = `Bearer ${token}`;
-    } catch (error) {
-      console.error('Erro token:', error);
+
+api.interceptors.request.use(
+  (config) => {
+    let token = null;
+
+    // Tenta pegar o token de todas as formas possíveis que seu login pode ter salvo
+    const rawToken = localStorage.getItem('token');
+    const storedUser = localStorage.getItem('user');
+
+    if (rawToken) {
+      token = rawToken;
+    } else if (storedUser) {
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        // Pega o token dentro do objeto do usuário
+        token = parsedUser.token || parsedUser.accessToken || parsedUser;
+      } catch (error) {
+        console.error('Erro ao ler token:', error);
+      }
     }
+
+    // SE TEM TOKEN, ENVIA! (Isso corrige o erro 401)
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
   }
-  return config;
-});
-export const getDistributors = async () => {
-    const response = await api.get('/distributors');
-    return response.data;
-};
+);
 
-export const saveDistributor = async (data) => {
-    const response = await api.post('/distributors', data);
-    return response.data;
-};
 
-export const updateDistributor = async (id, data) => {
-    const response = await api.put(`/distributors/${id}`, data);
-    return response.data;
-};
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
 
-export const deleteDistributor = async (id) => {
-    const response = await api.delete(`/distributors/${id}`);
-    return response.data;
-};
+      localStorage.removeItem('user');
+      localStorage.removeItem('token');
 
-export const changeUserPassword = async (data) => {
-    const response = await api.post('/auth/change-password', data);
-    return response.data;
-};
+      // Redireciona para login se não estiver lá
+      if (!window.location.pathname.includes('/login')) {
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
-export const requestPasswordReset = async (email) => {
-    const response = await api.post('/auth/forgot-password', { email });
-    return response.data;
-};
+export const getDistributors = async () =>
+  (await api.get('/distributors')).data;
+export const saveDistributor = async (data) =>
+  (await api.post('/distributors', data)).data;
+export const updateDistributor = async (id, data) =>
+  (await api.put(`/distributors/${id}`, data)).data;
+export const deleteDistributor = async (id) =>
+  (await api.delete(`/distributors/${id}`)).data;
 
-export const getFornecedores = async () => {
-    const response = await api.get('/distributors'); 
-    return response.data;
-};
+// Autenticação
+export const changeUserPassword = async (data) =>
+  (await api.post('/auth/change-password', data)).data;
+export const requestPasswordReset = async (email) =>
+  (await api.post('/auth/forgot-password', { email })).data;
 
-// 2. Buscar Pacientes
-export const getPacientes = async () => {
-    const response = await api.get('/patients');
-    return response.data;
-};
+// Alias
+export const getFornecedores = async () =>
+  (await api.get('/distributors')).data;
 
-// 3. Buscar Medicamentos
-export const getMedicamentos = async () => {
-    const response = await api.get('/medications');
-    return response.data;
-};
+// Dados Gerais
+export const getPacientes = async () => (await api.get('/patients')).data;
+export const getMedicamentos = async () => (await api.get('/medications')).data;
 
-// 4. Listar Remessas
-export const getRemessas = async () => {
-    const response = await api.get('/remessas');
-    return response.data;
-};
-
-// 5. Criar Remessa
-export const createRemessa = async (data) => {
-    const response = await api.post('/remessas', data);
-    return response.data;
-};
-
-// 6. Adicionar Receita
-export const addReceitaToRemessa = async (remessaId, data) => {
-    const response = await api.post(`/remessas/${remessaId}/receitas`, data);
-    return response.data;
-};
-
-// 7. Fechar Remessa
-export const fecharRemessa = async (remessaId) => {
-    const response = await api.put(`/remessas/${remessaId}/fechar`);
-    return response.data;
-};
+// Remessas Antigas (Legado)
+export const getRemessas = async () => (await api.get('/remessas')).data;
+export const createRemessa = async (data) =>
+  (await api.post('/remessas', data)).data;
+export const addReceitaToRemessa = async (remessaId, data) =>
+  (await api.post(`/remessas/${remessaId}/receitas`, data)).data;
+export const fecharRemessa = async (remessaId) =>
+  (await api.put(`/remessas/${remessaId}/fechar`)).data;
 
 export const shipmentService = {
-  // Buscar remessas
   getOpen: () => api.get('/shipments/open'),
   getHistory: () => api.get('/shipments/history'),
-  
-  // A FUNÇÃO QUE ESTAVA FALTANDO (CRIAR):
   create: (data) => api.post('/shipments/create', data),
-  
-  // Adicionar/Editar itens
   addItem: (data) => api.post('/shipments/items', data),
-  
-  // Remover item específico (Lixeira do card)
   removeItem: (itemId) => api.delete(`/shipments/items/${itemId}`),
-
   close: (data) => api.put('/shipments/close', data),
-  
-  // Cancelar lote inteiro (delete com body precisa desta sintaxe)
   cancel: (data) => api.delete('/shipments/cancel', { data }),
 };
 
 export default api;
-
-
-
-
-
