@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 
-// --- Ícones e Componentes Auxiliares ---
 
 const CloseIcon = (
   <svg

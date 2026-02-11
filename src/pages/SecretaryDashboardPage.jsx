@@ -1,19 +1,15 @@
-// src/pages/SecretaryDashboardPage.jsx
-// (ATUALIZADO: Com busca de Farmácias para Filtros e Gráficos)
-
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom'; 
+import { useNavigate } from 'react-router-dom';
+import api from '../services/api';
 
-// --- Serviços ---
-import api from '../services/api'; // <--- Necessário para buscar farmácias
-
-// --- Imports de Componentes (Views) ---
+// Views
 import { DashboardView } from '../components/views/secretary/DashboardView';
 import { PatientHistoryView } from '../components/views/secretary/PatientHistoryView';
 import { GeneralReportView } from '../components/views/secretary/GeneralReportView';
 import { RecentDeliveriesView } from '../components/views/secretary/RecentDeliveriesView';
+import { WeeklyShipmentView } from '../components/views/secretary/WeeklyShipmentView'; // Sua nova tela
 
-// --- Modais e Utils ---
+// Components/Utils
 import { ViewReasonModal } from '../components/common/ViewReasonModal';
 import { getMedicationName } from '../utils/helpers';
 import { icons } from '../utils/icons';
@@ -31,46 +27,58 @@ export default function SecretaryDashboardPage({
 }) {
   const navigate = useNavigate();
 
-  // --- Estados do Controlador ---
+  // Estados
   const [currentView, setCurrentView] = useState('dashboard');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [initialPatientForHistory, setInitialPatientForHistory] = useState(null);
+  const [initialPatientForHistory, setInitialPatientForHistory] =
+    useState(null);
   const [viewingReasonRecord, setViewingReasonRecord] = useState(null);
-
-  // --- (NOVO) Estado para Farmácias (Distribuidores) ---
   const [distributors, setDistributors] = useState([]);
 
-  // --- (NOVO) Busca Farmácias ao Iniciar ---
+  // Carregar Farmácias (Distribuidores)
   useEffect(() => {
     const fetchDistributors = async () => {
       try {
         const response = await api.get('/distributors');
         setDistributors(response.data || []);
       } catch (error) {
-        console.error("Erro ao carregar farmácias:", error);
+        console.error('Erro ao carregar farmácias:', error);
       }
     };
     fetchDistributors();
-  }, []); // Executa apenas uma vez na montagem
+  }, []);
 
-  // --- Wrapper de Navegação ---
+  // Navegação Interna
   const navigateToView = useCallback((view) => {
     if (view !== 'records') setInitialPatientForHistory(null);
     if (view !== 'all_history') setFilterStatus('all');
     setCurrentView(view);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []); 
+  }, []);
 
-  // --- Sincroniza URL com Estado ---
+  // Sincronia com URL/Props
   useEffect(() => {
     let targetView = activeTabForced || 'dashboard';
-    if (targetView === 'reports' || targetView === 'reports-general') targetView = 'all_history';
+    if (targetView === 'reports' || targetView === 'reports-general')
+      targetView = 'all_history';
     if (targetView === 'patient-history') targetView = 'records';
-    if (!['dashboard', 'records', 'deliveries', 'all_history'].includes(targetView)) targetView = 'dashboard';
-    navigateToView(targetView); 
+
+    // Lista de views válidas (Observe que usamos 'shipment' aqui)
+    if (
+      ![
+        'dashboard',
+        'records',
+        'deliveries',
+        'all_history',
+        'shipment',
+      ].includes(targetView)
+    ) {
+      targetView = 'dashboard';
+    }
+    navigateToView(targetView);
   }, [activeTabForced, navigateToView]);
 
-  // --- Helpers ---
+  // Helpers
   const patientMap = useMemo(() => {
     if (!Array.isArray(patients)) return {};
     return patients.reduce((acc, patient) => {
@@ -79,30 +87,32 @@ export default function SecretaryDashboardPage({
     }, {});
   }, [patients]);
 
-  const getPatientNameById = useCallback((id) => patientMap[id] || 'Desconhecido', [patientMap]);
-  
-  // --- Callbacks ---
+  const getPatientNameById = useCallback(
+    (id) => patientMap[id] || 'Desconhecido',
+    [patientMap]
+  );
+
   const handleNavigateWithFilter = (viewUrl, status) => {
     if (viewUrl === '/reports-general') {
-        setFilterStatus(status);
-        setCurrentView('all_history'); // Força a troca de view internamente se necessário
-        navigate('/reports-general');
+      setFilterStatus(status);
+      setCurrentView('all_history');
+      navigate('/reports-general');
     } else {
-        navigate(viewUrl);
-    }
-  };
-  
-  const handleNavigateToPatientHistory = (patientId) => {
-    const patient = patients.find(p => (p._id || p.id) === patientId); 
-    if (patient) {
-      setInitialPatientForHistory(patient); 
-      navigate('/patient-history');          
-    } else {
-      if(addToast) addToast('Erro: Paciente não encontrado.', 'error');
+      navigate(viewUrl);
     }
   };
 
-  // --- Renderização ---
+  const handleNavigateToPatientHistory = (patientId) => {
+    const patient = patients.find((p) => (p._id || p.id) === patientId);
+    if (patient) {
+      setInitialPatientForHistory(patient);
+      navigate('/patient-history');
+    } else if (addToast) {
+      addToast('Erro: Paciente não encontrado.', 'error');
+    }
+  };
+
+  // Renderização das Telas
   const renderCurrentView = () => {
     switch (currentView) {
       case 'dashboard':
@@ -110,7 +120,7 @@ export default function SecretaryDashboardPage({
           <DashboardView
             user={user}
             annualBudget={annualBudget || user?.budget}
-            distributors={distributors} // <--- Passando para o gráfico
+            distributors={distributors}
             patients={patients}
             records={records}
             medications={medications}
@@ -118,8 +128,10 @@ export default function SecretaryDashboardPage({
             filterYear={filterYear}
             getPatientNameById={getPatientNameById}
             getMedicationName={getMedicationName}
-            icons={icons} 
+            icons={icons}
+            // PROPS IMPORTANTES DE NAVEGAÇÃO
             onNavigateWithFilter={handleNavigateWithFilter}
+            onChangeView={setCurrentView} 
           />
         );
 
@@ -132,7 +144,7 @@ export default function SecretaryDashboardPage({
             getMedicationName={getMedicationName}
             initialPatient={initialPatientForHistory}
             onViewReason={setViewingReasonRecord}
-            onBack={() => navigate('/dashboard')}
+            onBack={() => setCurrentView('dashboard')}
           />
         );
 
@@ -142,14 +154,14 @@ export default function SecretaryDashboardPage({
             user={user}
             records={records}
             medications={medications}
-            distributors={distributors} // <--- Passando para o filtro do relatório
+            distributors={distributors}
             addToast={addToast}
             getPatientNameById={getPatientNameById}
             getMedicationName={getMedicationName}
             initialFilterStatus={filterStatus}
-            onReportViewed={() => {}} 
+            onReportViewed={() => {}}
             onViewReason={setViewingReasonRecord}
-            onBack={() => navigate('/dashboard')}
+            onBack={() => setCurrentView('dashboard')}
           />
         );
 
@@ -161,10 +173,20 @@ export default function SecretaryDashboardPage({
             getPatientNameById={getPatientNameById}
             getMedicationName={getMedicationName}
             onPatientClick={handleNavigateToPatientHistory}
-            onBack={() => navigate('/dashboard')}
+            onBack={() => setCurrentView('dashboard')}
           />
         );
 
+      // CORREÇÃO AQUI: Deve ser 'shipment' para bater com a validação lá em cima
+      case 'shipment':
+        return (
+          <WeeklyShipmentView 
+            // Passamos a lista correta de distribuidores carregada da API
+            distributors={distributors} 
+            patients={patients}
+            medicationsList={medications}
+          />
+        );
       default:
         return null;
     }
@@ -173,7 +195,7 @@ export default function SecretaryDashboardPage({
   return (
     <>
       {renderCurrentView()}
-      
+
       {viewingReasonRecord && (
         <ViewReasonModal
           isOpen={true}

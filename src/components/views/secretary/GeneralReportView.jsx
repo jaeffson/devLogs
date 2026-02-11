@@ -1,76 +1,301 @@
 // src/components/views/secretary/GeneralReportView.jsx
-// (ATUALIZADO: Fonte da tela maior (SM), PDF mantido compacto + Numeração de Páginas)
-
 import React, { useState, useMemo, useEffect } from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { StatusBadge } from '../../common/StatusBadge';
 import { icons } from '../../../utils/icons';
 import useDebounce from '../../../hooks/useDebounce';
+import {
+  FiX,
+  FiCalendar,
+  FiUser,
+  FiPackage,
+  FiMapPin,
+  FiInfo,
+  FiClock,
+  FiCheckCircle,
+  FiAlertTriangle,
+} from 'react-icons/fi';
 
 const MS_IN_DAY = 24 * 60 * 60 * 1000;
 
-// --- HELPER: Identificação de Farmácia (Lógica Preservada) ---
+// --- CORREÇÃO DE DATA (FUSO HORÁRIO) ---
+const formatSafeDate = (dateString, includeTime = false) => {
+  if (!dateString) return '-';
+  const d = new Date(dateString);
+
+  // Se a data for válida
+  if (!isNaN(d.getTime())) {
+    // Para datas "puras" (sem hora importante, ex: Recebido em), ajustamos o fuso
+    // Isso evita que dia 10 vire dia 09 às 21h (Problema do "Ontem")
+    if (!includeTime) {
+      d.setMinutes(d.getMinutes() + d.getTimezoneOffset());
+      return d.toLocaleDateString('pt-BR');
+    }
+    // Para datas com hora (Entrada), usamos o local string normal
+    return d.toLocaleString('pt-BR');
+  }
+  return '-';
+};
+
+// --- SUBCOMPONENTE: MODAL DE DETALHES ---
+const RecordDetailModal = ({
+  record,
+  onClose,
+  resolvePatientName,
+  getMedicationName,
+  medications,
+  distributors,
+}) => {
+  if (!record) return null;
+
+  // Usa a função blindada para pegar o nome
+  const patientName = resolvePatientName(record);
+
+  // Datas formatadas com correção de fuso
+  const entryDate = formatSafeDate(record.entryDate, true); // Com hora
+
+  // Lógica para Data de Recebimento ou Status
+  let deliveryDateDisplay = 'Pendente';
+  if (record.deliveryDate) {
+    deliveryDateDisplay = formatSafeDate(record.deliveryDate, false);
+  } else if (record.status === 'Cancelado') {
+    deliveryDateDisplay = 'Cancelado';
+  }
+
+  const farmacia = getFarmaciaName(record, distributors);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-scale-in">
+        {/* Header Elegante */}
+        <div
+          className={`p-6 flex justify-between items-start text-white ${record.status === 'Cancelado' ? 'bg-gradient-to-r from-red-700 to-red-900' : 'bg-gradient-to-r from-gray-900 to-gray-800'}`}
+        >
+          <div>
+            <h3 className="text-xl font-bold flex items-center gap-2">
+              <FiUser className="text-white/80" /> {patientName}
+            </h3>
+            <p className="text-white/60 text-xs mt-1 font-mono uppercase tracking-wide">
+              Ref: {record._id.slice(-6)}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="bg-white/10 hover:bg-white/20 p-2 rounded-full transition-colors cursor-pointer text-white"
+          >
+            <FiX size={20} />
+          </button>
+        </div>
+
+        {/* Corpo com Scroll */}
+        <div className="p-6 space-y-6 overflow-y-auto max-h-[70vh]">
+          {/* Grid de Datas */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 flex flex-col gap-1">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                <FiClock /> Data Entrada
+              </span>
+              <span className="text-sm font-bold text-gray-800">
+                {entryDate}
+              </span>
+            </div>
+
+            <div
+              className={`p-4 rounded-xl border flex flex-col gap-1 ${record.deliveryDate ? 'bg-green-50 border-green-100' : record.status === 'Cancelado' ? 'bg-red-50 border-red-100' : 'bg-orange-50 border-orange-100'}`}
+            >
+              <span
+                className={`text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 ${record.deliveryDate ? 'text-green-600' : record.status === 'Cancelado' ? 'text-red-600' : 'text-orange-600'}`}
+              >
+                <FiCheckCircle />{' '}
+                {record.deliveryDate ? 'Recebido em' : 'Situação'}
+              </span>
+              <span
+                className={`text-sm font-bold ${record.deliveryDate ? 'text-green-800' : record.status === 'Cancelado' ? 'text-red-800' : 'text-orange-800'}`}
+              >
+                {deliveryDateDisplay}
+              </span>
+            </div>
+          </div>
+
+          {/* --- ÁREA DE CANCELAMENTO (NOVO) --- */}
+          {record.status === 'Cancelado' && (
+            <div className="bg-red-50 p-4 rounded-xl border border-red-100 animate-pulse-slow">
+              <h4 className="text-xs font-bold text-red-600 uppercase mb-2 flex items-center gap-2">
+                <FiAlertTriangle /> Motivo do Cancelamento
+              </h4>
+              <p className="text-sm text-red-800 font-medium">
+                {record.cancelReason || 'Nenhum motivo informado.'}
+              </p>
+            </div>
+          )}
+
+          {/* Farmácia */}
+          <div>
+            <h4 className="text-xs font-bold text-gray-500 uppercase mb-2 flex items-center gap-2">
+              <FiMapPin /> Origem / Farmácia
+            </h4>
+            <div className="bg-white px-4 py-3 rounded-xl text-gray-800 border border-gray-200 font-bold shadow-sm">
+              {farmacia}
+            </div>
+          </div>
+
+          {/* Medicações */}
+          <div>
+            <h4 className="text-xs font-bold text-gray-500 uppercase mb-2 flex items-center gap-2">
+              <FiPackage /> Medicamentos Solicitados
+            </h4>
+            <div className="space-y-2">
+              {record.medications?.map((m, i) => (
+                <div
+                  key={i}
+                  className="flex justify-between items-center bg-blue-50/50 p-3 rounded-xl border border-blue-100"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                    <span className="font-semibold text-gray-700 text-sm">
+                      {m.name || getMedicationName(m.medicationId, medications)}
+                    </span>
+                  </div>
+                  <span className="bg-white text-blue-700 px-3 py-1 rounded-lg text-xs font-bold border border-blue-200 shadow-sm">
+                    {m.dosage || m.quantity || 'N/A'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Observações */}
+          {record.observation && (
+            <div>
+              <h4 className="text-xs font-bold text-gray-500 uppercase mb-2 flex items-center gap-2">
+                <FiInfo /> Observações Gerais
+              </h4>
+              <p className="text-sm text-gray-600 bg-yellow-50 p-4 rounded-xl border border-yellow-100 italic leading-relaxed">
+                "{record.observation}"
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 bg-gray-50 border-t border-gray-100 text-center">
+          <button
+            onClick={onClose}
+            className="text-blue-600 font-bold text-sm hover:underline cursor-pointer"
+          >
+            Fechar Detalhes
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- FUNÇÕES AUXILIARES ---
+
+// Recupera nome da farmácia de forma segura
 const getFarmaciaName = (record, distributors = []) => {
-  // 1. Tenta pegar o nome direto do objeto
   if (record?.distributor?.name) return record.distributor.name;
   if (record?.unidade?.name) return record.unidade.name;
+  if (record?.farmacia) return record.farmacia;
+  if (record?.pharmacy) return record.pharmacy;
 
-  // 2. Cruza ID com a lista de distribuidores
   if (distributors && distributors.length > 0) {
-    const possibleId = record?.distributorId || record?.distributor || record?.location || record?.farmacia;
-    const found = distributors.find(d => 
-      d._id === possibleId || d.id === possibleId || d.name === possibleId
+    const possibleId =
+      record?.distributorId || record?.distributor || record?.location;
+    const found = distributors.find(
+      (d) =>
+        d._id === possibleId || d.id === possibleId || d.name === possibleId
     );
     if (found) return found.name;
   }
 
-  // 3. Fallback por string
-  let raw = record?.location || record?.farmacia || record?.pharmacy || record?.origin || record?.unidade || '';
+  let raw = record?.location || record?.origin || record?.unidade || '';
   const loc = String(raw).toLowerCase().trim();
-  
-  if (loc.includes('campina grande') || loc.includes('campina') || loc.includes('grande') || loc === 'cg') return 'Campina Grande';
-  if (loc.includes('joao paulo') || loc.includes('joão paulo') || loc.includes('jp')) return 'João Paulo';
+  if (loc.includes('campina grande') || loc.includes('cg'))
+    return 'Campina Grande';
+  if (loc.includes('joao paulo') || loc.includes('jp')) return 'João Paulo';
 
-  return 'Não Identificada';
+  return raw || 'Não Identificada';
 };
 
 export function GeneralReportView({
   user,
   records = [],
   medications = [],
-  distributors = [], 
+  distributors = [],
   addToast,
-  getPatientNameById,
+  getPatientNameById, // Esta é a função que vem do pai
   getMedicationName,
-  initialFilterStatus, 
-  onReportViewed,
-  onViewReason, 
-  onBack
+  initialFilterStatus,
+  onBack,
 }) {
-  
-  // --- Estados ---
+  // --- ESTADOS ---
   const [filterPeriod, setFilterPeriod] = useState('all');
   const [filterYear, setFilterYear] = useState(new Date().getFullYear());
-  const [filterStatus, setFilterStatus] = useState(initialFilterStatus || 'all');
+  const [filterStatus, setFilterStatus] = useState(
+    initialFilterStatus || 'all'
+  );
   const [reportSearchTerm, setReportSearchTerm] = useState('');
-  const [selectedPharmacy, setSelectedPharmacy] = useState(''); 
-
+  const [selectedPharmacy, setSelectedPharmacy] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(20); // Reduzi levemente itens por página pois a fonte aumentou
-  
+  const [itemsPerPage] = useState(15);
+
+  const [selectedRecord, setSelectedRecord] = useState(null);
+
   const debouncedReportSearchTerm = useDebounce(reportSearchTerm, 300);
 
   useEffect(() => {
-    if (initialFilterStatus) {
-      setFilterStatus(initialFilterStatus);
-      if (onReportViewed) onReportViewed(); 
+    if (initialFilterStatus) setFilterStatus(initialFilterStatus);
+  }, [initialFilterStatus]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    filterPeriod,
+    filterStatus,
+    debouncedReportSearchTerm,
+    selectedPharmacy,
+    filterYear,
+  ]);
+
+  // --- RESOLUÇÃO BLINDADA DO NOME DO PACIENTE ---
+  const resolvePatientName = (record) => {
+    // 1. Prioridade Máxima: Nome salvo no próprio registro (Backup do banco)
+    if (
+      record.patientName &&
+      record.patientName !== 'Paciente sem nome' &&
+      record.patientName !== 'Desconhecido'
+    ) {
+      return record.patientName;
     }
-  }, [initialFilterStatus, onReportViewed]);
 
-  useEffect(() => { setCurrentPage(1); }, [filterPeriod, filterStatus, debouncedReportSearchTerm, selectedPharmacy, filterYear]);
+    // 2. Se patientId for um objeto populado (veio do populate do backend)
+    if (
+      record.patientId &&
+      typeof record.patientId === 'object' &&
+      record.patientId.name
+    ) {
+      return record.patientId.name;
+    }
 
-  // Opções de Status
+    // 3. Tenta buscar na lista de pacientes via função do pai (se disponível)
+    if (typeof getPatientNameById === 'function') {
+      const id =
+        record.patientId && typeof record.patientId === 'object'
+          ? record.patientId._id || record.patientId.id
+          : record.patientId;
+
+      if (id) {
+        const found = getPatientNameById(id);
+        if (found && found !== 'Desconhecido') return found;
+      }
+    }
+
+    return 'Paciente Não Identificado';
+  };
+
   const statusOptions = useMemo(() => {
     const options = [
       { value: 'all', label: 'Todos' },
@@ -84,129 +309,187 @@ export function GeneralReportView({
     return options;
   }, [initialFilterStatus, filterStatus]);
 
-  // --- Filtragem ---
+  // --- FILTRAGEM ---
   const filteredRecordsForReport = useMemo(() => {
     let filtered = Array.isArray(records) ? [...records] : [];
-    
-    // Ano
+
     if (filterYear) {
-      filtered = filtered.filter(r => {
-        try { return new Date(r.entryDate).getFullYear() === parseInt(filterYear); } catch (e) { return false; }
+      filtered = filtered.filter((r) => {
+        try {
+          return new Date(r.entryDate).getFullYear() === parseInt(filterYear);
+        } catch (e) {
+          return false;
+        }
       });
     }
 
-    // Período
     if (filterPeriod !== 'all') {
       const days = parseInt(filterPeriod, 10);
       if (!isNaN(days)) {
         const cutoffDate = new Date();
         cutoffDate.setDate(cutoffDate.getDate() - days);
         cutoffDate.setHours(0, 0, 0, 0);
-        filtered = filtered.filter((r) => { try { return new Date(r.entryDate) >= cutoffDate; } catch (e) { return false; } });
+        filtered = filtered.filter((r) => {
+          try {
+            return new Date(r.entryDate) >= cutoffDate;
+          } catch (e) {
+            return false;
+          }
+        });
       }
     }
 
-    // Status
     const now = new Date().getTime();
     if (filterStatus !== 'all') {
       if (filterStatus === 'Vencido') {
-        filtered = filtered.filter(r => {
+        filtered = filtered.filter((r) => {
           if (r.status !== 'Pendente' || !r.entryDate) return false;
-          try { return (now - new Date(r.entryDate).getTime()) > (30 * MS_IN_DAY); } catch (e) { return false; }
+          try {
+            return now - new Date(r.entryDate).getTime() > 30 * MS_IN_DAY;
+          } catch (e) {
+            return false;
+          }
         });
       } else {
         filtered = filtered.filter((r) => r.status === filterStatus);
       }
     }
 
-    // Farmácia
     if (selectedPharmacy) {
-        filtered = filtered.filter(r => getFarmaciaName(r, distributors) === selectedPharmacy);
-    }
-
-    // Busca
-    const searchTermLower = debouncedReportSearchTerm.toLowerCase();
-    if (searchTermLower) {
-      filtered = filtered.filter((r) =>
-        (getPatientNameById(r.patientId) || '').toLowerCase().includes(searchTermLower) || 
-        getFarmaciaName(r, distributors).toLowerCase().includes(searchTermLower) 
+      filtered = filtered.filter(
+        (r) => getFarmaciaName(r, distributors) === selectedPharmacy
       );
     }
-    
+
+    const searchTermLower = debouncedReportSearchTerm.toLowerCase();
+    if (searchTermLower) {
+      filtered = filtered.filter(
+        (r) =>
+          resolvePatientName(r).toLowerCase().includes(searchTermLower) ||
+          getFarmaciaName(r, distributors)
+            .toLowerCase()
+            .includes(searchTermLower)
+      );
+    }
+
     return filtered.length > 0
       ? filtered.sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate))
       : [];
-  }, [records, filterPeriod, filterStatus, selectedPharmacy, debouncedReportSearchTerm, getPatientNameById, filterYear, distributors]);
+  }, [
+    records,
+    filterPeriod,
+    filterStatus,
+    selectedPharmacy,
+    debouncedReportSearchTerm,
+    filterYear,
+    distributors,
+  ]);
 
-  // Paginação
-  const totalPages = useMemo(() => Math.ceil(filteredRecordsForReport.length / itemsPerPage), [filteredRecordsForReport, itemsPerPage]);
+  const totalPages = useMemo(
+    () => Math.ceil(filteredRecordsForReport.length / itemsPerPage),
+    [filteredRecordsForReport, itemsPerPage]
+  );
   const currentRecordsForReport = useMemo(() => {
     const indexOfLastItem = currentPage * itemsPerPage;
     const indexOfFirstItem = indexOfLastItem - itemsPerPage;
     return filteredRecordsForReport.slice(indexOfFirstItem, indexOfLastItem);
   }, [filteredRecordsForReport, currentPage, itemsPerPage]);
 
-  // --- Exportar PDF (Configuração Mantida + Numeração de Páginas) ---
+  // --- EXPORTAR PDF ---
   const handleExportPDF = () => {
-    if (!filteredRecordsForReport.length) { addToast?.('Sem dados.', 'error'); return; }
+    if (!filteredRecordsForReport.length) {
+      addToast?.('Sem dados.', 'error');
+      return;
+    }
     try {
       const doc = new jsPDF();
-      const reportTitle = 'Relatório Geral de Movimentações';
-      const userName = user?.name || 'Usuário do Sistema';
+      const userName = user?.name || 'Sistema';
       const dateNow = new Date().toLocaleDateString('pt-BR');
       const timeNow = new Date().toLocaleTimeString('pt-BR');
-      
-      doc.setFontSize(14); 
-      doc.text(reportTitle, 14, 15);
-      
-      doc.setFontSize(8); 
+
+      // Cabeçalho Centralizado
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('UNIDADE BÁSICA DE SAÚDE PARARI - PB', 105, 15, {
+        align: 'center',
+      });
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text('Relatório Geral de Movimentações', 105, 22, {
+        align: 'center',
+      });
+
+      doc.setLineWidth(0.5);
+      doc.line(14, 26, 196, 26);
+
+      doc.setFontSize(8);
       doc.setTextColor(100);
-      doc.text(`Emitido por: ${userName}`, 14, 21);
-      doc.text(`Data: ${dateNow} às ${timeNow}`, 14, 25);
-      doc.text(`Filtro Ano: ${filterYear} | Registros: ${filteredRecordsForReport.length}`, 14, 29);
+      doc.text(`Gerado por: ${userName}`, 14, 32);
+      doc.text(`Data: ${dateNow} às ${timeNow}`, 196, 32, { align: 'right' });
 
       const tableRows = filteredRecordsForReport.map((record) => {
-        const farmacia = getFarmaciaName(record, distributors); 
-        const patientName = getPatientNameById(record.patientId) || 'N/A'; 
-        const date = new Date(record.entryDate).toLocaleDateString('pt-BR');
-        
-        let deliveryFormatted = '-';
-        if (record.deliveryDate) {
-           const dObj = new Date(record.deliveryDate);
-           dObj.setMinutes(dObj.getMinutes() + dObj.getTimezoneOffset());
-           deliveryFormatted = dObj.toLocaleDateString('pt-BR');
-        }
-        
-        const items = Array.isArray(record.medications) 
-           ? record.medications.map(m => `${getMedicationName(m.medicationId, medications)} (${m.quantity})`).join(', ')
-           : '0 itens';
+        const patientName = resolvePatientName(record);
+        const farmacia = getFarmaciaName(record, distributors);
+        const date = formatSafeDate(record.entryDate, false);
+        const receivedDate = record.deliveryDate
+          ? formatSafeDate(record.deliveryDate, false)
+          : record.status === 'Cancelado'
+            ? 'CANCELADO'
+            : 'PENDENTE';
 
-        return [patientName, date, deliveryFormatted, items, farmacia, record.status];
+        const items = Array.isArray(record.medications)
+          ? record.medications
+              .map((m) => {
+                const name =
+                  m.name || getMedicationName(m.medicationId, medications);
+                const qtd = m.dosage || m.quantity || '';
+                return qtd ? `${name} (${qtd})` : name;
+              })
+              .join(', ')
+          : '-';
+
+        // Colunas
+        return [patientName, items, date, receivedDate, farmacia];
       });
 
       autoTable(doc, {
-        head: [['Paciente', 'Entrada', 'Entrega', 'Medicações', 'Unidade', 'Status']],
+        head: [['PACIENTE', 'MEDICAÇÕES', 'ENTRADA', 'RECEBIDO', 'FARMÁCIA']],
         body: tableRows,
-        startY: 34,
+        startY: 36,
         theme: 'grid',
-        // MANTIDO fontSize 7 como solicitado para o PDF
-        styles: { fontSize: 7, cellPadding: 2 }, 
-        headStyles: { fillColor: [50, 50, 50], textColor: 255 },
-        // ADICIONADO: Numeração de Páginas no PDF
+        styles: { fontSize: 8, cellPadding: 3, valign: 'middle' },
+        headStyles: {
+          fillColor: [44, 62, 80],
+          textColor: 255,
+          fontStyle: 'bold',
+          halign: 'center',
+        },
+        columnStyles: {
+          0: { cellWidth: 40, fontStyle: 'bold' },
+          1: { cellWidth: 'auto' },
+          2: { cellWidth: 20, halign: 'center' },
+          3: { cellWidth: 25, halign: 'center', fontStyle: 'bold' },
+          4: { cellWidth: 30, halign: 'center' },
+        },
         didDrawPage: function (data) {
-            doc.setFontSize(7);
-            doc.setTextColor(150);
-            doc.text(
-                'Página ' + data.pageNumber,
-                data.settings.margin.left,
-                doc.internal.pageSize.height - 10
-            );
-        }
+          doc.setFontSize(7);
+          doc.setTextColor(150);
+          doc.text(
+            'Página ' + data.pageNumber,
+            196,
+            doc.internal.pageSize.height - 10,
+            { align: 'right' }
+          );
+        },
       });
 
-      doc.output('dataurlnewwindow');
-      addToast?.('PDF gerado!', 'success');
-    } catch (err) { addToast?.('Erro ao gerar PDF.', 'error'); }
+      doc.save(`relatorio_medlog_${Date.now()}.pdf`);
+      addToast?.('PDF gerado com sucesso!', 'success');
+    } catch (err) {
+      console.error(err);
+      addToast?.('Erro ao gerar PDF.', 'error');
+    }
   };
 
   const availableYears = useMemo(() => {
@@ -217,220 +500,282 @@ export function GeneralReportView({
   }, []);
 
   return (
-    <div className="flex flex-col h-full w-full bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-      
-      {/* --- HEADER --- */}
-      <div className="flex-none p-3 border-b border-gray-200 bg-gray-50">
-        
-        {/* Linha 1: Título e Botões */}
-        <div className="flex justify-between items-center mb-3">
-            <div className="flex items-center gap-2">
-                {onBack && (
-                <button 
-                    onClick={onBack} 
-                    className="p-2 rounded-full bg-white border border-gray-300 hover:bg-gray-100 text-gray-600 transition-colors shadow-sm cursor-pointer" 
-                    title="Voltar"
-                >
-                    {/* Ícone Arrow Left */}
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="19" y1="12" x2="5" y2="12"></line>
-                        <polyline points="12 19 5 12 12 5"></polyline>
-                    </svg>
-                </button>
-                )}
-                <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                    Relatório
-                    <span className="text-xs font-normal text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full border border-gray-300">
-                        {filteredRecordsForReport.length}
-                    </span>
-                </h2>
+    <div className="flex flex-col h-full w-full bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden font-sans">
+      {/* HEADER */}
+      <div className="flex-none p-5 border-b border-gray-200 bg-gray-50/50">
+        <div className="flex justify-between items-center mb-4">
+          <div className="flex items-center gap-3">
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="p-2.5 rounded-xl bg-white border border-gray-200 hover:bg-gray-100 hover:border-gray-300 text-gray-600 transition-all shadow-sm cursor-pointer"
+                title="Voltar"
+              >
+                {icons.arrowLeft || '<'}
+              </button>
+            )}
+            <div>
+              <h2 className="text-xl font-extrabold text-gray-800 flex items-center gap-2 tracking-tight">
+                Relatório Geral
+              </h2>
+              <span className="text-xs text-gray-500 font-medium">
+                Total de {filteredRecordsForReport.length} registros
+              </span>
             </div>
-            
-            <button
-                onClick={handleExportPDF}
-                disabled={!filteredRecordsForReport.length}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-800 text-white rounded hover:bg-gray-900 text-sm font-medium transition-colors shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-                {icons.download} PDF
-            </button>
+          </div>
+
+          <button
+            onClick={handleExportPDF}
+            disabled={!filteredRecordsForReport.length}
+            className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 text-white rounded-xl hover:bg-black text-sm font-bold transition-all shadow-lg hover:shadow-gray-400 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0"
+          >
+            {icons.download} SALVAR PDF
+          </button>
         </div>
 
-        {/* Linha 2: Filtros (Aumentados para text-sm) */}
-        <div className="flex flex-wrap gap-3 items-center">
-            
-            {/* Busca */}
-            <div className="relative flex-grow min-w-[200px]">
-                <input
-                    type="text"
-                    placeholder="Buscar paciente ou farmácia..."
-                    value={reportSearchTerm}
-                    onChange={(e) => setReportSearchTerm(e.target.value)}
-                    className="w-full pl-8 px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-gray-500 outline-none bg-white cursor-text"
-                />
-                <span className="absolute left-2.5 top-2.5 text-gray-400 text-sm">{icons.search}</span>
-            </div>
+        {/* Filtros */}
+        <div className="flex flex-wrap gap-3 items-center bg-white p-3 rounded-xl border border-gray-200 shadow-sm">
+          <div className="relative flex-grow min-w-[200px]">
+            <input
+              type="text"
+              placeholder="Buscar paciente, farmácia..."
+              value={reportSearchTerm}
+              onChange={(e) => setReportSearchTerm(e.target.value)}
+              className="w-full pl-9 px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all"
+            />
+            <span className="absolute left-3 top-3 text-gray-400 text-sm">
+              {icons.search}
+            </span>
+          </div>
 
-            {/* Ano */}
-            <select
-                value={filterYear}
-                onChange={(e) => setFilterYear(parseInt(e.target.value))}
-                className="px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-gray-500 outline-none bg-white cursor-pointer"
-            >
-                {availableYears.map(year => <option key={year} value={year}>{year}</option>)}
-            </select>
+          <select
+            value={filterYear}
+            onChange={(e) => setFilterYear(parseInt(e.target.value))}
+            className="px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 bg-gray-50 hover:bg-white focus:ring-2 focus:ring-blue-100 outline-none cursor-pointer transition-all"
+          >
+            {availableYears.map((year) => (
+              <option key={year} value={year}>
+                {year}
+              </option>
+            ))}
+          </select>
 
-            {/* Unidade */}
-            <select
-                value={selectedPharmacy}
-                onChange={(e) => setSelectedPharmacy(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-gray-500 outline-none bg-white cursor-pointer max-w-[180px]"
-            >
-                <option value="">Todas Unidades</option>
-                {distributors.map(dist => (
-                    <option key={dist._id || dist.id} value={dist.name}>{dist.name}</option>
-                ))}
-            </select>
+          <select
+            value={selectedPharmacy}
+            onChange={(e) => setSelectedPharmacy(e.target.value)}
+            className="px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 bg-gray-50 hover:bg-white focus:ring-2 focus:ring-blue-100 outline-none cursor-pointer max-w-[180px]"
+          >
+            <option value="">Todas Unidades</option>
+            {distributors.map((dist) => (
+              <option key={dist._id || dist.id} value={dist.name}>
+                {dist.name}
+              </option>
+            ))}
+          </select>
 
-             {/* Período */}
-             <select
-                value={filterPeriod}
-                onChange={(e) => setFilterPeriod(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-gray-500 outline-none bg-white cursor-pointer"
-            >
-                <option value="all">Todo Histórico</option>
-                <option value="7">Últimos 7 dias</option>
-                <option value="30">Últimos 30 dias</option>
-                <option value="60">Últimos 60 dias</option>
-                <option value="90">Últimos 90 dias</option>
-            </select>
+          <select
+            value={filterPeriod}
+            onChange={(e) => setFilterPeriod(e.target.value)}
+            className="px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 bg-gray-50 hover:bg-white focus:ring-2 focus:ring-blue-100 outline-none cursor-pointer"
+          >
+            <option value="all">Todo Histórico</option>
+            <option value="7">Últimos 7 dias</option>
+            <option value="30">Últimos 30 dias</option>
+            <option value="90">Últimos 90 dias</option>
+          </select>
 
-            {/* Tabs de Status */}
-            <div className="flex bg-white rounded border border-gray-300 p-1 overflow-hidden">
-                {statusOptions.map((opt) => (
-                <button
-                    key={opt.value}
-                    onClick={() => setFilterStatus(opt.value)}
-                    className={`px-3 py-1 text-xs font-medium whitespace-nowrap transition-colors cursor-pointer rounded
-                    ${filterStatus === opt.value 
-                        ? 'bg-gray-700 text-white shadow-sm' 
-                        : 'text-gray-600 hover:bg-gray-100'}`}
-                >
-                    {opt.label}
-                </button>
-                ))}
-            </div>
+          <div className="flex bg-gray-100 rounded-lg p-1">
+            {statusOptions.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setFilterStatus(opt.value)}
+                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer
+                    ${
+                      filterStatus === opt.value
+                        ? 'bg-white text-blue-600 shadow-sm ring-1 ring-black/5'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
+                    }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* --- TABELA (Fonte Aumentada) --- */}
-      <div className="flex-grow overflow-auto bg-white">
-        <table className="w-full text-left border-collapse min-w-[800px]">
-          <thead className="bg-gray-100 sticky top-0 z-10 shadow-sm">
+      {/* TABELA */}
+      <div className="flex-grow overflow-auto bg-white custom-scrollbar">
+        <table className="w-full text-left border-collapse min-w-[900px]">
+          <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm border-b border-gray-200">
             <tr>
-              {/* Fonte dos headers aumentada para text-sm */}
-              <th className="p-3 text-sm font-semibold text-gray-700 uppercase border-b border-gray-200">Paciente</th>
-              <th className="p-3 text-sm font-semibold text-gray-700 uppercase border-b border-gray-200">Datas</th>
-              <th className="p-3 text-sm font-semibold text-gray-700 uppercase border-b border-gray-200 w-1/3">Medicações</th>
-              <th className="p-3 text-sm font-semibold text-gray-700 uppercase border-b border-gray-200">Unidade</th>
-              <th className="p-3 text-sm font-semibold text-gray-700 uppercase text-center border-b border-gray-200">Status</th>
+              <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider">
+                Paciente
+              </th>
+              <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">
+                Entrada
+              </th>
+              <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center bg-blue-50/30">
+                Recebido
+              </th>
+              <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider w-1/3">
+                Medicações
+              </th>
+              <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">
+                Origem
+              </th>
+              <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">
+                Status
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {currentRecordsForReport.length > 0 ? (
               currentRecordsForReport.map((record) => {
-                const patientName = getPatientNameById(record.patientId) || 'Não identificado';
+                const patientName = resolvePatientName(record);
                 const farmaciaName = getFarmaciaName(record, distributors);
-                
-                let deliveryDateFormatted = null;
-                if (record.status === 'Atendido' && record.deliveryDate) {
-                    try {
-                        let dt = new Date(record.deliveryDate);
-                        if(!isNaN(dt)) {
-                             dt.setMinutes(dt.getMinutes() + dt.getTimezoneOffset());
-                             deliveryDateFormatted = dt.toLocaleDateString('pt-BR');
-                        }
-                    } catch(e){}
-                }
+                const deliveryDateFormatted = record.deliveryDate
+                  ? formatSafeDate(record.deliveryDate, false)
+                  : '-';
 
                 return (
-                  <tr key={record._id || record.id} className="hover:bg-blue-50 transition-colors">
-                    {/* Células com text-sm (14px) para melhor leitura */}
-                    <td className="p-3 text-sm font-medium text-gray-900 align-top">
-                       {patientName}
-                    </td>
-                    <td className="p-3 text-sm align-top text-gray-600">
-                        <div className="flex flex-col gap-0.5">
-                            <span>E: {new Date(record.entryDate).toLocaleDateString('pt-BR')}</span>
-                            {deliveryDateFormatted && <span className="text-emerald-700 font-medium">S: {deliveryDateFormatted}</span>}
+                  <tr
+                    key={record._id || record.id}
+                    onClick={() => setSelectedRecord(record)}
+                    className="hover:bg-blue-50/40 transition-colors group cursor-pointer"
+                  >
+                    <td className="p-4 text-sm font-bold text-gray-800 align-middle">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center font-bold text-xs group-hover:bg-blue-200 group-hover:text-blue-700 transition-colors">
+                          {patientName.charAt(0)}
                         </div>
+                        {patientName}
+                      </div>
                     </td>
-                    <td className="p-3 align-top">
-                       <div className="flex flex-wrap gap-1.5">
-                         {Array.isArray(record.medications) ? record.medications.map((m, i) => (
-                             <span key={i} className="inline-flex items-center px-2 py-1 rounded border border-gray-200 bg-gray-50 text-gray-700 text-xs">
-                                {getMedicationName(m.medicationId, medications)} <b>({m.quantity})</b>
-                             </span>
-                         )) : '-'}
-                       </div>
+
+                    <td className="p-4 text-sm text-center align-middle text-gray-500 font-medium">
+                      {formatSafeDate(record.entryDate, false)}
                     </td>
-                    <td className="p-3 align-top">
-                        <span className={`px-2 py-1 rounded text-xs font-medium border whitespace-nowrap
-                            ${farmaciaName === 'Campina Grande' ? 'bg-blue-50 text-blue-700 border-blue-100' : 
-                              farmaciaName === 'João Paulo' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 
-                              'bg-gray-100 text-gray-600 border-gray-200'}`}>
-                            {farmaciaName}
+
+                    {/* COLUNA DATA DE RECEBIMENTO (CORRIGIDA) */}
+                    <td className="p-4 text-sm text-center align-middle bg-blue-50/20">
+                      {record.status === 'Cancelado' ? (
+                        <span className="text-red-400 text-xs font-bold">
+                          CANCELADO
                         </span>
+                      ) : record.deliveryDate ? (
+                        <span className="text-green-700 font-bold bg-green-50 px-2 py-1 rounded border border-green-100">
+                          {deliveryDateFormatted}
+                        </span>
+                      ) : (
+                        <span className="text-gray-300 text-xs italic">
+                          ---
+                        </span>
+                      )}
                     </td>
-                    <td className="p-3 text-center align-top">
-                        <StatusBadge status={record.status} />
-                        {record.status === 'Cancelado' && (
-                            <button 
-                                onClick={() => onViewReason(record)}
-                                className="block mx-auto mt-1 text-xs text-red-600 hover:underline cursor-pointer"
-                            >
-                                Motivo
-                            </button>
+
+                    <td className="p-4 align-middle">
+                      <div className="flex flex-wrap gap-1.5">
+                        {Array.isArray(record.medications)
+                          ? record.medications.slice(0, 3).map((m, i) => {
+                              const medName =
+                                m.name ||
+                                getMedicationName(m.medicationId, medications);
+                              const medQtd = m.dosage || m.quantity || '';
+                              return (
+                                <span
+                                  key={i}
+                                  className="inline-flex items-center px-2 py-1 rounded-md border border-gray-200 bg-white text-gray-600 text-xs shadow-sm font-medium"
+                                >
+                                  {medName}{' '}
+                                  {medQtd && (
+                                    <b className="ml-1 text-gray-800">
+                                      ({medQtd})
+                                    </b>
+                                  )}
+                                </span>
+                              );
+                            })
+                          : '-'}
+                        {record.medications?.length > 3 && (
+                          <span className="text-xs text-gray-400 italic self-center">
+                            +{record.medications.length - 3} mais...
+                          </span>
                         )}
+                      </div>
+                    </td>
+
+                    <td className="p-4 text-center align-middle">
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide border
+                            ${
+                              farmaciaName.includes('Campina')
+                                ? 'bg-indigo-50 text-indigo-700 border-indigo-100'
+                                : farmaciaName.includes('João')
+                                  ? 'bg-teal-50 text-teal-700 border-teal-100'
+                                  : 'bg-gray-100 text-gray-600 border-gray-200'
+                            }`}
+                      >
+                        {farmaciaName}
+                      </span>
+                    </td>
+
+                    <td className="p-4 text-center align-middle">
+                      <StatusBadge status={record.status} />
                     </td>
                   </tr>
                 );
               })
             ) : (
-                <tr>
-                    <td colSpan="5" className="py-10 text-center text-gray-500 text-sm">
-                        Nenhum registro encontrado.
-                    </td>
-                </tr>
+              <tr>
+                <td
+                  colSpan="6"
+                  className="py-20 text-center text-gray-400 text-sm"
+                >
+                  <div className="flex flex-col items-center gap-2">
+                    <FiPackage size={40} className="text-gray-200" />
+                    Nenhum registro encontrado para os filtros selecionados.
+                  </div>
+                </td>
+              </tr>
             )}
           </tbody>
         </table>
       </div>
 
-      {/* --- PAGINAÇÃO (UI) --- */}
+      {/* PAGINAÇÃO */}
       {totalPages > 1 && (
-         <div className="flex-none p-2 bg-gray-50 border-t border-gray-200 flex justify-between items-center text-sm">
-            <span className="text-gray-600 ml-2">
-               Pág <b>{currentPage}</b> / <b>{totalPages}</b>
-            </span>
-            <div className="flex gap-2">
-               <button
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  className="px-3 py-1.5 bg-white border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 cursor-pointer text-sm"
-               >
-                  Anterior
-               </button>
-               <button
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                  className="px-3 py-1.5 bg-white border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 cursor-pointer text-sm"
-               >
-                  Próxima
-               </button>
-            </div>
-         </div>
+        <div className="flex-none p-3 bg-gray-50 border-t border-gray-200 flex justify-between items-center text-sm">
+          <span className="text-gray-600 ml-2 font-medium">
+            Página <b>{currentPage}</b> de <b>{totalPages}</b>
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50 cursor-pointer text-sm font-bold shadow-sm transition-all"
+            >
+              Anterior
+            </button>
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50 cursor-pointer text-sm font-bold shadow-sm transition-all"
+            >
+              Próxima
+            </button>
+          </div>
+        </div>
       )}
 
+      {/* MODAL DE DETALHES */}
+      <RecordDetailModal
+        record={selectedRecord}
+        onClose={() => setSelectedRecord(null)}
+        resolvePatientName={resolvePatientName}
+        getMedicationName={getMedicationName}
+        medications={medications}
+        distributors={distributors}
+      />
     </div>
   );
 }

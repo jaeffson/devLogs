@@ -1,572 +1,721 @@
-// src/pages/AdminSettingsPage.jsx
-// (ATUALIZADO: Gestão Completa de Farmácias - Criar, Editar Teto, Excluir)
+import React, { useState, useEffect } from 'react';
+import api from '../services/api';
+import { toast } from 'react-hot-toast';
 
-import React, { useState, useMemo, useEffect } from 'react';
-import api from '../services/api'; 
+// --- ÍCONES ---
+import {
+  FiActivity,
+  FiTrash2,
+  FiPlus,
+  FiCheckCircle,
+  FiClock,
+  FiUser,
+  FiTruck,
+  FiFileText,
+  FiSettings,
+  FiPieChart,
+  FiEdit3,
+  FiX,
+  FiAlertTriangle,
+  FiDollarSign,
+} from 'react-icons/fi';
 
-// --- Imports de Componentes ---
 import UserForm from '../components/forms/UserForm';
-import { DestructiveConfirmModal } from '../components/common/DestructiveConfirmModal';
-import { ConfirmModal } from '../components/common/Modal'; // Para Status Toggle e Confirmações simples
 import { StatusBadge } from '../components/common/StatusBadge';
-import  {AnnualBudgetChart}  from '../components/common/AnnualBudgetChart';
-import { icons } from '../utils/icons';
+import { AnnualBudgetChart } from '../components/common/AnnualBudgetChart';
 
-// --- Componente da Página ---
 export default function AdminSettingsPage({
-    user, users = [], setUsers, // setUsers atua como refetchUsers
-    annualBudget, handleUpdateBudget, // Atualiza estado global do Orçamento Geral
-    activityLog = [],
-    records = [],
-    addToast, addLog
+  user,
+  users = [],
+  setUsers,
+  annualBudget,
+  handleUpdateBudget,
+  activityLog = [],
+  addLog,
 }) {
-    // --- Estados Internos (Geral) ---
-    const [activeSubTab, setActiveSubTab] = useState('users');
-    
-    // --- Estados: Usuários ---
-    const [isUserModalOpen, setIsUserModalOpen] = useState(false);
-    const [editingUser, setEditingUser] = useState(null);
-    const [deleteConfirmation, setDeleteConfirmation] = useState({ isOpen: false, data: null, type: null }); // type: 'user' | 'pharmacy'
-    const [statusConfirmation, setStatusConfirmation] = useState({ isOpen: false, message: '', data: null, onConfirm: null });
+  // --- NAVEGAÇÃO ---
+  const [activeSubTab, setActiveSubTab] = useState('global');
 
-    // --- Estados: Orçamento Global ---
-    const [newBudgetValue, setNewBudgetValue] = useState(String(annualBudget || '0'));
+  // --- DADOS ---
+  const [distributors, setDistributors] = useState([]);
+  const [loadingDists, setLoadingDists] = useState(false);
 
-    // --- Estados: Farmácias (NOVO) ---
-    const [distributors, setDistributors] = useState([]);
-    const [editingDistributorValues, setEditingDistributorValues] = useState({});
-    const [isLoadingDistributors, setIsLoadingDistributors] = useState(false);
-    const [savingDistributorId, setSavingDistributorId] = useState(null);
-    
-    // Estado para Criar Nova Farmácia
-    const [isCreatePharmacyModalOpen, setIsCreatePharmacyModalOpen] = useState(false);
-    const [newPharmacyName, setNewPharmacyName] = useState('');
-    const [newPharmacyBudget, setNewPharmacyBudget] = useState('');
+  // --- MODAIS E FORMULÁRIOS ---
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
 
-    // Sincroniza o valor do input de orçamento global
-    useEffect(() => {
-        const value = (annualBudget || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
-        setNewBudgetValue(String(value));
-    }, [annualBudget]);
+  // Estado Fornecedores
+  const [isDistributorModalOpen, setIsDistributorModalOpen] = useState(false);
+  const [editingDistributor, setEditingDistributor] = useState(null);
+  const [distributorForm, setDistributorForm] = useState({
+    name: '',
+    cnpj: '',
+    contact: '',
+    budget: '',
+  });
 
-    // Carrega Farmácias quando a aba 'pharmacies' é ativada
-    useEffect(() => {
-        if (activeSubTab === 'pharmacies') {
-            loadDistributors();
-        }
-    }, [activeSubTab]);
+  // --- ESTADO DO MODAL DE EXCLUSÃO (CORRIGIDO) ---
+  const [deleteModal, setDeleteModal] = useState({
+    isOpen: false,
+    data: null,
+    type: null,
+  });
+  const [deleteInputConfirmation, setDeleteInputConfirmation] = useState(''); // O texto que você digita
 
-    // --- LOGICA: Farmácias / Distribuidores ---
-    const loadDistributors = async () => {
-        setIsLoadingDistributors(true);
-        try {
-            const response = await api.get('/distributors');
-            setDistributors(response.data || []);
-            
-            // Prepara valores para edição
-            const values = {};
-            response.data.forEach(d => {
-                values[d._id] = d.budget || 0;
-            });
-            setEditingDistributorValues(values);
-        } catch (error) {
-            console.error("Erro ao carregar farmácias", error);
-            if (addToast) addToast('Erro ao carregar unidades.', 'error');
-        } finally {
-            setIsLoadingDistributors(false);
-        }
+  // --- CARREGAMENTO INICIAL ---
+  useEffect(() => {
+    fetchDistributors();
+  }, []);
+
+  const fetchDistributors = async () => {
+    setLoadingDists(true);
+    try {
+      const res = await api.get('/distributors');
+      setDistributors(res.data || []);
+    } catch (error) {
+      console.error('Erro ao carregar fornecedores', error);
+    } finally {
+      setLoadingDists(false);
+    }
+  };
+
+  // ==================================================================================
+  // LÓGICA DE FORNECEDORES
+  // ==================================================================================
+
+  const handleOpenDistributorModal = (dist = null) => {
+    if (dist) {
+      setEditingDistributor(dist);
+      setDistributorForm({
+        name: dist.name,
+        cnpj: dist.cnpj || '',
+        contact: dist.contact || '',
+        budget: dist.budget || '', // Carrega o orçamento existente
+      });
+    } else {
+      setEditingDistributor(null);
+      setDistributorForm({ name: '', cnpj: '', contact: '', budget: '' });
+    }
+    setIsDistributorModalOpen(true);
+  };
+
+  const handleSaveDistributor = async (e) => {
+    e.preventDefault();
+    try {
+      const payload = {
+        ...distributorForm,
+        budget: Number(distributorForm.budget) || 0,
+      };
+
+      if (editingDistributor) {
+        await api.put(`/distributors/${editingDistributor._id}`, payload);
+        toast.success('Fornecedor atualizado!');
+        if (addLog)
+          addLog(
+            'ATUALIZAR_FORNECEDOR',
+            `Atualizou: ${distributorForm.name} (Teto: R$ ${payload.budget})`
+          );
+      } else {
+        await api.post('/distributors', payload);
+        toast.success('Fornecedor cadastrado!');
+        if (addLog)
+          addLog(
+            'CRIAR_FORNECEDOR',
+            `Novo: ${distributorForm.name} (Teto: R$ ${payload.budget})`
+          );
+      }
+      setIsDistributorModalOpen(false);
+      fetchDistributors();
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message || 'Erro ao salvar fornecedor.'
+      );
+    }
+  };
+
+  // ==================================================================================
+  // LÓGICA DE EXCLUSÃO SEGURA (AGORA FUNCIONA A DIGITAÇÃO)
+  // ==================================================================================
+
+  const openDeleteModal = (data, type) => {
+    setDeleteModal({ isOpen: true, data, type });
+    setDeleteInputConfirmation(''); // Reseta o input ao abrir
+  };
+
+  const handleConfirmDelete = async () => {
+    const { data, type } = deleteModal;
+
+    // Validação de segurança
+    if (deleteInputConfirmation !== data.name) {
+      toast.error('O nome digitado não confere.');
+      return;
+    }
+
+    try {
+      if (type === 'user') {
+        await api.delete(`/users/${data._id}`);
+        toast.success('Usuário excluído.');
+        setUsers();
+      } else if (type === 'distributor') {
+        await api.delete(`/distributors/${data._id}`);
+        toast.success('Fornecedor removido.');
+        fetchDistributors();
+      }
+      setDeleteModal({ isOpen: false, data: null, type: null });
+    } catch (error) {
+      toast.error('Erro ao excluir. Verifique dependências.');
+    }
+  };
+
+  // ==================================================================================
+  // HELPERS UI
+  // ==================================================================================
+
+  const getLogStyle = (action) => {
+    const act = action ? action.toUpperCase() : '';
+    if (
+      act.includes('CRIAR') ||
+      act.includes('ADICIONAR') ||
+      act.includes('NOVO')
+    )
+      return {
+        icon: <FiPlus />,
+        color: 'text-green-600 bg-green-50 border-green-200',
+      };
+    if (
+      act.includes('REMOVER') ||
+      act.includes('EXCLUIR') ||
+      act.includes('CANCELAR')
+    )
+      return {
+        icon: <FiTrash2 />,
+        color: 'text-red-600 bg-red-50 border-red-200',
+      };
+    if (act.includes('FECHAR') || act.includes('CONCLUIR'))
+      return {
+        icon: <FiCheckCircle />,
+        color: 'text-blue-600 bg-blue-50 border-blue-200',
+      };
+    if (act.includes('EDITAR') || act.includes('ATUALIZAR'))
+      return {
+        icon: <FiFileText />,
+        color: 'text-orange-600 bg-orange-50 border-orange-200',
+      };
+    if (act.includes('LOGIN'))
+      return {
+        icon: <FiUser />,
+        color: 'text-purple-600 bg-purple-50 border-purple-200',
+      };
+    return {
+      icon: <FiActivity />,
+      color: 'text-gray-600 bg-gray-50 border-gray-200',
     };
+  };
 
-    const handleSaveDistributorBudget = async (id) => {
-        setSavingDistributorId(id);
-        try {
-            const newVal = parseFloat(editingDistributorValues[id]);
-            if (isNaN(newVal) || newVal < 0) {
-                if (addToast) addToast('Valor inválido.', 'warning');
-                setSavingDistributorId(null);
-                return;
-            }
+  const formatCurrency = (value) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(value || 0);
+  };
 
-            await api.put(`/distributors/${id}`, { budget: newVal });
-            
-            if (addToast) addToast('Teto da unidade atualizado!', 'success');
-            if (addLog) addLog(user?.name, `atualizou orçamento da unidade ID: ${id}`);
+  // ==================================================================================
+  // RENDERIZAÇÃO DAS ABAS
+  // ==================================================================================
 
-            // Atualiza lista localmente
-            setDistributors(prev => prev.map(d => d._id === id ? { ...d, budget: newVal } : d));
+  const renderSubTabView = () => {
+    switch (activeSubTab) {
+      case 'global':
+        return (
+          <div className="animate-fade-in space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2">
+                <FiPieChart className="text-blue-600" /> Orçamento Anual Global
+              </h3>
+              <p className="text-gray-500 text-sm mb-6">
+                Este é o teto global de gastos. Você também pode definir limites
+                individuais na aba "Fornecedores".
+              </p>
+              <AnnualBudgetChart
+                annualBudget={annualBudget}
+                onUpdateBudget={handleUpdateBudget}
+                currentSpending={0}
+              />
+            </div>
+          </div>
+        );
 
-        } catch (e) {
-            console.error(e);
-            if (addToast) addToast('Erro ao salvar.', 'error');
-        } finally {
-            setSavingDistributorId(null);
-        }
-    };
-
-    // --- NOVO: Criar Farmácia ---
-    const handleCreatePharmacy = async () => {
-        if (!newPharmacyName.trim()) {
-            addToast('O nome da unidade é obrigatório.', 'warning');
-            return;
-        }
-
-        try {
-            const budgetValue = parseFloat(newPharmacyBudget) || 0;
-            await api.post('/distributors', { 
-                name: newPharmacyName, 
-                budget: budgetValue 
-            });
-
-            addToast('Unidade cadastrada com sucesso!', 'success');
-            addLog?.(user?.name, `cadastrou nova unidade: ${newPharmacyName}`);
-            
-            setNewPharmacyName('');
-            setNewPharmacyBudget('');
-            setIsCreatePharmacyModalOpen(false);
-            loadDistributors(); // Recarrega a lista
-
-        } catch (error) {
-            console.error(error);
-            addToast('Erro ao cadastrar unidade.', 'error');
-        }
-    };
-
-    // --- NOVO: Excluir Farmácia ---
-    const handleDeletePharmacyClick = (dist) => {
-        setDeleteConfirmation({ 
-            isOpen: true, 
-            data: dist, 
-            type: 'pharmacy' 
-        });
-    };
-
-    const handleConfirmDelete = async () => {
-        const { data, type } = deleteConfirmation;
-        const id = data._id || data.id;
-
-        try {
-            if (type === 'user') {
-                await api.delete(`/users/${id}`);
-                addToast('Usuário excluído.', 'success');
-                addLog?.(user?.name, `EXCLUIU usuário ${data.name}`);
-                setUsers();
-            } else if (type === 'pharmacy') {
-                await api.delete(`/distributors/${id}`);
-                addToast('Unidade removida com sucesso.', 'success');
-                addLog?.(user?.name, `EXCLUIU unidade ${data.name}`);
-                loadDistributors();
-            }
-        } catch (error) {
-            console.error(error);
-            addToast(`Erro ao excluir ${type === 'user' ? 'usuário' : 'unidade'}.`, 'error');
-        } finally {
-            setDeleteConfirmation({ isOpen: false, data: null, type: null });
-        }
-    };
-
-    // --- CÁLCULO DO GASTO TOTAL (Para Gráfico Global) ---
-    const totalSpentForYear = useMemo(() => {
-        const currentYear = new Date().getFullYear();
-        return (records || [])
-            .filter(r => new Date(r.entryDate).getFullYear() === currentYear)
-            .reduce((sum, item) => sum + (Number(item.totalValue) || 0), 0);
-    }, [records]);
-
-    // --- Funções UI/Modais (Usuários) ---
-    const closeStatusConfirmation = () => setStatusConfirmation({ isOpen: false, message: '', data: null, onConfirm: null });
-
-    const handleOpenUserModal = (userToEdit = null) => {
-        setEditingUser(userToEdit);
-        setIsUserModalOpen(true);
-    };
-
-    const handleCloseUserModal = () => {
-        setIsUserModalOpen(false);
-        setEditingUser(null);
-    };
-
-    // --- FUNÇÕES CRUD DE USUÁRIOS ---
-    const handleSaveUser = async (userData) => {
-        const cleanedUserData = { ...userData, name: userData.name.trim(), email: userData.email.trim().toLowerCase() };
-        const userId = cleanedUserData._id || cleanedUserData.id;
-        
-        try {
-            if(userId) {
-                await api.put(`/users/${userId}`, cleanedUserData);
-                addToast('Usuário atualizado com sucesso!', 'success');
-                addLog?.(user?.name, `atualizou usuário ${cleanedUserData.name}`);
-            } else {
-                await api.post('/users', cleanedUserData);
-                addToast('Usuário criado com sucesso!', 'success');
-                addLog?.(user?.name, `criou usuário: ${cleanedUserData.name}`);
-            }
-            setUsers(); 
-        } catch (error) {
-            console.error('[API Error] Salvar Usuário:', error);
-            const msg = error.response?.data?.message || 'Erro ao salvar usuário.';
-            addToast(msg, 'error');
-        } finally {
-            handleCloseUserModal();
-        }
-    };
-
-    const handleToggleUserStatusClick = (userToToggle) => {
-        const isActivating = userToToggle.status !== 'active';
-        setStatusConfirmation({
-            isOpen: true,
-            message: `Deseja ${isActivating ? 'ATIVAR' : 'DESATIVAR'} "${userToToggle.name}"?`,
-            data: userToToggle._id || userToToggle.id,
-            onConfirm: handleToggleUserStatusConfirm
-        });
-    };
-
-    const handleToggleUserStatusConfirm = async (userId) => {
-        const userToToggle = users.find(u => (u._id || u.id) === userId);
-        const newStatus = (userToToggle.status !== 'active') ? 'active' : 'inactive';
-        
-        try {
-            await api.patch(`/users/${userId}/status`, { status: newStatus });
-            addToast(`Usuário ${newStatus === 'active' ? 'ativado' : 'desativado'}!`, 'success');
-            addLog?.(user?.name, `${newStatus === 'active' ? 'ativou' : 'desativou'} usuário ${userToToggle?.name}`);
-            setUsers();
-        } catch (error) {
-            console.error('[API Error] Toggle Status:', error);
-            addToast('Falha ao atualizar status.', 'error');
-        } finally {
-            closeStatusConfirmation(); 
-        }
-    };
-
-    const handleDeleteUserClick = (userToDelete) => {
-        if ((userToDelete._id || userToDelete.id) === (user._id || user.id)) {
-            addToast('Você não pode excluir sua própria conta.', 'error');
-            return;
-        }
-        setDeleteConfirmation({ isOpen: true, data: userToDelete, type: 'user' });
-    };
-
-    // --- FUNÇÃO DE ORÇAMENTO GLOBAL ---
-    const handleBudgetSave = async () => {
-        const cleanedValue = newBudgetValue.replace(/\./g, '').replace(',', '.');
-        const value = parseFloat(cleanedValue);
-
-        if (isNaN(value) || value < 0) {
-            addToast('Valor de orçamento inválido.', 'error');
-            setNewBudgetValue(annualBudget.toLocaleString('pt-BR', { minimumFractionDigits: 2 }));
-            return;
-        }
-
-        try {
-            await api.post('/settings/budget', { budget: value });
-            handleUpdateBudget(value);
-            addToast('Orçamento global atualizado!', 'success');
-        } catch (error) {
-            console.error('[API Error] Salvar Orçamento:', error);
-            addToast('Falha ao salvar orçamento no servidor.', 'error');
-        }
-    };
-
-    const sortedActivityLog = useMemo(() =>
-        [...activityLog].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)),
-        [activityLog]
-    );
-
-    // --- RENDERIZAÇÃO DAS SUB-ABAS ---
-    const renderSubTabView = () => {
-        switch (activeSubTab) {
-            case 'users':
-                return (
-                    <div className="animate-fade-in bg-white p-6 rounded-xl shadow-lg border border-gray-100">
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 border-b pb-4">
-                            <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                                {icons.users} Gerenciar Usuários
-                            </h3>
-                            <button onClick={() => handleOpenUserModal()} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 text-sm font-semibold transition-colors shadow-md mt-3 md:mt-0 cursor-pointer">
-                                <span className="w-4 h-4">{icons.plus}</span> Novo Usuário
-                            </button>
-                        </div>
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full bg-white text-sm border-collapse">
-                                <thead className="bg-gray-50 border-b border-gray-200">
-                                    <tr>
-                                        <th className="text-left py-3 px-4 font-bold text-gray-600 uppercase tracking-wider">Nome</th>
-                                        <th className="text-left py-3 px-4 font-bold text-gray-600 uppercase tracking-wider hidden sm:table-cell">Email</th>
-                                        <th className="text-left py-3 px-4 font-bold text-gray-600 uppercase tracking-wider hidden md:table-cell">Função</th>
-                                        <th className="text-left py-3 px-4 font-bold text-gray-600 uppercase tracking-wider">Status</th>
-                                        <th className="text-left py-3 px-4 font-bold text-gray-600 uppercase tracking-wider">Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {users.map(u => (
-                                        <tr key={u._id || u.id} className="border-b border-gray-100 hover:bg-blue-50/50 transition-colors"> 
-                                            <td className="py-3 px-4 font-medium text-gray-800">{u.name}</td>
-                                            <td className="py-3 px-4 text-gray-600 hidden sm:table-cell">{u.email}</td>
-                                            <td className="py-3 px-4 text-gray-600 capitalize hidden md:table-cell">{u.role}</td>
-                                            <td className="py-3 px-4"><StatusBadge status={u.status} /></td>
-                                            <td className="py-3 px-4">
-                                                <div className="flex items-center gap-2">
-                                                    <button onClick={() => handleOpenUserModal(u)} className="p-1 text-blue-600 hover:bg-blue-100 rounded transition-colors cursor-pointer" title="Editar Usuário"><span className="w-5 h-5 block">{icons.edit}</span></button>
-                                                    <button onClick={() => handleToggleUserStatusClick(u)} className={`p-1 rounded ${u.status === 'active' ? 'text-yellow-600 hover:bg-yellow-100' : 'text-green-600 hover:bg-green-100'} transition-colors cursor-pointer`} title={u.status === 'active' ? 'Desativar' : 'Ativar'}>
-                                                        <span className="w-5 h-5 block">{u.status === 'active' ? icons.ban : icons.check}</span>
-                                                    </button>
-                                                    <button onClick={() => handleDeleteUserClick(u)} className="p-1 text-red-600 hover:bg-red-100 rounded disabled:opacity-30 transition-colors cursor-pointer" title="Excluir" disabled={(u._id || u.id) === (user._id || user.id)}><span className="w-5 h-5 block">{icons.trash}</span></button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                            {users.length === 0 && <p className="text-center text-gray-500 py-10">Nenhum usuário encontrado.</p>}
-                        </div>
-                    </div>
-                );
-
-            case 'budget':
-                return (
-                    <div className="animate-fade-in max-w-lg mx-auto bg-white p-6 rounded-xl shadow-lg border border-gray-100">
-                        <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-                            {icons.dollar} Orçamento Global (Padrão)
-                        </h3>
-                        <p className="text-sm text-gray-500 mb-4">Este valor é usado como referência geral caso as farmácias não tenham tetos individuais definidos.</p>
-                        <div className="bg-gray-50 p-6 rounded-xl border border-gray-200 space-y-6">
-                            <div className="flex justify-center">
-                                <AnnualBudgetChart key={annualBudget} totalSpent={totalSpentForYear} budgetLimit={annualBudget} />
-                            </div>
-                            <div className="border-t border-gray-200 pt-4">
-                                <label className="block text-gray-700 font-semibold mb-2" htmlFor="annual-budget-input">Definir Novo Limite Global (R$)</label>
-                                <div className="relative">
-                                    <span className="absolute left-3 top-2.5 text-gray-400 font-bold">R$</span>
-                                    <input 
-                                        id="annual-budget-input" 
-                                        type="text" 
-                                        value={newBudgetValue} 
-                                        onChange={(e) => setNewBudgetValue(e.target.value)} 
-                                        className="w-full pl-10 pr-4 py-2.5 border-2 border-gray-300 rounded-xl focus:border-blue-500 transition-colors text-lg font-bold text-gray-800" 
-                                        placeholder="0,00"
-                                    />
-                                </div>
-                            </div>
-                            <button onClick={handleBudgetSave} className="w-full px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-semibold transition-colors shadow-md cursor-pointer flex items-center justify-center gap-2">
-                                {icons.save} Salvar Orçamento
-                            </button>
-                        </div>
-                    </div>
-                );
-
-            case 'pharmacies':
-                // --- ABA: UNIDADES (COM CRUD COMPLETO) ---
-                return (
-                    <div className="animate-fade-in bg-white p-6 rounded-xl shadow-lg border border-gray-100">
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-                            <div>
-                                <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                                    {icons.organization || <span>🏥</span>} Gestão de Unidades
-                                </h3>
-                                <p className="text-sm text-gray-500 mt-1">Cadastre e defina o orçamento de cada farmácia.</p>
-                            </div>
-                            
-                            <button 
-                                onClick={() => setIsCreatePharmacyModalOpen(true)}
-                                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-semibold transition-colors shadow-md cursor-pointer"
+      case 'distributors':
+        return (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden animate-fade-in">
+            <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+              <h3 className="font-bold text-gray-700">
+                Fornecedores & Orçamentos
+              </h3>
+              <button
+                onClick={() => handleOpenDistributorModal()}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all shadow-sm cursor-pointer"
+              >
+                <FiPlus /> Novo Fornecedor
+              </button>
+            </div>
+            {loadingDists ? (
+              <div className="p-8 text-center text-gray-400">Carregando...</div>
+            ) : (
+              <table className="w-full text-left">
+                <thead className="bg-gray-50 text-gray-500 text-xs uppercase font-semibold">
+                  <tr>
+                    <th className="p-4">Razão Social / Nome</th>
+                    <th className="p-4">Teto de Gastos (Mensal)</th>
+                    <th className="p-4">CNPJ / Contato</th>
+                    <th className="p-4 text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {distributors.length > 0 ? (
+                    distributors.map((d) => (
+                      <tr
+                        key={d._id}
+                        className="hover:bg-blue-50/50 transition-colors group"
+                      >
+                        <td className="p-4 font-bold text-gray-800 flex items-center gap-2">
+                          <div className="p-1.5 bg-blue-100 text-blue-600 rounded">
+                            <FiTruck size={14} />
+                          </div>
+                          {d.name}
+                        </td>
+                        <td className="p-4">
+                          <span className="font-mono font-medium text-green-700 bg-green-50 px-2 py-1 rounded border border-green-200">
+                            {formatCurrency(d.budget)}
+                          </span>
+                        </td>
+                        <td className="p-4 text-sm text-gray-600">
+                          <div className="text-xs font-mono">
+                            {d.cnpj || 'S/ CNPJ'}
+                          </div>
+                          <div className="text-xs">{d.contact}</div>
+                        </td>
+                        <td className="p-4 text-right">
+                          <div className="flex justify-end gap-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => handleOpenDistributorModal(d)}
+                              className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg cursor-pointer"
                             >
-                                <span className="w-4 h-4">{icons.plus}</span> Nova Unidade
+                              <FiEdit3 />
                             </button>
-                        </div>
+                            <button
+                              onClick={() => openDeleteModal(d, 'distributor')}
+                              className="p-2 text-red-600 hover:bg-red-100 rounded-lg cursor-pointer"
+                            >
+                              <FiTrash2 />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="4" className="p-8 text-center text-gray-400">
+                        Nenhum fornecedor cadastrado.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            )}
+          </div>
+        );
 
-                        {isLoadingDistributors ? (
-                            <div className="p-10 flex justify-center">
-                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-1 gap-4">
-                                {distributors.map((dist) => (
-                                    <div key={dist._id} className="p-4 bg-gray-50 rounded-xl border border-gray-200 flex flex-col md:flex-row items-center justify-between gap-4 transition-all hover:shadow-md hover:border-indigo-200 group">
-                                        
-                                        {/* Info Farmácia */}
-                                        <div className="flex items-center gap-4 w-full md:w-auto">
-                                            <div className="w-10 h-10 rounded-full bg-white text-indigo-600 border border-indigo-100 flex items-center justify-center font-bold text-lg shadow-sm">
-                                                {dist.name.charAt(0).toUpperCase()}
-                                            </div>
-                                            <div>
-                                                <p className="font-bold text-gray-800">{dist.name}</p>
-                                                <p className="text-xs text-gray-500">Teto Atual: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dist.budget || 0)}</p>
-                                            </div>
-                                        </div>
-
-                                        {/* Ações: Input e Botões */}
-                                        <div className="flex items-center gap-3 w-full md:w-auto">
-                                            <div className="relative w-full md:w-40 group-focus-within:ring-2 ring-indigo-100 rounded-lg transition-all">
-                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-medium text-sm">R$</span>
-                                                <input 
-                                                    type="number" 
-                                                    className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-gray-800 font-semibold focus:border-indigo-500 outline-none transition-all"
-                                                    value={editingDistributorValues[dist._id]}
-                                                    onChange={(e) => setEditingDistributorValues({...editingDistributorValues, [dist._id]: e.target.value})}
-                                                    placeholder="0.00"
-                                                />
-                                            </div>
-                                            
-                                            <button 
-                                                onClick={() => handleSaveDistributorBudget(dist._id)}
-                                                disabled={savingDistributorId === dist._id}
-                                                className={`p-2 rounded-lg text-white transition-all shadow-sm cursor-pointer
-                                                    ${savingDistributorId === dist._id ? 'bg-gray-300' : 'bg-indigo-600 hover:bg-indigo-700 active:scale-95'}
-                                                `}
-                                                title="Salvar Teto"
-                                            >
-                                                {savingDistributorId === dist._id ? (
-                                                    <span className="animate-spin block w-5 h-5 border-2 border-white border-t-transparent rounded-full"></span>
-                                                ) : (
-                                                    <span className="w-5 h-5 block">{icons.save}</span>
-                                                )}
-                                            </button>
-
-                                            <button 
-                                                onClick={() => handleDeletePharmacyClick(dist)}
-                                                className="p-2 bg-white border border-red-200 text-red-500 rounded-lg hover:bg-red-50 hover:text-red-700 transition-colors cursor-pointer"
-                                                title="Excluir Unidade"
-                                            >
-                                                <span className="w-5 h-5 block">{icons.trash}</span>
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
-                                {distributors.length === 0 && (
-                                    <div className="text-center py-10 bg-gray-50 rounded-xl border border-dashed border-gray-300">
-                                        <p className="text-gray-500 mb-2">Nenhuma unidade cadastrada.</p>
-                                        <button onClick={() => setIsCreatePharmacyModalOpen(true)} className="text-indigo-600 font-semibold hover:underline">Cadastrar primeira unidade</button>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {/* MODAL DE CRIAÇÃO DE FARMÁCIA */}
-                        {isCreatePharmacyModalOpen && (
-                            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fadeIn">
-                                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-                                    <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                                        <h3 className="font-bold text-gray-800 text-lg">Nova Unidade</h3>
-                                        <button onClick={() => setIsCreatePharmacyModalOpen(false)} className="text-gray-400 hover:text-gray-600 cursor-pointer">✕</button>
-                                    </div>
-                                    <div className="p-6 space-y-4">
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">Nome da Unidade / Farmácia</label>
-                                            <input 
-                                                type="text" 
-                                                value={newPharmacyName}
-                                                onChange={(e) => setNewPharmacyName(e.target.value)}
-                                                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                                                placeholder="Ex: Farmácia Central"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">Teto Orçamentário Inicial (R$)</label>
-                                            <input 
-                                                type="number" 
-                                                value={newPharmacyBudget}
-                                                onChange={(e) => setNewPharmacyBudget(e.target.value)}
-                                                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                                                placeholder="0.00"
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
-                                        <button 
-                                            onClick={() => setIsCreatePharmacyModalOpen(false)}
-                                            className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-xl font-medium transition-colors cursor-pointer"
-                                        >
-                                            Cancelar
-                                        </button>
-                                        <button 
-                                            onClick={handleCreatePharmacy}
-                                            className="px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-medium shadow-md transition-colors cursor-pointer"
-                                        >
-                                            Cadastrar
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                );
-
-            case 'log':
-                return (
-                    <div className="animate-fade-in bg-white p-6 rounded-xl shadow-lg border border-gray-100">
-                        <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-                            {icons.history} Log de Atividades
-                        </h3>
-                        <div className="overflow-y-auto max-h-[60vh] bg-gray-50 border border-gray-200 rounded-xl p-4 custom-scrollbar">
-                            {sortedActivityLog.length > 0 ? (
-                                <ul className="space-y-3">
-                                    {sortedActivityLog.map(log => (
-                                        <li key={log.id} className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm transition-shadow hover:shadow-md">
-                                            <p className="text-sm text-gray-800">
-                                                <span className="font-semibold text-blue-600">{log.user}</span> 
-                                                <span className="text-gray-700"> {log.action}</span>
-                                            </p>
-                                            <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
-                                                {icons.clock} {new Date(log.timestamp).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'medium' })}
-                                            </p>
-                                        </li>
-                                    ))}
-                                </ul>
-                            ) : (<p className="text-center text-gray-500 py-6">Nenhuma atividade registrada.</p>)}
-                        </div>
-                    </div>
-                );
-            default: return null;
-        }
-    };
-
-    // --- Renderização Principal da Página ---
-    return (
-        <div className="bg-white rounded-2xl shadow-xl p-4 md:p-8 space-y-8 max-w-7xl mx-auto">
-            <h2 className="text-3xl font-bold text-gray-800 border-b pb-3 flex items-center gap-2">
-                <span className="text-blue-600">{icons.gear}</span> Painel Administrativo
-            </h2>
-            
-            <div className="border-b border-gray-200 overflow-x-auto">
-              <nav className="-mb-px flex space-x-6 md:space-x-8 min-w-max" aria-label="Tabs">
-                  <button onClick={() => setActiveSubTab('users')} className={`${activeSubTab === 'users' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-gray-500 hover:text-gray-700'} whitespace-nowrap py-3 px-1 border-b-2 font-medium text-base transition-colors cursor-pointer flex items-center gap-2`}>
-                      {icons.users} Usuários ({users.length})
-                  </button>
-                  
-                  <button onClick={() => setActiveSubTab('pharmacies')} className={`${activeSubTab === 'pharmacies' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-gray-500 hover:text-gray-700'} whitespace-nowrap py-3 px-1 border-b-2 font-medium text-base transition-colors cursor-pointer flex items-center gap-2`}>
-                      {icons.organization || <span>🏥</span>} Unidades
-                  </button>
-
-                  <button onClick={() => setActiveSubTab('budget')} className={`${activeSubTab === 'budget' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-gray-500 hover:text-gray-700'} whitespace-nowrap py-3 px-1 border-b-2 font-medium text-base transition-colors cursor-pointer flex items-center gap-2`}>
-                      {icons.dollar} Global
-                  </button>
-                  
-                  <button onClick={() => setActiveSubTab('log')} className={`${activeSubTab === 'log' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-gray-500 hover:text-gray-700'} whitespace-nowrap py-3 px-1 border-b-2 font-medium text-base transition-colors cursor-pointer flex items-center gap-2`}>
-                      {icons.history} Logs
-                  </button>
-              </nav>
+      case 'users':
+        return (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden animate-fade-in">
+            <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+              <h3 className="font-bold text-gray-700">Usuários do Sistema</h3>
+              <button
+                onClick={() => {
+                  setEditingUser(null);
+                  setIsUserModalOpen(true);
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all shadow-sm cursor-pointer"
+              >
+                <FiPlus /> Novo Usuário
+              </button>
             </div>
+            <table className="w-full text-left">
+              <thead className="bg-gray-50 text-gray-500 text-xs uppercase font-semibold">
+                <tr>
+                  <th className="p-4">Nome / Email</th>
+                  <th className="p-4">Função</th>
+                  <th className="p-4">Status</th>
+                  <th className="p-4 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {users.map((u) => (
+                  <tr
+                    key={u._id}
+                    className="hover:bg-blue-50/50 transition-colors group"
+                  >
+                    <td className="p-4">
+                      <div className="font-bold text-gray-800">{u.name}</div>
+                      <div className="text-xs text-gray-500">{u.email}</div>
+                    </td>
+                    <td className="p-4">
+                      <span
+                        className={`px-2 py-1 rounded text-xs font-bold border ${u.role === 'admin' ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-blue-100 text-blue-700 border-blue-200'}`}
+                      >
+                        {u.role === 'admin' ? 'Administrador' : 'Profissional'}
+                      </span>
+                    </td>
+                    <td className="p-4">
+                      <StatusBadge active={u.active} />
+                    </td>
+                    <td className="p-4 text-right">
+                      <div className="flex justify-end gap-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => {
+                            setEditingUser(u);
+                            setIsUserModalOpen(true);
+                          }}
+                          className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg cursor-pointer"
+                        >
+                          <FiEdit3 />
+                        </button>
+                        {user.id !== u._id && (
+                          <button
+                            onClick={() => openDeleteModal(u, 'user')}
+                            className="p-2 text-red-600 hover:bg-red-100 rounded-lg cursor-pointer"
+                          >
+                            <FiTrash2 />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
 
-            <div className="mt-4">
-                {renderSubTabView()}
+      case 'log':
+        return (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden animate-fade-in">
+            <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+              <h3 className="font-bold text-gray-700 flex items-center gap-2">
+                <FiClock className="text-gray-400" /> Histórico de Atividades
+              </h3>
+              <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded border">
+                Últimos 100 registros
+              </span>
             </div>
-            
-            {/* Modais de Usuário e Confirmação */}
-            {isUserModalOpen && (
-                <UserForm user={editingUser} onSave={handleSaveUser} onClose={handleCloseUserModal} addToast={addToast} />
-            )}
-            
-            {statusConfirmation.isOpen && (
-                <ConfirmModal message={statusConfirmation.message} onConfirm={() => statusConfirmation.onConfirm(statusConfirmation.data)} onClose={closeStatusConfirmation} confirmText="Sim" />
-            )}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-gray-50 text-gray-500 text-xs uppercase font-semibold tracking-wider">
+                  <tr>
+                    <th className="p-4 w-16 text-center">Tipo</th>
+                    <th className="p-4 w-1/5">Usuário / Data</th>
+                    <th className="p-4 w-1/6">Ação</th>
+                    <th className="p-4">Detalhes do Evento</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {activityLog.map((log) => {
+                    const style = getLogStyle(log.action);
+                    return (
+                      <tr
+                        key={log._id}
+                        className="hover:bg-gray-50 transition-colors"
+                      >
+                        <td className="p-4 text-center align-top">
+                          <div
+                            className={`w-8 h-8 mx-auto flex items-center justify-center rounded-full border ${style.color}`}
+                          >
+                            {style.icon}
+                          </div>
+                        </td>
+                        <td className="p-4 align-top">
+                          <div className="flex flex-col">
+                            <span className="font-bold text-gray-800 text-sm flex items-center gap-1">
+                              <FiUser size={12} className="text-gray-400" />{' '}
+                              {log.user || log.userName || 'Sistema'}
+                            </span>
+                            <span className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                              <FiClock size={10} />
+                              {new Date(
+                                log.createdAt
+                              ).toLocaleDateString()}{' '}
+                              {new Date(log.createdAt).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-4 align-top">
+                          <span
+                            className={`inline-flex px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide border ${style.color.replace('text-', 'text-opacity-80 ').replace('bg-', 'bg-opacity-50 ')}`}
+                          >
+                            {log.action?.replace(/_/g, ' ')}
+                          </span>
+                        </td>
+                        <td className="p-4 align-top">
+                          <p className="text-sm text-gray-600 leading-relaxed font-medium">
+                            {log.details || 'Sem detalhes.'}
+                          </p>
+                          {log.entity && (
+                            <span className="text-[10px] text-gray-400 mt-1 block">
+                              Ref: {log.entity}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {activityLog.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan="4"
+                        className="p-12 text-center text-gray-400"
+                      >
+                        Nenhum log encontrado.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
 
-            {deleteConfirmation.isOpen && deleteConfirmation.data && (
-                <DestructiveConfirmModal
-                    message={`Excluir permanentemente "${deleteConfirmation.data.name}"? Esta ação é irreversível.`}
-                    confirmText="EXCLUIR"
-                    onConfirm={handleConfirmDelete}
-                    onClose={() => setDeleteConfirmation({ isOpen: false, data: null, type: null })}
-                />
-            )}
+      default:
+        return null;
+    }
+  };
+
+  // ==================================================================================
+  // RENDER PRINCIPAL
+  // ==================================================================================
+
+  return (
+    <div className="p-6 bg-gray-50 min-h-screen">
+      <header className="mb-8">
+        <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+          <FiSettings className="text-gray-600" /> Configurações & Auditoria
+        </h1>
+        <p className="text-gray-500 text-sm">
+          Gerenciamento global do sistema MedLogs
+        </p>
+      </header>
+
+      {/* Menu de Abas */}
+      <div className="border-b border-gray-200 mb-6">
+        <nav className="-mb-px flex space-x-8 overflow-x-auto custom-scrollbar">
+          <button
+            onClick={() => setActiveSubTab('global')}
+            className={`${activeSubTab === 'global' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'} whitespace-nowrap py-3 px-1 border-b-2 font-medium flex items-center gap-2 cursor-pointer`}
+          >
+            <FiPieChart /> Geral
+          </button>
+          <button
+            onClick={() => setActiveSubTab('distributors')}
+            className={`${activeSubTab === 'distributors' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'} whitespace-nowrap py-3 px-1 border-b-2 font-medium flex items-center gap-2 cursor-pointer`}
+          >
+            <FiTruck /> Fornecedores
+          </button>
+          <button
+            onClick={() => setActiveSubTab('users')}
+            className={`${activeSubTab === 'users' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'} whitespace-nowrap py-3 px-1 border-b-2 font-medium flex items-center gap-2 cursor-pointer`}
+          >
+            <FiUser /> Usuários
+          </button>
+          <button
+            onClick={() => setActiveSubTab('log')}
+            className={`${activeSubTab === 'log' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'} whitespace-nowrap py-3 px-1 border-b-2 font-medium flex items-center gap-2 cursor-pointer`}
+          >
+            <FiClock /> Logs
+          </button>
+        </nav>
+      </div>
+
+      <div className="mt-4">{renderSubTabView()}</div>
+
+      {/* --- MODAL DE USUÁRIO --- */}
+      {isUserModalOpen && (
+        <UserForm
+          user={editingUser}
+          onSave={handleSaveUser}
+          onClose={() => setIsUserModalOpen(false)}
+          addToast={toast}
+        />
+      )}
+
+      {/* --- MODAL DE FORNECEDOR (COM ORÇAMENTO) --- */}
+      {isDistributorModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="bg-gray-50 px-6 py-4 border-b flex justify-between items-center">
+              <h3 className="font-bold text-gray-700 flex items-center gap-2">
+                <FiTruck />{' '}
+                {editingDistributor ? 'Editar Fornecedor' : 'Novo Fornecedor'}
+              </h3>
+              <button
+                onClick={() => setIsDistributorModalOpen(false)}
+                className="cursor-pointer"
+              >
+                <FiX />
+              </button>
+            </div>
+            <form onSubmit={handleSaveDistributor} className="p-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">
+                    Nome / Farmácia
+                  </label>
+                  <input
+                    className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none uppercase"
+                    value={distributorForm.name}
+                    onChange={(e) =>
+                      setDistributorForm({
+                        ...distributorForm,
+                        name: e.target.value,
+                      })
+                    }
+                    required
+                    autoFocus
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">
+                      CNPJ
+                    </label>
+                    <input
+                      className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                      value={distributorForm.cnpj}
+                      onChange={(e) =>
+                        setDistributorForm({
+                          ...distributorForm,
+                          cnpj: e.target.value,
+                        })
+                      }
+                      placeholder="00.000..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">
+                      Teto (R$)
+                    </label>
+                    <div className="relative">
+                      <FiDollarSign
+                        className="absolute left-2 top-3 text-gray-400"
+                        size={12}
+                      />
+                      <input
+                        type="number"
+                        className="w-full p-2 pl-6 border rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                        value={distributorForm.budget}
+                        onChange={(e) =>
+                          setDistributorForm({
+                            ...distributorForm,
+                            budget: e.target.value,
+                          })
+                        }
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">
+                    Contato
+                  </label>
+                  <input
+                    className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                    value={distributorForm.contact}
+                    onChange={(e) =>
+                      setDistributorForm({
+                        ...distributorForm,
+                        contact: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsDistributorModalOpen(false)}
+                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 cursor-pointer"
+                >
+                  Salvar
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
-    );
+      )}
+
+      {/* --- MODAL DE EXCLUSÃO SEGURO (NATIVO DA PÁGINA) --- */}
+      {deleteModal.isOpen && deleteModal.data && (
+        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center backdrop-blur-sm p-4 animate-scale-in">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden border border-red-100">
+            <div className="bg-red-50 px-6 py-4 border-b border-red-100 flex items-center gap-3">
+              <div className="p-2 bg-red-100 text-red-600 rounded-full">
+                <FiAlertTriangle size={24} />
+              </div>
+              <h3 className="font-bold text-red-900 text-lg">
+                Ação Destrutiva
+              </h3>
+            </div>
+
+            <div className="p-6">
+              <p className="text-gray-600 mb-4">
+                Você está prestes a excluir permanentemente: <br />
+                <span className="font-bold text-gray-800 text-lg block mt-1">
+                  {deleteModal.data.name}
+                </span>
+              </p>
+
+              <p className="text-sm text-gray-500 mb-4">
+                Para confirmar, digite o nome exato abaixo:
+              </p>
+
+              <input
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none font-bold text-gray-700"
+                placeholder={`Digite "${deleteModal.data.name}"`}
+                value={deleteInputConfirmation}
+                onChange={(e) => setDeleteInputConfirmation(e.target.value)}
+                autoFocus
+              />
+
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  onClick={() =>
+                    setDeleteModal({ isOpen: false, data: null, type: null })
+                  }
+                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleConfirmDelete}
+                  disabled={deleteInputConfirmation !== deleteModal.data.name}
+                  className="px-6 py-2 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer transition-all"
+                >
+                  <FiTrash2 /> EXCLUIR DEFINITIVAMENTE
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }

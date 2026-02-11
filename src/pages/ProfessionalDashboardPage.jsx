@@ -53,7 +53,6 @@ const SearchPatientModal = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
-      {/* Responsividade: max-w-lg garante que não fica gigante, e max-h-[90vh] funciona em telas pequenas */}
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
         <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
           <h3 className="font-bold text-gray-800 flex items-center gap-2">
@@ -82,7 +81,6 @@ const SearchPatientModal = ({
               <button
                 key={p._id || p.id}
                 onClick={() => onSelectPatient(p)}
-                // cursor-pointer já está aqui (embutido no botão)
                 className="w-full text-left p-3 hover:bg-blue-50 rounded-xl transition-colors flex items-center justify-between group cursor-pointer"
               >
                 <div className="flex items-center gap-3 overflow-hidden">
@@ -138,7 +136,7 @@ export default function ProfessionalDashboardPage({
   medications = [],
   setMedications,
   addToast,
-  addLog, // Garantir que addLog está sendo passado
+  addLog,
   activeTabForced,
 }) {
   const navigate = useNavigate();
@@ -153,11 +151,14 @@ export default function ProfessionalDashboardPage({
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
   const [editingPatient, setEditingPatient] = useState(null);
+  const [viewingCancelReason, setViewingCancelReason] = useState(null);
+  const handleViewCancelReason = (record) => {
+    setViewingCancelReason(record);
+  };
 
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
 
-  // Chaves para resetar formulários
   const [recordFormKey, setRecordFormKey] = useState(0);
 
   const [confirmation, setConfirmation] = useState({
@@ -191,7 +192,6 @@ export default function ProfessionalDashboardPage({
     setCurrentPage(1);
   }, [statusFilter, debouncedHistorySearch]);
 
-  // --- Helpers ---
   const syncGlobalState = async (refetchFunction, errorMsg) => {
     if (typeof refetchFunction === 'function') await refetchFunction();
     else console.error(`Função de recarga não encontrada para ${errorMsg}.`);
@@ -224,11 +224,22 @@ export default function ProfessionalDashboardPage({
       isDestructive: false,
     });
 
-  const getPatientNameById = (patientId) =>
-    Array.isArray(patients)
-      ? patients.find((p) => (p._id || p.id) === patientId)?.name ||
-        'Desconhecido'
-      : 'Desconhecido';
+  // --- CORREÇÃO 1: Nome do Paciente Inteligente ---
+  const getPatientNameById = (patientId) => {
+    // Tenta achar na lista
+    const inList = Array.isArray(patients)
+      ? patients.find((p) => (p._id || p.id) === patientId)?.name
+      : null;
+
+    // Se não achar, tenta ver se o objeto do backend já tem o nome (populate ou backup)
+    if (!inList) {
+      // As vezes o patientId vem populado como objeto
+      if (typeof patientId === 'object' && patientId?.name)
+        return patientId.name;
+      return 'Desconhecido';
+    }
+    return inList;
+  };
 
   const findRecentRecord = (patientId, recordToExcludeId = null) => {
     if (!patientId || !Array.isArray(records)) return null;
@@ -236,8 +247,11 @@ export default function ProfessionalDashboardPage({
     const patientRecords = records
       .filter((r) => {
         const recordId = r._id || r.id;
+        // Normaliza o ID do paciente (pode ser string ou objeto)
+        const pId =
+          typeof r.patientId === 'object' ? r.patientId._id : r.patientId;
         return (
-          r.patientId === patientId &&
+          pId === patientId &&
           r.status !== 'Cancelado' &&
           recordId !== recordToExcludeId
         );
@@ -250,7 +264,6 @@ export default function ProfessionalDashboardPage({
     return null;
   };
 
-  // --- FLUXO DE ATENDIMENTO ---
   const openSearchModal = () => setIsSearchModalOpen(true);
 
   const handleSelectPatientFromSearch = (patient) => {
@@ -291,6 +304,36 @@ export default function ProfessionalDashboardPage({
     setIsPatientModalOpen(true);
   };
 
+  // --- LOGICA DE EDITAR REGISTRO (CORRIGIDA) ---
+  const handleEditRecordClick = (record) => {
+    // 1. Tenta achar o ID do paciente de forma segura
+    let pId = record.patientId;
+    if (typeof pId === 'object' && pId !== null) {
+      pId = pId._id || pId.id;
+    }
+
+    // 2. Busca o paciente na lista carregada
+    let targetPatient = patients.find((p) => (p._id || p.id) === pId);
+
+    // 3. FALBACK: Se não achar (paginação ou deletado), cria um "Fantasma"
+    // para permitir abrir o modal de qualquer jeito
+    if (!targetPatient && pId) {
+      targetPatient = {
+        _id: pId,
+        name: record.patientName || 'Paciente (Arquivo)', // Usa o nome salvo no Record
+        isGhost: true,
+      };
+    }
+
+    if (targetPatient) {
+      setSelectedPatient(targetPatient);
+      setEditingRecord(record);
+      setIsRecordModalOpen(true);
+    } else {
+      addToast('Erro: Dados do paciente corrompidos.', 'error');
+    }
+  };
+
   // --- API Handlers ---
 
   const handleSavePatient = async (patientData) => {
@@ -303,22 +346,17 @@ export default function ProfessionalDashboardPage({
 
       if (patientId && patientId !== 'new') {
         response = await api.put(`/patients/${patientId}`, payload);
-        // --- LOG DE ATIVIDADE: Atualização de Paciente ---
         addLog?.(
           user?.name,
           `atualizou o cadastro do paciente ${patientData.name}`
         );
-        // --- FIM LOG ---
         addToast('Paciente atualizado!', 'success');
         setIsPatientModalOpen(false);
         setEditingPatient(null);
       } else {
         response = await api.post('/patients', payload);
-        // --- LOG DE ATIVIDADE: Criação de Paciente ---
         addLog?.(user?.name, `cadastrou novo paciente: ${patientData.name}`);
-        // --- FIM LOG ---
         addToast('Paciente cadastrado!', 'success');
-
         setIsPatientModalOpen(false);
         setEditingPatient(null);
         openRecordModalWithCheck(response.data, null);
@@ -335,31 +373,19 @@ export default function ProfessionalDashboardPage({
   const handleSaveRecord = async (formData) => {
     try {
       if (editingRecord) {
-        // --- MODO EDIÇÃO ---
         const id = editingRecord._id || editingRecord.id;
-
-        // Enviamos o formData completo para que o campo 'farmacia' chegue ao backend
         const response = await api.put(`/records/${id}`, formData);
-
-        // Atualiza a lista localmente
         setRecords((prev) =>
           prev.map((r) => (r._id === id || r.id === id ? response.data : r))
         );
         addToast('Registro atualizado com sucesso!', 'success');
       } else {
-        // --- MODO NOVO REGISTRO ---
         const response = await api.post('/records', formData);
-
-        // Adiciona o novo registro no topo da lista
         setRecords((prev) => [response.data, ...prev]);
         addToast('Registro criado com sucesso!', 'success');
       }
-
       setIsRecordModalOpen(false);
       setEditingRecord(null);
-
-      // Opcional: recarregar os dados para garantir sincronia
-      // fetchData();
     } catch (error) {
       console.error('Erro ao salvar registro:', error);
       addToast('Erro ao salvar o registro. Verifique os dados.', 'error');
@@ -383,12 +409,10 @@ export default function ProfessionalDashboardPage({
 
     try {
       await api.delete(`/records/${id}`);
-      // --- LOG DE ATIVIDADE: Exclusão de Registro ---
       addLog?.(
         user?.name,
         `EXCLUIU o registro de atendimento de ${patientName}`
       );
-      // --- FIM LOG ---
       addToast('Registro excluído!', 'success');
       await syncGlobalState(setRecords, 'registros');
     } catch {
@@ -401,9 +425,7 @@ export default function ProfessionalDashboardPage({
   const handleAddNewMedication = async (medData) => {
     try {
       const res = await api.post('/medications', { name: medData.name.trim() });
-      // --- LOG DE ATIVIDADE: Criação de Medicação ---
       addLog?.(user?.name, `cadastrou nova medicação: ${medData.name.trim()}`);
-      // --- FIM LOG ---
       addToast('Medicação cadastrada!', 'success');
       await syncGlobalState(setMedications, 'medicações');
       return res.data;
@@ -423,11 +445,7 @@ export default function ProfessionalDashboardPage({
         status: 'Atendido',
         deliveryDate: date,
       });
-
-      // --- LOG DE ATIVIDADE: Atendimento (Conclusão) ---
       addLog?.(user?.name, `registrou ATENDIMENTO de ${patientName}`);
-      // --- FIM LOG ---
-
       await syncGlobalState(setRecords, 'registros');
       addToast('Atendido!', 'success');
       setAttendingRecord(null);
@@ -447,14 +465,10 @@ export default function ProfessionalDashboardPage({
         status: 'Cancelado',
         cancelReason: reason,
       });
-
-      // --- LOG DE ATIVIDADE: Cancelamento de Registro ---
       addLog?.(
         user?.name,
         `CANCELOU o registro de atendimento de ${patientName} (Motivo: ${reason})`
       );
-      // --- FIM LOG ---
-
       addToast('Cancelado.', 'info');
       await syncGlobalState(setRecords, 'registros');
     } catch {
@@ -462,7 +476,6 @@ export default function ProfessionalDashboardPage({
     }
   };
 
-  // --- Memos de Listagem e Performance ---
   const filteredPatients = useMemo(
     () =>
       Array.isArray(patients)
@@ -484,7 +497,11 @@ export default function ProfessionalDashboardPage({
     const targetId = selectedPatient?._id || selectedPatient?.id;
     if (!targetId || !Array.isArray(records)) return [];
     return records
-      .filter((r) => r.patientId === targetId)
+      .filter((r) => {
+        const pId =
+          typeof r.patientId === 'object' ? r.patientId._id : r.patientId;
+        return pId === targetId;
+      })
       .sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate));
   }, [records, selectedPatient]);
 
@@ -495,6 +512,7 @@ export default function ProfessionalDashboardPage({
         : [],
     [records]
   );
+
   const overduePendingRecords = useMemo(() => {
     if (!Array.isArray(records)) return [];
     const now = new Date().getTime();
@@ -508,18 +526,35 @@ export default function ProfessionalDashboardPage({
 
   // OTIMIZAÇÃO: Pré-calcula o nome do paciente
   const recordsWithPatientNames = useMemo(() => {
+    // Mapa rápido de IDs -> Nomes
     const patientMap = patients.reduce((acc, p) => {
       acc[p._id || p.id] = p.name;
       return acc;
     }, {});
 
-    return records.map((r) => ({
-      ...r,
-      patientName: patientMap[r.patientId] || 'Desconhecido',
-    }));
+    return records.map((r) => {
+      // 1. Tenta pegar do mapa de pacientes carregados
+      let pId = r.patientId;
+      if (typeof pId === 'object') pId = pId._id;
+
+      let pName = patientMap[pId];
+
+      // 2. Se não achar, tenta pegar do próprio registro (backup ou populate)
+      if (!pName) {
+        if (r.patientName)
+          pName = r.patientName; // Campo backup que criamos
+        else if (typeof r.patientId === 'object' && r.patientId.name)
+          pName = r.patientId.name;
+        else pName = 'Desconhecido';
+      }
+
+      return {
+        ...r,
+        patientName: pName,
+      };
+    });
   }, [records, patients]);
 
-  // Filtro de Histórico usando o nome pré-calculado
   const filteredRecords = useMemo(() => {
     let result = recordsWithPatientNames.sort(
       (a, b) => new Date(b.entryDate) - new Date(a.entryDate)
@@ -563,17 +598,34 @@ export default function ProfessionalDashboardPage({
       .sort((a, b) => new Date(b.deliveryDate) - new Date(a.deliveryDate));
   }, [records]);
 
-  // --- RENDER ---
+  // Helper para garantir a resolução do nome independente do formato do ID
+  const getSafeMedicationName = (medicationId, meds = []) => {
+    if (!medicationId) return '-';
+
+    // Extrai o ID caso ele venha como objeto (populado pelo MongoDB)
+    const targetId =
+      typeof medicationId === 'object'
+        ? medicationId._id || medicationId.id
+        : medicationId;
+
+    if (!targetId) return 'Desconhecido';
+
+    // Converte para String para garantir que a comparação não falhe por tipo
+    const targetIdStr = String(targetId);
+
+    // Busca na lista de medicações convertendo os IDs da lista também
+    const found = meds.find(
+      (m) => String(m._id) === targetIdStr || String(m.id) === targetIdStr
+    );
+
+    return found ? found.name : 'Desconhecido';
+  };
+
   const renderCurrentView = () => {
     switch (currentView) {
       case 'dashboard':
-        // --- Novo Visual para o Dashboard (Mantido para Contexto) ---
-
-        // --- Alerta de Registros Vencidos ---
         const showOverdueAlert =
           overduePendingRecords.length > 0 && isOverdueAlertVisible;
-
-        // --- Mapeamento de Cores para Cards ---
         const statCards = [
           {
             label: 'Novo Atendimento',
@@ -624,8 +676,6 @@ export default function ProfessionalDashboardPage({
             shadow: 'shadow-sm',
           },
         ];
-
-        // --- Mapeamento de Acessos Rápidos ---
         const quickAccess = [
           {
             label: 'Pacientes',
@@ -652,7 +702,6 @@ export default function ProfessionalDashboardPage({
 
         return (
           <div className="space-y-8 animate-fade-in max-w-7xl mx-auto p-4 md:p-6 lg:p-0">
-            {/* --- 1. Cabeçalho e Botão Principal --- */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <h2 className="text-3xl font-bold text-gray-800 tracking-tight">
@@ -665,8 +714,6 @@ export default function ProfessionalDashboardPage({
                   Seu resumo de atividades e acesso rápido.
                 </p>
               </div>
-
-              {/* Botão de Iniciar Atendimento - Proeminente */}
               <button
                 onClick={openSearchModal}
                 className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl shadow-xl shadow-blue-200 font-semibold flex items-center justify-center gap-2 transition-all transform hover:-translate-y-0.5 active:scale-95 text-lg cursor-pointer flex-shrink-0"
@@ -675,8 +722,6 @@ export default function ProfessionalDashboardPage({
                 <span>Iniciar Atendimento Rápido</span>
               </button>
             </div>
-
-            {/* --- 2. Alertas --- */}
             {showOverdueAlert && (
               <div className="bg-red-50 border border-red-200 p-4 rounded-xl flex justify-between items-center transition-opacity animate-slide-down">
                 <div className="flex items-center gap-3">
@@ -684,7 +729,7 @@ export default function ProfessionalDashboardPage({
                     {icons.alert}
                   </span>
                   <p className="text-sm font-medium text-red-800">
-                    Atenção: Você tem **{overduePendingRecords.length}**{' '}
+                    Atenção: Você tem **{overduePendingRecords.length}**
                     registro(s) pendente(s) por mais de 30 dias. Verifique no
                     Histórico.
                   </p>
@@ -697,16 +742,12 @@ export default function ProfessionalDashboardPage({
                 </button>
               </div>
             )}
-
-            {/* --- 3. Cards de Estatísticas (Grid 4 colunas) --- */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {statCards.map((card, idx) => (
                 <div
                   key={idx}
                   onClick={card.action}
-                  className={`bg-white p-6 rounded-2xl border border-gray-100 transition-all cursor-pointer ${card.hover} ${card.shadow} ${
-                    card.isButton ? 'border-none' : ''
-                  }`}
+                  className={`bg-white p-6 rounded-2xl border border-gray-100 transition-all cursor-pointer ${card.hover} ${card.shadow} ${card.isButton ? 'border-none' : ''}`}
                 >
                   <div className="flex justify-between items-start">
                     <div>
@@ -724,27 +765,20 @@ export default function ProfessionalDashboardPage({
                       )}
                     </div>
                     <div
-                      className={`p-3 rounded-xl transition-transform ${
-                        card.isButton ? card.color : card.color
-                      } ${card.textColor} group-hover:scale-110`}
+                      className={`p-3 rounded-xl transition-transform ${card.color} ${card.textColor} group-hover:scale-110`}
                     >
                       {card.icon}
                     </div>
                   </div>
                   <p
-                    className={`mt-3 text-xs font-medium ${
-                      card.isButton ? 'text-white/80' : 'text-gray-500'
-                    }`}
+                    className={`mt-3 text-xs font-medium ${card.isButton ? 'text-white/80' : 'text-gray-500'}`}
                   >
                     {card.subtext}
                   </p>
                 </div>
               ))}
             </div>
-
-            {/* --- 4. Acesso Rápido e Últimas Entregas (Grid 2/3) --- */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-4">
-              {/* Bloco 1: Acesso Rápido */}
               <div className="lg:col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
                 <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                   {icons.bolt} Acesso Rápido
@@ -773,8 +807,6 @@ export default function ProfessionalDashboardPage({
                   ))}
                 </div>
               </div>
-
-              {/* Bloco 2: Últimas Entregas (Mini Tabela) */}
               <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col">
                 <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                   {icons.history} Últimas Entregas ({recentDeliveries.length})
@@ -796,7 +828,11 @@ export default function ProfessionalDashboardPage({
                             onClick={() => {
                               setSelectedPatient(
                                 patients.find(
-                                  (p) => (p._id || p.id) === record.patientId
+                                  (p) =>
+                                    (p._id || p.id) ===
+                                    (typeof record.patientId === 'object'
+                                      ? record.patientId._id
+                                      : record.patientId)
                                 )
                               );
                               navigate('/patients');
@@ -806,23 +842,12 @@ export default function ProfessionalDashboardPage({
                             <td className="py-2 px-1 font-medium text-gray-800">
                               {getPatientNameById(record.patientId)}
                             </td>
-                            {/* 2. Entrega */}
                             <td className="py-4 px-3 align-middle text-gray-600">
                               {record.deliveryDate ? (
                                 <span className="bg-green-50 text-green-700 px-2 py-1 rounded text-xs font-medium border border-green-100 cursor-pointer">
-                                  {(() => {
-                                    const d = new Date(record.deliveryDate);
-                                    // getUTCDate ignora o fuso horário local e lê o dia exato do banco
-                                    const dia = String(d.getUTCDate()).padStart(
-                                      2,
-                                      '0'
-                                    );
-                                    const mes = String(
-                                      d.getUTCMonth() + 1
-                                    ).padStart(2, '0');
-                                    const ano = d.getUTCFullYear();
-                                    return `${dia}/${mes}/${ano}`;
-                                  })()}
+                                  {new Date(
+                                    record.deliveryDate
+                                  ).toLocaleDateString('pt-BR')}
                                 </span>
                               ) : (
                                 <span className="text-gray-300 text-xs italic cursor-default">
@@ -858,11 +883,190 @@ export default function ProfessionalDashboardPage({
 
       case 'patients':
         return (
-          // O grid de 12 colunas só ativa em 'lg', mobile é 1 coluna
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 h-[calc(100vh-8rem)] animate-fade-in max-w-7xl mx-auto p-4 md:p-0">
+            {/* Painel Lateral: Lista de Pacientes */}
+            <div className="lg:col-span-4 bg-white/80 backdrop-blur-md rounded-3xl shadow-xl border border-gray-100 flex flex-col overflow-hidden">
+              <div className="p-6 border-b border-gray-100 bg-gray-50/50">
+                <div className="flex justify-between items-center mb-5">
+                  <h2 className="font-extrabold text-gray-900 flex items-center gap-3 tracking-tight">
+                    <span className="bg-blue-100 text-blue-600 p-2 rounded-xl">
+                      {icons.users}
+                    </span>
+                    Pacientes
+                  </h2>
+                  <span className="bg-blue-600 text-white text-[10px] font-black px-2.5 py-1 rounded-full shadow-lg shadow-blue-200">
+                    {patients.length} TOTAL
+                  </span>
+                </div>
+                <div className="relative group">
+                  <input
+                    type="text"
+                    placeholder="Buscar paciente..."
+                    className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-2xl text-sm focus:ring-4 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all shadow-sm group-hover:border-gray-300"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                  <span className="absolute left-3.5 top-3.5 text-gray-400 group-hover:text-blue-500 transition-colors">
+                    {icons.search}
+                  </span>
+                </div>
+                <button
+                  onClick={() => handleEditPatient(null)}
+                  className="mt-4 w-full py-3.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-2xl text-sm font-bold hover:shadow-lg hover:shadow-blue-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                >
+                  {icons.plus} NOVO CADASTRO
+                </button>
+              </div>
+
+              <div className="flex-grow overflow-y-auto p-4 space-y-2 custom-scrollbar">
+                {filteredPatients.map((p) => {
+                  const active =
+                    (selectedPatient?._id || selectedPatient?.id) ===
+                    (p._id || p.id);
+                  return (
+                    <div
+                      key={p._id || p.id}
+                      onClick={() => setSelectedPatient(p)}
+                      className={`p-4 rounded-2xl cursor-pointer flex items-center gap-4 transition-all duration-200 ${
+                        active
+                          ? 'bg-blue-600 text-white shadow-xl shadow-blue-200 scale-[1.02]'
+                          : 'hover:bg-blue-50 border border-transparent text-gray-700'
+                      }`}
+                    >
+                      <div
+                        className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg shadow-inner ${
+                          active
+                            ? 'bg-white/20 text-white'
+                            : 'bg-blue-100 text-blue-600'
+                        }`}
+                      >
+                        {p.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="overflow-hidden">
+                        <p
+                          className={`font-bold truncate ${active ? 'text-white' : 'text-gray-900'}`}
+                        >
+                          {p.name}
+                        </p>
+                        <p
+                          className={`text-[11px] font-medium truncate ${active ? 'text-blue-100' : 'text-gray-400'}`}
+                        >
+                          {p.cpf
+                            ? `CPF: ${p.cpf}`
+                            : p.susCard
+                              ? `SUS: ${p.susCard}`
+                              : 'Sem documento'}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Painel Principal: Detalhes e Prontuários */}
+            <div className="lg:col-span-8 bg-white/80 backdrop-blur-md rounded-3xl shadow-xl border border-gray-100 flex flex-col overflow-hidden">
+              {selectedPatient ? (
+                <>
+                  {/* Header do Paciente */}
+                  <div className="bg-gradient-to-br from-white to-blue-50/50 p-8 border-b border-blue-50 flex flex-col md:flex-row justify-between items-center gap-6">
+                    <div className="flex gap-6 items-center w-full">
+                      <div className="w-20 h-20 bg-blue-600 text-white rounded-3xl flex items-center justify-center text-3xl font-black shadow-2xl shadow-blue-200 ring-4 ring-white">
+                        {selectedPatient.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <h2 className="text-3xl font-black text-gray-900 tracking-tight truncate">
+                          {selectedPatient.name}
+                        </h2>
+                        <div className="flex flex-wrap gap-3 mt-2">
+                          <span className="bg-white border border-gray-200 text-gray-500 px-3 py-1 rounded-lg text-xs font-bold shadow-sm">
+                            CPF: {selectedPatient.cpf || '--'}
+                          </span>
+                          <span className="bg-white border border-gray-200 text-gray-500 px-3 py-1 rounded-lg text-xs font-bold shadow-sm">
+                            SUS: {selectedPatient.susCard || '--'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-3 w-full md:w-auto">
+                      <button
+                        onClick={() => handleEditPatient(selectedPatient)}
+                        className="flex-1 md:flex-none px-4 py-2.5 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 text-gray-600 transition-all shadow-sm font-bold text-sm cursor-pointer flex items-center justify-center gap-2"
+                      >
+                        {icons.edit} EDITAR
+                      </button>
+                      {user?.role !== 'profissional' && (
+                        <button
+                          onClick={() =>
+                            setConfirmation({
+                              isOpen: true,
+                              title: 'Excluir Paciente',
+                              message: `Atenção: Todos os dados de ${selectedPatient.name} serão removidos permanentemente.`,
+                              onConfirm: () =>
+                                handleDeletePatient(
+                                  selectedPatient._id || selectedPatient.id
+                                ),
+                              isDestructive: true,
+                              confirmText: 'EXCLUIR AGORA',
+                            })
+                          }
+                          className="flex-1 md:flex-none px-4 py-2.5 bg-white border border-red-100 rounded-xl hover:bg-red-50 text-red-500 transition-all shadow-sm font-bold text-sm cursor-pointer flex items-center justify-center gap-2"
+                        >
+                          {icons.trash}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Tabela de Prontuários (Histórico do Paciente) */}
+                  <div className="p-8 flex-grow flex flex-col bg-gray-50/20">
+                    <div className="flex justify-between items-center mb-6">
+                      <div>
+                        <h3 className="font-black text-gray-800 flex items-center gap-2 text-lg">
+                          {icons.history} Prontuário Digital
+                        </h3>
+                        <p className="text-xs text-gray-400 font-medium">
+                          Histórico de solicitações e entregas.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() =>
+                          openRecordModalWithCheck(selectedPatient, null)
+                        }
+                        className="bg-emerald-600 text-white px-6 py-3 rounded-2xl text-sm font-black hover:bg-emerald-700 shadow-lg shadow-emerald-100 transition-all active:scale-95 cursor-pointer flex items-center gap-2"
+                      >
+                        {icons.plus} NOVA ENTRADA
+                      </button>
+                    </div>
+
+                    <div className="flex-grow overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-inner shadow-gray-100">
+                      <PatientRecordsTable
+                        records={patientRecords}
+                        medications={medications}
+                        onViewReason={handleViewCancelReason}
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-gray-300 animate-pulse">
+                  <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mb-6 border-4 border-dashed border-gray-100">
+                    <span className="text-5xl">{icons.user}</span>
+                  </div>
+                  <p className="text-xl font-black uppercase tracking-widest">
+                    Selecione um Paciente
+                  </p>
+                  <p className="text-sm font-medium mt-2">
+                    Para visualizar o histórico completo e realizar
+                    atendimentos.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+        return (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-8rem)] lg:h-[calc(100vh-8rem)] animate-fade-in max-w-7xl mx-auto p-4 md:p-0">
-            {' '}
-            {/* Adicionado padding para móvel */}
-            {/* Painel lateral: Mobile ocupa 100%, Desktop 4 colunas */}
             <div className="lg:col-span-4 bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col overflow-hidden">
               <div className="p-5 border-b border-gray-100 bg-gray-50/50">
                 <div className="flex justify-between items-center mb-4">
@@ -902,27 +1106,16 @@ export default function ProfessionalDashboardPage({
                       <div
                         key={patient._id || patient.id}
                         onClick={() => setSelectedPatient(patient)}
-                        // cursor-pointer garantido
-                        className={`p-3 rounded-xl cursor-pointer border transition-all flex items-center gap-3 ${
-                          isSelected
-                            ? 'bg-blue-50 border-blue-200 shadow-sm'
-                            : 'bg-white border-transparent hover:bg-gray-50 hover:border-gray-100'
-                        }`}
+                        className={`p-3 rounded-xl cursor-pointer border transition-all flex items-center gap-3 ${isSelected ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-white border-transparent hover:bg-gray-50 hover:border-gray-100'}`}
                       >
                         <div
-                          className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
-                            isSelected
-                              ? 'bg-blue-200 text-blue-700'
-                              : 'bg-gray-100 text-gray-500'
-                          }`}
+                          className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${isSelected ? 'bg-blue-200 text-blue-700' : 'bg-gray-100 text-gray-500'}`}
                         >
                           {patient.name.charAt(0).toUpperCase()}
                         </div>
                         <div className="overflow-hidden">
                           <p
-                            className={`text-sm truncate font-medium ${
-                              isSelected ? 'text-blue-900' : 'text-gray-800'
-                            }`}
+                            className={`text-sm truncate font-medium ${isSelected ? 'text-blue-900' : 'text-gray-800'}`}
                           >
                             {patient.name}
                           </p>
@@ -940,7 +1133,6 @@ export default function ProfessionalDashboardPage({
                 )}
               </div>
             </div>
-            {/* Painel de detalhes: Mobile só aparece se houver paciente selecionado */}
             <div className="lg:col-span-8 bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col overflow-hidden relative">
               {selectedPatient ? (
                 <>
@@ -1043,7 +1235,6 @@ export default function ProfessionalDashboardPage({
                   <p className="text-lg font-medium text-gray-600">
                     Nenhum paciente selecionado
                   </p>
-                  {/* Responsividade: Botão de voltar no mobile se a lista estiver escondida */}
                   <button
                     onClick={() => navigate('/dashboard')}
                     className="mt-4 text-blue-600 hover:underline lg:hidden cursor-pointer"
@@ -1059,8 +1250,6 @@ export default function ProfessionalDashboardPage({
       case 'historico':
         return (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 animate-fade-in flex flex-col h-[calc(100vh-8rem)] max-w-7xl mx-auto p-4 md:p-6">
-            {' '}
-            {/* Ajustado padding */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6 pb-6 border-b border-gray-100">
               <div>
                 <h2 className="text-2xl font-bold text-gray-800">
@@ -1070,12 +1259,8 @@ export default function ProfessionalDashboardPage({
                   Visualize e gerencie todas as entradas.
                 </p>
               </div>
-
-              {/* Responsividade: flex-wrap para permitir que os botões quebrem a linha em telas pequenas */}
               <div className="flex flex-wrap gap-4 items-center">
                 <div className="relative w-full sm:w-auto">
-                  {' '}
-                  {/* w-full para input no mobile */}
                   <input
                     type="text"
                     placeholder="Buscar paciente no relatório..."
@@ -1094,18 +1279,12 @@ export default function ProfessionalDashboardPage({
                   {icons.plus} Novo Registro
                 </button>
                 <div className="flex bg-gray-100 p-1 rounded-lg w-full sm:w-auto">
-                  {' '}
-                  {/* w-full para grupo de botões no mobile */}
                   {['Todos', 'Pendente', 'Atendido', 'Cancelado'].map(
                     (status) => (
                       <button
                         key={status}
                         onClick={() => setStatusFilter(status)}
-                        className={`flex-1 sm:flex-none px-4 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer ${
-                          statusFilter === status
-                            ? 'bg-white text-blue-600 shadow-sm'
-                            : 'text-gray-500 hover:text-gray-700'
-                        }`}
+                        className={`flex-1 sm:flex-none px-4 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer ${statusFilter === status ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                       >
                         {status}
                       </button>
@@ -1130,7 +1309,6 @@ export default function ProfessionalDashboardPage({
                     {currentRecords.map((record) => (
                       <tr
                         key={record._id || record.id}
-                        // UI/UX Moderno e Cursor-Pointer
                         className="hover:bg-blue-50/30 transition-colors group cursor-pointer border-b border-gray-100 shadow-sm hover:shadow-md"
                         tabIndex={0}
                       >
@@ -1148,6 +1326,8 @@ export default function ProfessionalDashboardPage({
                             )}
                           </span>
                         </td>
+
+                        {/* --- CORREÇÃO 2: Exibição da Medicação --- */}
                         <td className="py-3 px-4">
                           <div className="flex flex-wrap gap-1">
                             {Array.isArray(record.medications)
@@ -1156,18 +1336,24 @@ export default function ProfessionalDashboardPage({
                                     key={i}
                                     className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded border border-gray-200"
                                   >
-                                    {getMedicationName(
-                                      m.medicationId,
-                                      medications
-                                    )}{' '}
-                                    <span className="text-gray-400 border-l border-gray-300 pl-1 ml-1">
-                                      {m.quantity}
+                                    {/* Prioriza o Nome salvo no banco, fallback para o ID */}
+                                    {m.name ||
+                                      getMedicationName(
+                                        m.medicationId,
+                                        medications
+                                      )}
+                                    <span className="text-gray-400 border-l border-gray-300 pl-1 ml-1 font-bold">
+                                      {/* Mostra quantidade formatada ou número + unidade */}
+                                      {m.dosage ||
+                                        `${m.quantity} ${m.unit || ''}`}
                                     </span>
                                   </span>
                                 ))
                               : '-'}
                           </div>
                         </td>
+                        {/* ------------------------------------------- */}
+
                         <td className="py-3 px-4">
                           <StatusBadge status={record.status} />
                         </td>
@@ -1196,24 +1382,19 @@ export default function ProfessionalDashboardPage({
                                 </button>
                               </>
                             )}
+
+                            {/* --- CORREÇÃO 3: Botão de Editar (Usa função corrigida) --- */}
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                const p = patients.find(
-                                  (pat) =>
-                                    (pat._id || pat.id) === record.patientId
-                                );
-                                if (p) {
-                                  setSelectedPatient(p);
-                                  setEditingRecord(record);
-                                  setIsRecordModalOpen(true);
-                                }
+                                handleEditRecordClick(record);
                               }}
                               className="text-gray-500 hover:text-blue-600 p-1.5 rounded-md hover:bg-gray-100 transition-colors cursor-pointer"
                             >
                               {icons.edit}
                             </button>
-                            {/* --- NOVO BOTÃO DE EXCLUSÃO (Somente Admin) --- */}
+                            {/* -------------------------------------------------------- */}
+
                             {user?.role !== 'profissional' && (
                               <button
                                 onClick={(e) => {
@@ -1223,9 +1404,7 @@ export default function ProfessionalDashboardPage({
                                     title: 'Excluir Registro',
                                     message: `Tem certeza que deseja excluir o registro de ${record.patientName} (Entrada: ${new Date(record.entryDate).toLocaleDateString('pt-BR')})? Esta ação é irreversível.`,
                                     onConfirm: () => {
-                                      // Fecha o modal imediatamente para o feedback visual ser rápido
                                       closeConfirmation();
-                                      // Chama a função que fará a requisição e a toast
                                       handleDeleteRecord(
                                         record._id || record.id
                                       );
@@ -1234,14 +1413,12 @@ export default function ProfessionalDashboardPage({
                                     confirmText: 'Excluir',
                                   });
                                 }}
-                                // Adicionado cursor-pointer
                                 className="text-red-600 hover:bg-red-50 p-1.5 rounded-md transition-colors cursor-pointer"
                                 title="Excluir Registro"
                               >
                                 {icons.trash}
                               </button>
                             )}
-                            {/* --- FIM NOVO BOTÃO DE EXCLUSÃO --- */}
                           </div>
                         </td>
                       </tr>
@@ -1279,11 +1456,169 @@ export default function ProfessionalDashboardPage({
 
       case 'deliveries':
         return (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 animate-fade-in flex flex-col h-[calc(100vh-8rem)] max-w-7xl mx-auto p-4 md:p-6">
+          <div className="bg-white/80 backdrop-blur-md rounded-2xl shadow-xl border border-gray-100 p-8 animate-fade-in max-w-7xl mx-auto h-[calc(100vh-8rem)] flex flex-col">
+            <div className="flex justify-between items-center mb-8">
+              <div>
+                <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight flex items-center gap-3">
+                  <span className="bg-green-100 text-green-600 p-3 rounded-2xl shadow-sm">
+                    {icons.check}
+                  </span>
+                  Entregas da Semana
+                </h2>
+                <p className="text-gray-500 mt-2 font-medium">
+                  Acompanhe o fluxo de saídas recentes.
+                </p>
+              </div>
+              <div className="bg-blue-50 px-4 py-2 rounded-xl border border-blue-100">
+                <span className="text-blue-700 font-bold text-sm">
+                  {recentDeliveries.length} Atendimentos
+                </span>
+              </div>
+            </div>
+
+            <div className="flex-grow overflow-auto rounded-2xl border border-gray-200 bg-white shadow-inner custom-scrollbar">
+              <table className="min-w-full text-sm text-left border-separate border-spacing-0">
+                <thead className="bg-gray-50/50 sticky top-0 z-20 backdrop-blur-md">
+                  <tr>
+                    <th className="py-4 px-6 font-bold text-gray-400 uppercase tracking-widest text-[10px] border-b border-gray-100">
+                      Data
+                    </th>
+                    <th className="py-4 px-6 font-bold text-gray-400 uppercase tracking-widest text-[10px] border-b border-gray-100">
+                      Paciente
+                    </th>
+                    <th className="py-4 px-6 font-bold text-gray-400 uppercase tracking-widest text-[10px] border-b border-gray-100">
+                      Itens Entregues
+                    </th>
+                    <th className="py-4 px-6 font-bold text-gray-400 uppercase tracking-widest text-[10px] border-b border-gray-100 text-center">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {recentDeliveries.map((r, idx) => (
+                    <tr
+                      key={r._id || r.id}
+                      className="hover:bg-blue-50/40 transition-all duration-200 group"
+                    >
+                      <td className="py-5 px-6">
+                        <span className="font-bold text-green-700 bg-green-50 px-3 py-1.5 rounded-lg border border-green-100">
+                          {r.deliveryDate
+                            ? new Date(r.deliveryDate).toLocaleDateString(
+                                'pt-BR'
+                              )
+                            : '-'}
+                        </span>
+                      </td>
+                      <td className="py-5 px-6 font-bold text-gray-800 text-base">
+                        {getPatientNameById(r.patientId)}
+                      </td>
+                      <td className="py-5 px-6">
+                        <div className="flex flex-wrap gap-2">
+                          {r.medications?.map((m, i) => (
+                            <span
+                              key={i}
+                              className="bg-white border border-gray-200 text-gray-600 px-3 py-1 rounded-lg text-xs font-semibold shadow-sm group-hover:border-blue-200 transition-colors"
+                            >
+                              {getSafeMedicationName(
+                                m.medicationId,
+                                medications
+                              )}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="py-5 px-6 text-center">
+                        <StatusBadge status={r.status} />
+                        {/* Se houver cancelamento, mostramos o motivo de forma discreta mas visível */}
+                        {r.status === 'Cancelado' && r.cancelReason && (
+                          <div className="mt-2 text-[10px] font-bold text-red-500 flex items-center justify-center gap-1 uppercase italic">
+                            <span className="text-red-400">{icons.info}</span>{' '}
+                            {r.cancelReason}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {recentDeliveries.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-full py-20 text-gray-400 italic">
+                  <div className="p-6 bg-gray-50 rounded-full mb-4 opacity-50">
+                    {icons.history}
+                  </div>
+                  <p className="text-lg font-medium">
+                    Nenhuma entrega registrada nos últimos 7 dias.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+        return (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 animate-fade-in max-w-7xl mx-auto h-[calc(100vh-8rem)] flex flex-col">
             <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
               <span className="bg-green-100 text-green-600 p-2 rounded-lg">
                 {icons.check}
               </span>
+              Entregas da Semana
+            </h2>
+            <div className="flex-grow overflow-auto bg-white rounded-xl border border-gray-200 shadow-sm">
+              <table className="min-w-full text-sm text-left">
+                <thead className="bg-gray-50 text-gray-500 uppercase text-xs border-b">
+                  <tr>
+                    <th className="py-3 px-4 pl-6">Data Entrega</th>
+                    <th className="py-3 px-4">Paciente</th>
+                    <th className="py-3 px-4">Itens</th>
+                    <th className="py-3 px-4">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {recentDeliveries.map((r) => (
+                    <tr
+                      key={r._id || r.id}
+                      className="hover:bg-gray-50 transition-colors"
+                    >
+                      <td className="py-3 px-4 pl-6 font-medium text-green-700">
+                        {r.deliveryDate
+                          ? new Date(r.deliveryDate).toLocaleDateString('pt-BR')
+                          : '-'}
+                      </td>
+                      <td className="py-3 px-4 font-medium text-gray-800">
+                        {getPatientNameById(r.patientId)}
+                      </td>
+
+                      {/* --- CORREÇÃO AQUI --- */}
+                      <td className="py-3 px-4 text-gray-600">
+                        {r.medications
+                          ?.map((m) =>
+                            getSafeMedicationName(m.medicationId, medications)
+                          )
+                          .join(', ')}
+                      </td>
+                      {/* ---------------------- */}
+
+                      <td className="py-3 px-4">
+                        <StatusBadge status={r.status} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {recentDeliveries.length === 0 && (
+                <div className="p-10 text-center text-gray-400">
+                  Nenhuma entrega recente.
+                </div>
+              )}
+            </div>
+          </div>
+        );
+        return (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 animate-fade-in flex flex-col h-[calc(100vh-8rem)] max-w-7xl mx-auto p-4 md:p-6">
+            <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+              <span className="bg-green-100 text-green-600 p-2 rounded-lg">
+                {icons.check}
+              </span>{' '}
               Entregas da Semana
             </h2>
             <div className="flex-grow overflow-auto bg-white rounded-xl border border-gray-200 shadow-sm">
@@ -1302,23 +1637,11 @@ export default function ProfessionalDashboardPage({
                       key={record._id || record.id}
                       className="hover:bg-gray-50 transition-colors cursor-pointer"
                     >
-                      {' '}
                       <td className="py-3 px-4 pl-6 font-medium text-green-700">
                         {record.deliveryDate
-                          ? (() => {
-                              const d = new Date(record.deliveryDate);
-                              // getUTCDate garante que o dia 22 continue sendo 22 no Brasil
-                              const dia = String(d.getUTCDate()).padStart(
-                                2,
-                                '0'
-                              );
-                              const mes = String(d.getUTCMonth() + 1).padStart(
-                                2,
-                                '0'
-                              );
-                              const ano = d.getUTCFullYear();
-                              return `${dia}/${mes}/${ano}`;
-                            })()
+                          ? new Date(record.deliveryDate).toLocaleDateString(
+                              'pt-BR'
+                            )
                           : '-'}
                       </td>
                       <td className="py-3 px-4 font-medium text-gray-800">
@@ -1363,7 +1686,6 @@ export default function ProfessionalDashboardPage({
   return (
     <>
       {renderCurrentView()}
-
       <SearchPatientModal
         isOpen={isSearchModalOpen}
         onClose={() => setIsSearchModalOpen(false)}
@@ -1374,7 +1696,6 @@ export default function ProfessionalDashboardPage({
           handleEditPatient(null);
         }}
       />
-
       {isPatientModalOpen && (
         <PatientForm
           patient={editingPatient}
@@ -1387,7 +1708,6 @@ export default function ProfessionalDashboardPage({
           addToast={addToast}
         />
       )}
-
       {isRecordModalOpen && (
         <RecordForm
           key={recordFormKey}
@@ -1414,7 +1734,6 @@ export default function ProfessionalDashboardPage({
           addToast={addToast}
         />
       )}
-
       {confirmation.isOpen && (
         <ConfirmModal
           title={confirmation.title}
@@ -1446,6 +1765,57 @@ export default function ProfessionalDashboardPage({
           onConfirm={handleCancelRecordStatus}
           getPatientNameById={getPatientNameById}
         />
+      )}
+      {/* MODAL DE MOTIVO DO CANCELAMENTO (SENIOR UI) */}
+      {viewingCancelReason && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-in border border-red-50">
+            <div className="p-6 bg-gradient-to-br from-red-50 to-white border-b border-red-100 flex justify-between items-center">
+              <div className="flex items-center gap-3 text-red-600">
+                <span className="p-2 bg-red-100 rounded-xl">{icons.info}</span>
+                <h3 className="font-black text-lg tracking-tight">
+                  MOTIVO DO CANCELAMENTO
+                </h3>
+              </div>
+              <button
+                onClick={() => setViewingCancelReason(null)}
+                className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-full transition-all cursor-pointer"
+              >
+                {icons.close}
+              </button>
+            </div>
+
+            <div className="p-8">
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
+                Detalhes informados:
+              </p>
+              <div className="bg-gray-50 p-5 rounded-2xl border border-gray-100 italic text-gray-700 leading-relaxed shadow-inner">
+                "
+                {viewingCancelReason.cancelReason ||
+                  'Nenhum motivo detalhado foi fornecido.'}
+                "
+              </div>
+
+              <div className="mt-6 flex flex-col gap-2">
+                <p className="text-[10px] text-gray-400 font-medium">
+                  Cancelado em:{' '}
+                  {new Date(viewingCancelReason.updatedAt).toLocaleDateString(
+                    'pt-BR'
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-end">
+              <button
+                onClick={() => setViewingCancelReason(null)}
+                className="px-6 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-black hover:bg-black transition-all cursor-pointer shadow-lg shadow-gray-200"
+              >
+                ENTENDIDO
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

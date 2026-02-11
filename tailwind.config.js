@@ -1,14 +1,18 @@
-{import('tailwindcss').Config} 
+{
+  import('tailwindcss').Config;
+}
 export default {
   content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}", 
+    './index.html',
+    './src/**/*.{js,ts,jsx,tsx}',
+    './index.html',
+    './src/**/*.{js,ts,jsx,tsx}',
   ],
   theme: {
     extend: {
       animation: {
         'fade-in': 'fadeIn 0.3s ease-in',
-        'shake': 'shake 0.5s ease-in-out',
+        shake: 'shake 0.5s ease-in-out',
         'slide-in': 'slideIn 0.4s ease-out',
       },
       keyframes: {
@@ -29,4 +33,4 @@ export default {
     },
   },
   plugins: [],
-}
+};

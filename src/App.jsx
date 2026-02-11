@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Routes, Route, Navigate, useNavigate, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from './services/api';
@@ -20,6 +20,9 @@ import { FullScreenPreloader } from './components/common/FullScreenPreloader';
 import { getMedicationName } from './utils/helpers';
 import WelcomeModal from './components/WelcomeModal/WelcomeModal.jsx';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+import ShipmentsPage from './pages/ShipmentsPage';
+import PublicShipmentView from './pages/PublicShipmentView';
+import ShipmentConferencePage from './pages/ShipmentConferencePage.jsx';
 
 export default function App() {
   useSyncManager();
@@ -38,10 +41,8 @@ export default function App() {
   const [records, setRecords] = useState([]);
   const [medications, setMedications] = useState([]);
   const [users, setUsers] = useState([]);
-
   const [annualBudget, setAnnualBudget] = useState(5000.0);
   const [activityLog, setActivityLog] = useState([]);
-
   const [filterYear, setFilterYear] = useState(new Date().getFullYear());
 
   const navigate = useNavigate();
@@ -55,12 +56,7 @@ export default function App() {
 
   const addLog = useCallback(async (userName, action) => {
     const logData = { user: userName || 'Sistema', action };
-    const tempLog = {
-      ...logData,
-      id: Date.now(),
-      timestamp: new Date().toISOString(),
-    };
-    setActivityLog((prev) => [tempLog, ...prev].slice(0, 100));
+    setActivityLog((prev) => [logData, ...prev].slice(0, 100)); // Otimista
     try {
       await api.post('/logs', logData);
     } catch (error) {
@@ -146,10 +142,7 @@ export default function App() {
       ]);
     } catch (error) {
       console.error('Falha Crítica no Promise.all:', error);
-      addToast(
-        'Erro ao carregar dados iniciais. Verifique se o backend local está rodando.',
-        'error'
-      );
+      addToast('Erro ao carregar dados iniciais.', 'error');
     } finally {
       setIsInitializing(false);
     }
@@ -221,21 +214,13 @@ export default function App() {
     }
   }, [user]);
 
-  const handleAcceptCookies = useCallback(() => {
-    localStorage.setItem('cookieConsent', 'true');
-    setShowCookieBanner(false);
-  }, []);
-
   const handleCloseWelcomeModal = () => {
     setShowWelcomeModal(false);
     localStorage.setItem('hasSeenWelcomeModal', 'true');
   };
 
-  if (isInitializing || isLoggingOut) {
-    return <FullScreenPreloader />;
-  }
+  if (isInitializing || isLoggingOut) return <FullScreenPreloader />;
 
-  // Helper para verificar se é profissional (aceitando várias escritas)
   const isProfessionalUser =
     user &&
     (user.role === 'profissional' ||
@@ -268,6 +253,11 @@ export default function App() {
       {showWelcomeModal && <WelcomeModal onClose={handleCloseWelcomeModal} />}
 
       <Routes>
+        {/* ========================================================= */}
+        {/* 1. ROTAS PÚBLICAS (Acessíveis sem login) - DEVEM VIR PRIMEIRO */}
+        {/* ========================================================= */}
+        <Route path="/pedidos/ver/:token" element={<PublicShipmentView />} />
+
         <Route
           path="/login"
           element={
@@ -285,6 +275,11 @@ export default function App() {
           }
         />
 
+        <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
+
+        {/* ========================================================= */}
+        {/* 2. ROTAS PROTEGIDAS (Exigem Login) */}
+        {/* ========================================================= */}
         <Route
           path="/"
           element={
@@ -301,7 +296,7 @@ export default function App() {
         >
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="profile" element={<Profile />} />
-          {/* Rota do Dashboard Geral */}
+
           <Route
             path="dashboard"
             element={
@@ -314,6 +309,7 @@ export default function App() {
           />
           <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
 
+          {/* Rotas de Profissional */}
           {isProfessionalUser && (
             <>
               <Route
@@ -347,9 +343,11 @@ export default function App() {
                 path="medications"
                 element={<MedicationsPage {...commonPageProps} />}
               />
+              <Route path="/conferencia" element={<ShipmentConferencePage />} />
             </>
           )}
 
+          {/* Rotas de Secretário */}
           {user?.role === 'secretario' && (
             <>
               <Route
@@ -386,6 +384,34 @@ export default function App() {
             </>
           )}
 
+          {/* Rotas Comuns (Admin + Secretário) */}
+          {(user?.role === 'admin' || user?.role === 'secretario') && (
+            <>
+              <Route
+                path="medications"
+                element={<MedicationsPage {...commonPageProps} />}
+              />
+              <Route
+                path="shipments"
+                element={<ShipmentsPage {...commonPageProps} />}
+              />
+              <Route
+                path="history"
+                element={
+                  <SecretaryDashboardPage
+                    {...commonPageProps}
+                    activeTabForced="history"
+                  />
+                }
+              />
+              <Route
+                path="reports"
+                element={<AdminReportsPage {...commonPageProps} />}
+              />
+            </>
+          )}
+
+          {/* Rotas Exclusivas Admin */}
           {user?.role === 'admin' && (
             <Route
               path="settings"
@@ -393,13 +419,7 @@ export default function App() {
             />
           )}
 
-          {(user?.role === 'admin' || user?.role === 'secretario') && (
-            <Route
-              path="reports"
-              element={<AdminReportsPage {...commonPageProps} />}
-            />
-          )}
-
+          {/* Rota 404 (Dentro do Layout) */}
           <Route
             path="*"
             element={
@@ -412,9 +432,6 @@ export default function App() {
             }
           />
         </Route>
-
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
       </Routes>
     </>
   );

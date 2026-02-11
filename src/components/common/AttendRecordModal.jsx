@@ -1,6 +1,3 @@
-// src/components/common/AttendRecordModal.jsx
-// (ATUALIZADO: Corrigido bug de fuso horário na data 'today')
-
 import React, { useState } from 'react';
 import { Modal } from './Modal';
 import { ClipLoader } from 'react-spinners';
@@ -12,7 +9,6 @@ const getLocalDateString = (date = new Date()) => {
   const day = date.getDate().toString().padStart(2, '0');
   return `${year}-${month}-${day}`;
 };
-// --- (FIM DA CORREÇÃO) ---
 
 export function AttendRecordModal({
   record,
@@ -23,11 +19,7 @@ export function AttendRecordModal({
   getMedicationName, 
   isSaving,
 }) {
-
-  // --- (INÍCIO DA CORREÇÃO) ---
-  // Usa a nova função para definir 'today'
   const today = getLocalDateString(); 
-  // --- (FIM DA CORREÇÃO) ---
   
   const recordId = record?._id; 
   const [deliveryDate, setDeliveryDate] = useState(today); 
@@ -67,17 +59,24 @@ export function AttendRecordModal({
           <h4 className="font-semibold text-gray-900 mb-3 text-sm">
             Medicações Registradas:
           </h4>
-          {typeof getMedicationName === 'function' &&
-          Array.isArray(medications) ? (
+          {Array.isArray(record?.medications) ? (
             <ul className="space-y-2 max-h-40 overflow-y-auto">
-              {record?.medications?.length > 0 ? (
+              {record.medications.length > 0 ? (
                 record.medications.map((medItem, index) => (
                   <li key={medItem.recordMedId || index} className="flex items-start gap-2 bg-gray-50 rounded-lg p-3 border border-gray-100 text-sm">
                     <span className="w-1.5 h-1.5 bg-green-500 rounded-full mt-1.5 flex-shrink-0"></span>
                     <span className="text-gray-800">
-                      {getMedicationName(medItem.medicationId, medications) ||
-                        `ID ${medItem.medicationId} não encontrado`}
-                      {medItem.quantity && <span className="text-gray-500 ml-1">({medItem.quantity})</span>}
+                      {/* --- CORREÇÃO: Usa o nome salvo se existir --- */}
+                      {medItem.name || (typeof getMedicationName === 'function' ? getMedicationName(medItem.medicationId, medications) : 'Medicação')}
+                      
+                      {/* --- CORREÇÃO: Mostra quantidade formatada --- */}
+                      <span className="text-gray-500 ml-1 font-semibold">
+                        (
+                          {medItem.dosage || 
+                           (medItem.quantity ? `${medItem.quantity} ${medItem.unit || ''}` : '') ||
+                           'Qtd não inf.'}
+                        )
+                      </span>
                     </span>
                   </li>
                 ))

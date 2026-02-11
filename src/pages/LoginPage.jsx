@@ -1,40 +1,93 @@
 // src/pages/LoginPage.jsx
-// (VERSÃO FINAL 4.6: Com Cursor Pointers e Ícones Corrigidos)
-
 import React, { useState } from 'react';
-import api, { requestPasswordReset } from '../services/api'; 
+import api, { requestPasswordReset } from '../services/api';
 import logo from '../assents/medlogs-logo.png';
-import { FiX, FiCheckCircle, FiArrowRight, FiAlertCircle } from 'react-icons/fi'; 
+import {
+  FiX,
+  FiCheckCircle,
+  FiArrowRight,
+  FiAlertCircle,
+} from 'react-icons/fi';
 
 // --- Ícones SVG (Lucide Style) ---
 const Icons = {
   // Ícones do formulário
   User: () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
       <circle cx="12" cy="7" r="4" />
     </svg>
   ),
   Mail: () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <rect width="20" height="16" x="2" y="4" rx="2" />
       <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
     </svg>
   ),
   Lock: () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
     </svg>
   ),
   Eye: () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
       <circle cx="12" cy="12" r="3" />
     </svg>
   ),
   EyeOff: () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
       <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
       <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
@@ -42,19 +95,49 @@ const Icons = {
     </svg>
   ),
   Briefcase: () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <rect width="20" height="14" x="2" y="7" rx="2" ry="2" />
       <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
     </svg>
   ),
   Shield: () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="80"
+      height="80"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
       <path d="m9 12 2 2 4-4" />
     </svg>
   ),
   CheckCircle: () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
       <polyline points="22 4 12 14.01 9 11.01" />
     </svg>
@@ -62,9 +145,25 @@ const Icons = {
 };
 
 const Spinner = () => (
-  <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+  <svg
+    className="animate-spin h-5 w-5 text-white"
+    xmlns="http://www.w3.org/2000/svg"
+    fill="none"
+    viewBox="0 0 24 24"
+  >
+    <circle
+      className="opacity-25"
+      cx="12"
+      cy="12"
+      r="10"
+      stroke="currentColor"
+      strokeWidth="4"
+    ></circle>
+    <path
+      className="opacity-75"
+      fill="currentColor"
+      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+    ></path>
   </svg>
 );
 
@@ -78,7 +177,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
   const [isLoading, setIsLoading] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState(0);
-  
+
   // --- Estados do Modal "Esqueceu a Senha" ---
   const [isForgotOpen, setIsForgotOpen] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
@@ -183,30 +282,34 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
     e.preventDefault();
     setForgotLoading(true);
     setForgotStatus({ type: '', message: '' });
-    
+
     // Validação simples de email
     if (!forgotEmail || !forgotEmail.includes('@')) {
-        setForgotStatus({ type: 'error', message: 'Por favor, digite um email válido.' });
-        setForgotLoading(false); // Faltou desligar o loading aqui no caso de erro
-        return;
+      setForgotStatus({
+        type: 'error',
+        message: 'Por favor, digite um email válido.',
+      });
+      setForgotLoading(false); // Faltou desligar o loading aqui no caso de erro
+      return;
     }
 
     try {
       await requestPasswordReset(forgotEmail);
-      setForgotStatus({ 
-        type: 'success', 
-        message: 'Se o e-mail existir, enviamos um link de recuperação!' 
+      setForgotStatus({
+        type: 'success',
+        message: 'Se o e-mail existir, enviamos um link de recuperação!',
       });
       // Limpa o campo apenas no sucesso
       setTimeout(() => {
-        if(isForgotOpen) setForgotEmail(''); 
+        if (isForgotOpen) setForgotEmail('');
       }, 2000);
     } catch (error) {
       console.error(error);
-      const errorMsg = error.response?.data?.message || 'Erro ao processar. Tente novamente.';
-      setForgotStatus({ 
-        type: 'error', 
-        message: errorMsg 
+      const errorMsg =
+        error.response?.data?.message || 'Erro ao processar. Tente novamente.';
+      setForgotStatus({
+        type: 'error',
+        message: errorMsg,
       });
     } finally {
       setForgotLoading(false);
@@ -237,25 +340,33 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
         {/* --- COLUNA ESQUERDA (Branding) --- */}
         <div className="hidden lg:flex lg:w-5/12 bg-gradient-to-br from-blue-700 to-indigo-900 p-12 flex-col justify-center items-center text-white relative">
           <div className="absolute top-0 left-0 w-full h-full opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
-          
+
           <div className="relative z-10 flex flex-col items-center text-center">
             <div className="mb-8 p-4 bg-white/10 rounded-full backdrop-blur-sm border border-white/20 shadow-xl">
-               <Icons.Shield />
+              <Icons.Shield />
             </div>
-            
+
             <h2 className="text-3xl font-bold mb-4 tracking-tight">MedLogs</h2>
             <p className="text-blue-100 text-sm leading-relaxed max-w-xs mb-8">
-              Gestão inteligente e segura de medicamentos e registos de saúde para profissionais e municípios.
+              Gestão Inteligente de Logística Farmacêutica.
             </p>
-
             <div className="space-y-4 w-full text-left">
               <div className="flex items-center gap-3 bg-white/5 p-3 rounded-lg border border-white/10">
-                 <div className="bg-green-500/20 p-2 rounded-full"><Icons.CheckCircle /></div>
-                 <span className="text-xs font-medium">Controlo de Estoque Real-time</span>
+                <div className="bg-green-500/20 p-2 rounded-full">
+                  <Icons.CheckCircle />
+                </div>
+                <span className="text-xs font-medium">
+                  Controle de Remessas: Conferência inteligente e rastreio de
+                  entregas da semana.
+                </span>
               </div>
               <div className="flex items-center gap-3 bg-white/5 p-3 rounded-lg border border-white/10">
-                 <div className="bg-blue-500/20 p-2 rounded-full"><Icons.CheckCircle /></div>
-                 <span className="text-xs font-medium">Histórico de Pacientes </span>
+                <div className="bg-blue-500/20 p-2 rounded-full">
+                  <Icons.CheckCircle />
+                </div>
+                <span className="text-xs font-medium">
+                  Dashboards financeiros com projeção de consumo anual.{' '}
+                </span>
               </div>
             </div>
 
@@ -270,7 +381,11 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
         <div className="w-full lg:w-7/12 bg-white p-8 md:p-12 flex flex-col justify-center relative">
           {/* Logo no Mobile */}
           <div className="flex justify-center lg:hidden mb-6">
-            <img src={logo} alt="MedLogs Logo" className="w-12 h-12 object-contain" />
+            <img
+              src={logo}
+              alt="MedLogs Logo"
+              className="w-12 h-12 object-contain"
+            />
           </div>
 
           <div className="flex items-center justify-center lg:justify-start mb-2 w-full">
@@ -279,7 +394,9 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
             </h1>
           </div>
           <p className="text-md text-slate-500 mb-8 text-center lg:text-left">
-            {isLoginView ? 'Insira suas credenciais para continuar.' : 'Complete o registo e aguarde aprovação.'}
+            {isLoginView
+              ? 'Insira suas credenciais para continuar.'
+              : 'Complete o registo e aguarde aprovação.'}
           </p>
 
           <form onSubmit={handleAuth} className="space-y-5">
@@ -294,7 +411,9 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
             {/* Nome (Apenas Registro) */}
             {!isLoginView && (
               <div className="space-y-1.5 animate-fade-in">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Nome Completo</label>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">
+                  Nome Completo
+                </label>
                 <div className="relative group">
                   <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors">
                     <Icons.User />
@@ -312,7 +431,9 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
 
             {/* Email */}
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Email </label>
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">
+                Email{' '}
+              </label>
               <div className="relative group">
                 <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors">
                   <Icons.Mail />
@@ -329,7 +450,9 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
 
             {/* Senha */}
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Senha</label>
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">
+                Senha
+              </label>
               <div className="relative group">
                 <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors">
                   <Icons.Lock />
@@ -360,7 +483,9 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
                         style={{ width: `${(passwordStrength / 5) * 100}%` }}
                       ></div>
                     </div>
-                    <span className="text-[10px] font-bold text-gray-500 uppercase">{getStrengthLabel()}</span>
+                    <span className="text-[10px] font-bold text-gray-500 uppercase">
+                      {getStrengthLabel()}
+                    </span>
                   </div>
                 </div>
               )}
@@ -382,9 +507,11 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
             {/* Select Role (Apenas Registo) */}
             {!isLoginView && (
               <div className="space-y-1.5 animate-fade-in">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Perfil</label>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">
+                  Perfil
+                </label>
                 <div className="relative group">
-                   <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors">
                     <Icons.Briefcase />
                   </div>
                   <select
@@ -396,7 +523,19 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
                     <option value="secretario">Secretário de Saúde</option>
                   </select>
                   <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="m6 9 6 6 6-6" />
+                    </svg>
                   </div>
                 </div>
               </div>
@@ -415,7 +554,9 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
                 </>
               ) : (
                 <>
-                  <span>{isLoginView ? 'Entrar no Sistema' : 'Criar Conta'}</span>
+                  <span>
+                    {isLoginView ? 'Entrar no Sistema' : 'Criar Conta'}
+                  </span>
                   <FiArrowRight size={20} />
                 </>
               )}
@@ -450,14 +591,14 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
       {isForgotOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
           {/* Backdrop Escuro */}
-          <div 
+          <div
             className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"
             onClick={() => setIsForgotOpen(false)}
           ></div>
 
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden relative z-10 transform transition-all scale-100">
             {/* Botão Fechar */}
-            <button 
+            <button
               onClick={() => setIsForgotOpen(false)}
               className="absolute top-4 right-4 text-gray-400 hover:text-red-500 transition-colors p-1 rounded-full hover:bg-red-50 cursor-pointer"
             >
@@ -469,9 +610,12 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
                 <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-600 ring-4 ring-blue-50/50">
                   <Icons.Lock />
                 </div>
-                <h3 className="text-2xl font-bold text-slate-800">Recuperar Senha</h3>
+                <h3 className="text-2xl font-bold text-slate-800">
+                  Recuperar Senha
+                </h3>
                 <p className="text-slate-500 mt-2 text-sm leading-relaxed">
-                  Digite seu email cadastrado para receber as instruções de redefinição.
+                  Digite seu email cadastrado para receber as instruções de
+                  redefinição.
                 </p>
               </div>
 
@@ -479,7 +623,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
                 <div className="bg-green-50 text-green-700 p-5 rounded-xl flex flex-col items-center text-center gap-3 mb-2 border border-green-100 animate-fade-in">
                   <FiCheckCircle size={32} className="text-green-600" />
                   <p className="text-sm font-medium">{forgotStatus.message}</p>
-                  <button 
+                  <button
                     onClick={() => setIsForgotOpen(false)}
                     className="mt-2 text-green-700 font-bold hover:underline text-sm cursor-pointer"
                   >
@@ -507,7 +651,7 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
                       />
                     </div>
                   </div>
-                  
+
                   {forgotStatus.type === 'error' && (
                     <div className="text-red-500 text-sm text-center font-medium bg-red-50 p-2 rounded-lg">
                       {forgotStatus.message}
@@ -534,12 +678,12 @@ export default function LoginPage({ onLogin, addToast, addLog }) {
                 </form>
               )}
             </div>
-            
+
             {/* Footer do Modal */}
             <div className="bg-gray-50 px-8 py-4 text-center border-t border-gray-100">
               <p className="text-xs text-slate-400">
                 Lembrou a senha?{' '}
-                <button 
+                <button
                   onClick={() => setIsForgotOpen(false)}
                   className="text-blue-600 font-semibold hover:underline cursor-pointer"
                 >
