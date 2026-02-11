@@ -17,33 +17,29 @@ api.interceptors.request.use(
   (config) => {
     let token = null;
 
-    // Tenta pegar o token de todas as formas possíveis que seu login pode ter salvo
+    // 1. Tenta pegar token solto
     const rawToken = localStorage.getItem('token');
+    
+    // 2. Tenta pegar objeto de usuário
     const storedUser = localStorage.getItem('user');
-    // Dentro de api.interceptors.request.use...
-    // ... código de busca do token ...
 
-    console.log('--- DEBUG TOKEN ---');
-    console.log('User no Storage:', storedUser);
-    console.log('Token encontrado:', token);
-
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-// ...
+    // LÓGICA DE EXTRAÇÃO (Faltava isso aqui)
     if (rawToken) {
       token = rawToken;
     } else if (storedUser) {
       try {
         const parsedUser = JSON.parse(storedUser);
-        // Pega o token dentro do objeto do usuário
         token = parsedUser.token || parsedUser.accessToken || parsedUser;
       } catch (error) {
-        console.error('Erro ao ler token:', error);
+        console.error('Erro ao ler JSON do usuário:', error);
       }
     }
 
-    // SE TEM TOKEN, ENVIA! (Isso corrige o erro 401)
+   
+    console.log('--- DEBUG TOKEN ---');
+    console.log('User no Storage:', storedUser);
+    console.log('Token Final:', token); // Aqui tem que aparecer o código do token
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
