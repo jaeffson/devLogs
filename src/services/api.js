@@ -12,7 +12,6 @@ const api = axios.create({
   },
 });
 
-
 api.interceptors.request.use(
   (config) => {
     let token = null;
@@ -23,7 +22,7 @@ api.interceptors.request.use(
     // 2. Tenta pegar objeto de usuário
     const storedUser = localStorage.getItem('user');
 
-    // LÓGICA DE EXTRAÇÃO (Faltava isso aqui)
+    // LÓGICA DE EXTRAÇÃO 
     if (rawToken) {
       token = rawToken;
     } else if (storedUser) {
@@ -35,10 +34,7 @@ api.interceptors.request.use(
       }
     }
 
-   
-    console.log('--- DEBUG TOKEN ---');
-    console.log('User no Storage:', storedUser);
-    console.log('Token Final:', token); // Aqui tem que aparecer o código do token
+
 
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;

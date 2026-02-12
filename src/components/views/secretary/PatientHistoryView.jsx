@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { PatientRecordsTable } from '../../common/PatientRecordsTable';
 import { icons } from '../../../utils/icons';
 import useDebounce from '../../../hooks/useDebounce';
@@ -7,9 +7,9 @@ export function PatientHistoryView({
   patients = [],
   records = [],
   medications = [],
-  getMedicationName,
+  getMedicationName, 
   initialPatient,
-  onViewReason,
+  onViewReason, 
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPatient, setSelectedPatient] = useState(
@@ -23,142 +23,152 @@ export function PatientHistoryView({
     setSearchTerm(''); // Limpa a busca ao selecionar
   };
 
-  // Filtro inteligente: Só processa se houver texto
+  // Filtro de Busca (Autocomplete)
   const searchResults = useMemo(() => {
     const term = debouncedSearch.trim().toLowerCase();
-    if (term.length < 2) return []; // Só busca com 2 ou mais caracteres
+    if (term.length < 2) return [];
 
     return patients
-      .filter(
-        (p) =>
-          (p.name?.toLowerCase() || '').includes(term) ||
-          (p.cpf && String(p.cpf).includes(term)) ||
-          (p.susCard && String(p.susCard).includes(term))
-      )
-      .slice(0, 10); // Limita a 10 resultados para performance e estética
+      .filter((p) => {
+        const nameMatch = (p.name?.toLowerCase() || '').includes(term);
+        const cpfMatch = p.cpf && String(p.cpf).includes(term);
+        const susMatch = p.susCard && String(p.susCard).includes(term);
+        return nameMatch || cpfMatch || susMatch;
+      })
+      .slice(0, 10);
   }, [patients, debouncedSearch]);
 
+  // --- CORREÇÃO PRINCIPAL: FILTRO DE REGISTROS ---
   const selectedPatientRecords = useMemo(() => {
     if (!selectedPatient) return [];
-    const patientId = selectedPatient.id || selectedPatient._id;
+    const targetId = String(selectedPatient._id || selectedPatient.id);
+
     return records
-      .filter((r) => r.patientId === patientId)
+      .filter((r) => {
+        const recordPatientId =
+          typeof r.patientId === 'object'
+            ? r.patientId._id || r.patientId.id
+            : r.patientId;
+        return String(recordPatientId) === targetId;
+      })
       .sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate));
   }, [selectedPatient, records]);
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] bg-gray-50/30 rounded-2xl overflow-hidden border border-gray-200">
-      {/* HEADER DE BUSCA ESTILO MODERNO */}
-      <div className="bg-white p-6 border-b border-gray-200 shadow-sm z-30">
-        <div className="max-w-2xl mx-auto relative">
+      {/* --- HEADER DE BUSCA --- */}
+      <div className="bg-white p-6 border-b border-gray-200 shadow-sm z-30 relative">
+        <div className="max-w-2xl mx-auto">
           <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 block ml-1">
             Consultar Histórico de Paciente
           </label>
           <div className="relative group">
-            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-500 text-xl">
+            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-500 text-xl pointer-events-none">
               {icons.search}
             </div>
             <input
               type="text"
               placeholder="Digite o nome, CPF ou cartão SUS..."
-              className="w-full pl-12 pr-12 py-4 bg-gray-50 border-2 border-transparent rounded-2xl text-lg focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all shadow-inner"
+              className="w-full pl-12 pr-12 py-4 bg-gray-50 border-2 border-transparent rounded-2xl text-lg focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all shadow-inner outline-none text-gray-700"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm('')}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 p-1"
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 p-2 rounded-full hover:bg-gray-100 transition-colors cursor-pointer"
               >
                 ✕
               </button>
             )}
-          </div>
 
-          {/* RESULTADOS DA BUSCA (DROPDOWN) */}
-          {debouncedSearch.length >= 2 && (
-            <div className="absolute w-full mt-2 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-              {searchResults.length > 0 ? (
-                <div className="max-h-[400px] overflow-y-auto p-2">
-                  {searchResults.map((p) => (
+            {/* DROPDOWN DE RESULTADOS */}
+            {debouncedSearch.length >= 2 && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200 max-h-[300px] overflow-y-auto custom-scrollbar">
+                {searchResults.length > 0 ? (
+                  searchResults.map((p) => (
                     <button
                       key={p.id || p._id}
                       onClick={() => handleSelect(p)}
-                      className="w-full flex items-center justify-between p-4 hover:bg-blue-50 rounded-xl transition-colors group text-left"
+                      className="w-full flex items-center justify-between p-4 hover:bg-blue-50 border-b border-gray-50 last:border-0 transition-colors group text-left cursor-pointer"
                     >
                       <div>
                         <p className="font-bold text-gray-800 group-hover:text-blue-700">
                           {p.name}
                         </p>
-                        <p className="text-xs text-gray-500">
-                          CPF: {p.cpf || '---'} | SUS: {p.susCard || '---'}
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          CPF: {p.cpf || '---'} <span className="mx-1">•</span>{' '}
+                          SUS: {p.susCard || '---'}
                         </p>
                       </div>
-                      <span className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                        Visualizar Histórico →
+                      <span className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity text-sm font-bold">
+                        Ver Histórico →
                       </span>
                     </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="p-8 text-center">
-                  <p className="text-gray-400 font-medium">
-                    Nenhum paciente encontrado para "{debouncedSearch}"
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
+                  ))
+                ) : (
+                  <div className="p-8 text-center">
+                    <p className="text-gray-400 font-medium">
+                      Nenhum paciente encontrado para "{debouncedSearch}"
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* ÁREA DE CONTEÚDO */}
-      <div className="flex-1 overflow-hidden relative">
+      {/* --- ÁREA DE CONTEÚDO --- */}
+      <div className="flex-1 overflow-hidden relative flex flex-col">
         {selectedPatient ? (
           <div className="h-full flex flex-col animate-in fade-in duration-500">
             {/* Resumo do Paciente Selecionado */}
-            <div className="bg-white/60 backdrop-blur-md px-8 py-4 flex items-center justify-between border-b border-gray-100">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-700 rounded-full flex items-center justify-center text-white font-bold shadow-lg">
-                  {selectedPatient.name.charAt(0)}
+            <div className="bg-white/60 backdrop-blur-md px-8 py-6 flex flex-col md:flex-row md:items-center justify-between border-b border-gray-100 gap-4">
+              <div className="flex items-center gap-5">
+                <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-700 rounded-2xl flex items-center justify-center text-white text-2xl font-black shadow-lg shadow-blue-200">
+                  {selectedPatient.name?.charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-gray-800">
+                  <h2 className="text-2xl font-black text-gray-800 tracking-tight">
                     {selectedPatient.name}
                   </h2>
-                  <p className="text-xs text-gray-500 uppercase font-semibold">
-                    Paciente Selecionado
-                  </p>
+                  <div className="flex gap-3 text-xs text-gray-500 font-medium mt-1">
+                    <span className="bg-white px-2 py-0.5 rounded border border-gray-200">
+                      CPF: {selectedPatient.cpf || 'Não informado'}
+                    </span>
+                    <span className="bg-white px-2 py-0.5 rounded border border-gray-200">
+                      SUS: {selectedPatient.susCard || 'Não informado'}
+                    </span>
+                  </div>
                 </div>
               </div>
-              <div className="flex gap-4 text-center">
-                <div>
-                  <p className="text-[10px] text-gray-400 uppercase font-bold">
-                    Registros
-                  </p>
-                  <p className="font-bold text-blue-600">
-                    {selectedPatientRecords.length}
-                  </p>
-                </div>
+
+              <div className="bg-blue-50 px-5 py-2 rounded-xl text-center border border-blue-100">
+                <p className="text-[10px] text-blue-400 uppercase font-bold tracking-wider">
+                  Total de Registros
+                </p>
+                <p className="text-2xl font-black text-blue-600">
+                  {selectedPatientRecords.length}
+                </p>
               </div>
             </div>
 
             {/* Tabela */}
-            <div className="flex-1 p-6 overflow-y-auto">
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="flex-1 p-6 overflow-y-auto bg-gray-50/50 custom-scrollbar">
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden min-h-[200px]">
                 <PatientRecordsTable
                   records={selectedPatientRecords}
                   medications={medications}
-                  getMedicationName={getMedicationName}
-                  onViewReason={onViewReason}
+                  onViewReason={onViewReason} 
                 />
               </div>
             </div>
           </div>
         ) : (
-          /* Estado Vazio (Quando nada está selecionado) */
-          <div className="h-full flex flex-col items-center justify-center text-center p-12">
-            <div className="w-24 h-24 bg-blue-50 text-blue-200 rounded-full flex items-center justify-center text-5xl mb-6">
+          /* Estado Vazio */
+          <div className="h-full flex flex-col items-center justify-center text-center p-12 opacity-60">
+            <div className="w-24 h-24 bg-gray-100 text-gray-400 rounded-full flex items-center justify-center text-5xl mb-6">
               {icons.search}
             </div>
             <h3 className="text-2xl font-bold text-gray-700">

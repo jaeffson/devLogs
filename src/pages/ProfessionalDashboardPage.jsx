@@ -1,4 +1,3 @@
-// src/pages/ProfessionalDashboardPage.jsx
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
@@ -9,15 +8,43 @@ import { StatusBadge } from '../components/common/StatusBadge';
 import { AttendRecordModal } from '../components/common/AttendRecordModal';
 import { CancelRecordModal } from '../components/common/CancelRecordModal';
 import { PatientRecordsTable } from '../components/common/PatientRecordsTable';
+import AddShipmentItemModal from '../components/common/AddShipmentItemModal';
 import MedicationsPage from './MedicationsPage';
 import { icons } from '../utils/icons';
 import { getMedicationName } from '../utils/helpers';
 import { useDebounce } from '../hooks/useDebounce';
+import { FiArrowRight } from 'react-icons/fi'; 
 
-// --- Constantes ---
+// ============================================================================
+// ÁREA DE HELPERS (Funções auxiliares - FORA DO COMPONENTE)
+const fixDate = (dateString) => {
+  if (!dateString) return '-';
+  const cleanDate = String(dateString).split('T')[0];
+  if (!cleanDate.includes('-')) return cleanDate;
+  const [year, month, day] = cleanDate.split('-');
+  return `${day}/${month}/${year}`;
+};
+
+// 2. Define a Saudação
+const getGreeting = () => {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Bom dia';
+  if (hour < 18) return 'Boa tarde';
+  return 'Boa noite';
+};
+
+// 3. Calcula dias de atraso (Lógica dos 35 dias)
+const calculateDaysLate = (lastVisitDate) => {
+  if (!lastVisitDate) return 0;
+  const last = new Date(lastVisitDate);
+  const today = new Date();
+  const diffTime = Math.abs(today - last);
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays;
+};
+
 const MS_IN_30_DAYS = 30 * 24 * 60 * 60 * 1000;
 const MS_IN_20_DAYS = 20 * 24 * 60 * 60 * 1000;
-
 // --- Subcomponente: Modal de Busca de Paciente ---
 const SearchPatientModal = ({
   isOpen,
@@ -150,6 +177,10 @@ export default function ProfessionalDashboardPage({
   // Modais
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
+
+  // NOVO: Estado para Modal de Nova Remessa
+  const [isAddShipmentModalOpen, setIsAddShipmentModalOpen] = useState(false);
+
   const [editingPatient, setEditingPatient] = useState(null);
   const [viewingCancelReason, setViewingCancelReason] = useState(null);
   const handleViewCancelReason = (record) => {
@@ -174,7 +205,6 @@ export default function ProfessionalDashboardPage({
   const [attendingRecord, setAttendingRecord] = useState(null);
   const [isAttendingLoading, setIsAttendingLoading] = useState(false);
   const [cancelingRecord, setCancelingRecord] = useState(null);
-  const [isOverdueAlertVisible, setIsOverdueAlertVisible] = useState(true);
 
   // Filtros
   const [statusFilter, setStatusFilter] = useState('Todos');
@@ -224,16 +254,12 @@ export default function ProfessionalDashboardPage({
       isDestructive: false,
     });
 
-  // --- CORREÇÃO 1: Nome do Paciente Inteligente ---
   const getPatientNameById = (patientId) => {
-    // Tenta achar na lista
     const inList = Array.isArray(patients)
       ? patients.find((p) => (p._id || p.id) === patientId)?.name
       : null;
 
-    // Se não achar, tenta ver se o objeto do backend já tem o nome (populate ou backup)
     if (!inList) {
-      // As vezes o patientId vem populado como objeto
       if (typeof patientId === 'object' && patientId?.name)
         return patientId.name;
       return 'Desconhecido';
@@ -247,7 +273,6 @@ export default function ProfessionalDashboardPage({
     const patientRecords = records
       .filter((r) => {
         const recordId = r._id || r.id;
-        // Normaliza o ID do paciente (pode ser string ou objeto)
         const pId =
           typeof r.patientId === 'object' ? r.patientId._id : r.patientId;
         return (
@@ -304,27 +329,19 @@ export default function ProfessionalDashboardPage({
     setIsPatientModalOpen(true);
   };
 
-  // --- LOGICA DE EDITAR REGISTRO (CORRIGIDA) ---
   const handleEditRecordClick = (record) => {
-    // 1. Tenta achar o ID do paciente de forma segura
     let pId = record.patientId;
     if (typeof pId === 'object' && pId !== null) {
       pId = pId._id || pId.id;
     }
-
-    // 2. Busca o paciente na lista carregada
     let targetPatient = patients.find((p) => (p._id || p.id) === pId);
-
-    // 3. FALBACK: Se não achar (paginação ou deletado), cria um "Fantasma"
-    // para permitir abrir o modal de qualquer jeito
     if (!targetPatient && pId) {
       targetPatient = {
         _id: pId,
-        name: record.patientName || 'Paciente (Arquivo)', // Usa o nome salvo no Record
+        name: record.patientName || 'Paciente (Arquivo)',
         isGhost: true,
       };
     }
-
     if (targetPatient) {
       setSelectedPatient(targetPatient);
       setEditingRecord(record);
@@ -333,8 +350,6 @@ export default function ProfessionalDashboardPage({
       addToast('Erro: Dados do paciente corrompidos.', 'error');
     }
   };
-
-  // --- API Handlers ---
 
   const handleSavePatient = async (patientData) => {
     try {
@@ -505,49 +520,23 @@ export default function ProfessionalDashboardPage({
       .sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate));
   }, [records, selectedPatient]);
 
-  const pendingRecords = useMemo(
-    () =>
-      Array.isArray(records)
-        ? records.filter((r) => r.status === 'Pendente')
-        : [],
-    [records]
-  );
-
-  const overduePendingRecords = useMemo(() => {
-    if (!Array.isArray(records)) return [];
-    const now = new Date().getTime();
-    return records.filter(
-      (r) =>
-        r.status === 'Pendente' &&
-        r.entryDate &&
-        now - new Date(r.entryDate).getTime() > MS_IN_30_DAYS
-    );
-  }, [records]);
-
   // OTIMIZAÇÃO: Pré-calcula o nome do paciente
   const recordsWithPatientNames = useMemo(() => {
-    // Mapa rápido de IDs -> Nomes
     const patientMap = patients.reduce((acc, p) => {
       acc[p._id || p.id] = p.name;
       return acc;
     }, {});
 
     return records.map((r) => {
-      // 1. Tenta pegar do mapa de pacientes carregados
       let pId = r.patientId;
       if (typeof pId === 'object') pId = pId._id;
-
       let pName = patientMap[pId];
-
-      // 2. Se não achar, tenta pegar do próprio registro (backup ou populate)
       if (!pName) {
-        if (r.patientName)
-          pName = r.patientName; // Campo backup que criamos
+        if (r.patientName) pName = r.patientName;
         else if (typeof r.patientId === 'object' && r.patientId.name)
           pName = r.patientId.name;
         else pName = 'Desconhecido';
       }
-
       return {
         ...r,
         patientName: pName,
@@ -598,283 +587,316 @@ export default function ProfessionalDashboardPage({
       .sort((a, b) => new Date(b.deliveryDate) - new Date(a.deliveryDate));
   }, [records]);
 
-  // Helper para garantir a resolução do nome independente do formato do ID
   const getSafeMedicationName = (medicationId, meds = []) => {
     if (!medicationId) return '-';
-
-    // Extrai o ID caso ele venha como objeto (populado pelo MongoDB)
     const targetId =
       typeof medicationId === 'object'
         ? medicationId._id || medicationId.id
         : medicationId;
-
     if (!targetId) return 'Desconhecido';
-
-    // Converte para String para garantir que a comparação não falhe por tipo
     const targetIdStr = String(targetId);
-
-    // Busca na lista de medicações convertendo os IDs da lista também
     const found = meds.find(
       (m) => String(m._id) === targetIdStr || String(m.id) === targetIdStr
     );
-
     return found ? found.name : 'Desconhecido';
   };
 
   const renderCurrentView = () => {
     switch (currentView) {
+      // ======================================================================
+      // DASHBOARD (DESIGN SENIOR CORRIGIDO)
+      // ======================================================================
       case 'dashboard':
-        const showOverdueAlert =
-          overduePendingRecords.length > 0 && isOverdueAlertVisible;
-        const statCards = [
-          {
-            label: 'Novo Atendimento',
-            value: icons.newEntry,
-            subtext: 'Clique para iniciar a busca',
-            icon: icons.search,
-            color: 'bg-blue-600',
-            textColor: 'text-white',
-            hover: 'hover:bg-blue-700 hover:shadow-xl hover:shadow-blue-200',
-            action: openSearchModal,
-            isButton: true,
-            shadow: 'shadow-lg shadow-blue-200',
-          },
-          {
-            label: 'Pendentes',
-            value: pendingRecords.length,
-            subtext: 'Aguardando ação',
-            icon: icons.clipboard,
-            color: 'bg-yellow-50',
-            textColor: 'text-yellow-700',
-            hover: 'hover:border-yellow-300',
-            action: () => navigate('/history'),
-            isButton: false,
-            shadow: 'shadow-sm',
-          },
-          {
-            label: 'Pacientes',
-            value: patients.length,
-            subtext: 'Total cadastrados',
-            icon: icons.users,
-            color: 'bg-blue-50',
-            textColor: 'text-blue-700',
-            hover: 'hover:border-blue-300',
-            action: () => navigate('/patients'),
-            isButton: false,
-            shadow: 'shadow-sm',
-          },
-          {
-            label: 'Entregas (7 dias)',
-            value: recentDeliveries.length,
-            subtext: 'Realizadas recentemente',
-            icon: icons.check,
-            color: 'bg-green-50',
-            textColor: 'text-green-700',
-            hover: 'hover:border-green-300',
-            action: () => navigate('/deliveries'),
-            isButton: false,
-            shadow: 'shadow-sm',
-          },
-        ];
-        const quickAccess = [
-          {
-            label: 'Pacientes',
-            icon: icons.users,
-            path: '/patients',
-            color: 'text-blue-600',
-            bg: 'bg-blue-50',
-          },
-          {
-            label: 'Histórico',
-            icon: icons.history,
-            path: '/history',
-            color: 'text-purple-600',
-            bg: 'bg-purple-50',
-          },
-          {
-            label: 'Medicações',
-            icon: icons.pill,
-            path: '/medications',
-            color: 'text-pink-600',
-            bg: 'bg-pink-50',
-          },
-        ];
+        // --- 1. MÉTRICAS E CÁLCULOS ---
+        const totalPacientes = patients?.length || 0;
+        const totalMedicamentos = medications?.length || 0;
+        const entregasRecentes = recentDeliveries?.length || 0;
+
+        // Lógica: Filtra pacientes com mais de 35 dias sem visita (baseado em lastVisit)
+        const pacientesEmAtraso =
+          patients?.filter((p) => {
+            if (!p.lastVisit) return false;
+            return calculateDaysLate(p.lastVisit) > 35;
+          }) || [];
 
         return (
-          <div className="space-y-8 animate-fade-in max-w-7xl mx-auto p-4 md:p-6 lg:p-0">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-3xl font-bold text-gray-800 tracking-tight">
-                  Bem-vindo(a),{' '}
-                  <span className="text-blue-600">
+          <div className="h-[calc(100vh-8rem)] overflow-y-auto custom-scrollbar p-2 animate-fade-in">
+            {/* --- 2. HEADER EXECUTIVO --- */}
+            {/* --- 1. CABEÇALHO EXECUTIVO --- */}
+            <div className="bg-gradient-to-r from-slate-900 to-blue-900 rounded-3xl shadow-xl p-8 mb-8 text-white relative overflow-hidden border border-white/10">
+              <div className="absolute -right-20 -top-20 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl"></div>
+
+              <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div>
+                  <h1 className="text-3xl font-black mb-2 tracking-tight">
+                    {getGreeting()},{' '}
                     {user?.name?.split(' ')[0] || 'Profissional'}
+                  </h1>
+                  <p className="text-blue-100/80 max-w-xl text-sm font-light leading-relaxed">
+                    {/* ALERTA DE ATRASO (Mantido) */}
+                    {pacientesEmAtraso.length > 0 && (
+                      <span className="block text-red-300 font-bold mt-1 bg-red-900/20 p-1 rounded border border-red-500/30">
+                        ⚠ Atenção: {pacientesEmAtraso.length} pacientes com
+                        atraso crítico (&gt;35 dias).
+                      </span>
+                    )}
+
+                    {/* Se não tiver nem remessas nem atrasos, mostra uma mensagem padrão de sistema ok */}
+                    {entregasRecentes === 0 &&
+                      pacientesEmAtraso.length === 0 && (
+                        <span>
+                          O sistema está atualizado e sem pendências no momento.
+                        </span>
+                      )}
+                  </p>
+                </div>
+
+                {/* Status KPI Rápido */}
+                <div className="flex gap-3">
+                  <div className="bg-white/10 backdrop-blur-md px-5 py-3 rounded-2xl border border-white/10 text-center cursor-default">
+                    <span className="block text-2xl font-black">
+                      {totalPacientes}
+                    </span>
+                    <span className="text-[10px] uppercase font-bold text-blue-200">
+                      Total Usuários
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {/* --- 3. CARDS KPI (INDICADORES) --- */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+              {/* Card Base de Usuários */}
+              <div
+                onClick={() => setCurrentView('patients')}
+                className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 group hover:border-blue-200 transition-all cursor-pointer"
+              >
+                <div className="flex justify-between items-center mb-4">
+                  <div className="p-3 bg-blue-50 text-blue-600 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-all">
+                    {icons.users}
+                  </div>
+                  <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-full uppercase">
+                    Ativos
                   </span>
-                </h2>
-                <p className="text-gray-500 mt-1 font-medium">
-                  Seu resumo de atividades e acesso rápido.
+                </div>
+                <h3 className="text-3xl font-black text-slate-800">
+                  {totalPacientes}
+                </h3>
+                <p className="text-sm text-slate-400 font-medium mt-1">
+                  Gerenciar Usuários
                 </p>
               </div>
-              <button
-                onClick={openSearchModal}
-                className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl shadow-xl shadow-blue-200 font-semibold flex items-center justify-center gap-2 transition-all transform hover:-translate-y-0.5 active:scale-95 text-lg cursor-pointer flex-shrink-0"
+
+              {/* Card Estoque */}
+              <div
+                onClick={() => setCurrentView('medications')}
+                className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 group hover:border-indigo-200 transition-all cursor-pointer"
               >
-                <span className="text-xl">{icons.search}</span>
-                <span>Iniciar Atendimento Rápido</span>
-              </button>
-            </div>
-            {showOverdueAlert && (
-              <div className="bg-red-50 border border-red-200 p-4 rounded-xl flex justify-between items-center transition-opacity animate-slide-down">
-                <div className="flex items-center gap-3">
-                  <span className="text-red-600 text-xl flex-shrink-0">
-                    {icons.alert}
-                  </span>
-                  <p className="text-sm font-medium text-red-800">
-                    Atenção: Você tem **{overduePendingRecords.length}**
-                    registro(s) pendente(s) por mais de 30 dias. Verifique no
-                    Histórico.
-                  </p>
-                </div>
-                <button
-                  onClick={() => setIsOverdueAlertVisible(false)}
-                  className="text-red-400 hover:text-red-600 transition-colors flex-shrink-0 p-1 cursor-pointer"
-                >
-                  {icons.close}
-                </button>
-              </div>
-            )}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {statCards.map((card, idx) => (
-                <div
-                  key={idx}
-                  onClick={card.action}
-                  className={`bg-white p-6 rounded-2xl border border-gray-100 transition-all cursor-pointer ${card.hover} ${card.shadow} ${card.isButton ? 'border-none' : ''}`}
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="text-sm font-medium text-gray-500 uppercase mb-2">
-                        {card.label}
-                      </p>
-                      {card.isButton ? (
-                        <span className="text-3xl font-bold text-white flex items-center gap-2">
-                          {card.value}
-                        </span>
-                      ) : (
-                        <h3 className="text-4xl font-bold text-gray-800">
-                          {card.value}
-                        </h3>
-                      )}
-                    </div>
-                    <div
-                      className={`p-3 rounded-xl transition-transform ${card.color} ${card.textColor} group-hover:scale-110`}
-                    >
-                      {card.icon}
-                    </div>
+                <div className="flex justify-between items-center mb-4">
+                  <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-all">
+                    {icons.medication}
                   </div>
-                  <p
-                    className={`mt-3 text-xs font-medium ${card.isButton ? 'text-white/80' : 'text-gray-500'}`}
-                  >
-                    {card.subtext}
-                  </p>
+                  <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded-full uppercase">
+                    Estoque
+                  </span>
                 </div>
-              ))}
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-4">
-              <div className="lg:col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-                <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                  {icons.bolt} Acesso Rápido
+                <h3 className="text-3xl font-black text-slate-800">
+                  {totalMedicamentos}
                 </h3>
-                <div className="space-y-3">
-                  {quickAccess.map((item, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => navigate(item.path)}
-                      className="w-full text-left p-4 bg-gray-50 rounded-xl border border-gray-100 hover:bg-gray-100 hover:border-gray-300 transition-all flex items-center justify-between group cursor-pointer"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div
-                          className={`p-2 rounded-lg ${item.bg} ${item.color} transition-transform`}
-                        >
-                          {item.icon}
-                        </div>
-                        <span className="font-semibold text-gray-700 text-base">
-                          {item.label}
-                        </span>
-                      </div>
-                      <div className="text-gray-400 group-hover:text-blue-600">
-                        {icons.arrowRight}
-                      </div>
-                    </button>
-                  ))}
-                </div>
+                <p className="text-sm text-slate-400 font-medium mt-1">
+                  Medicamentos
+                </p>
               </div>
-              <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col">
-                <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                  {icons.history} Últimas Entregas ({recentDeliveries.length})
+
+              {/* Card Entregas */}
+              <div
+                onClick={() => setCurrentView('deliveries')}
+                className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 group hover:border-emerald-200 transition-all cursor-pointer"
+              >
+                <div className="flex justify-between items-center mb-4">
+                  <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl group-hover:bg-emerald-600 group-hover:text-white transition-all">
+                    {icons.check}
+                  </div>
+                  <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full uppercase">
+                    Saídas
+                  </span>
+                </div>
+                <h3 className="text-3xl font-black text-slate-800">
+                  {entregasRecentes}
                 </h3>
-                <div className="flex-grow overflow-auto">
-                  {recentDeliveries.slice(0, 5).length > 0 ? (
-                    <table className="min-w-full text-sm text-left border-collapse">
-                      <thead className="text-gray-500 font-medium uppercase text-xs border-b border-gray-100">
-                        <tr>
-                          <th className="py-2 px-1">Paciente</th>
-                          <th className="py-2 px-1">Data</th>
-                          <th className="py-2 px-1">Itens</th>
+                <p className="text-sm text-slate-400 font-medium mt-1">
+                  Histórico Recente
+                </p>
+              </div>
+
+              {/* Card ALERTA (35 DIAS) - Clicável para filtrar */}
+              <div
+                onClick={() => {
+                  setCurrentView('patients');
+                }}
+                className={`p-6 rounded-2xl shadow-sm border transition-all group relative overflow-hidden cursor-pointer ${pacientesEmAtraso.length > 0 ? 'bg-red-50 border-red-100 hover:bg-red-100' : 'bg-white border-gray-100'}`}
+              >
+                {pacientesEmAtraso.length > 0 && (
+                  <div className="absolute right-0 top-0 w-16 h-16 bg-red-500/10 rounded-bl-full"></div>
+                )}
+
+                <div className="flex justify-between items-center mb-4 relative z-10">
+                  <div
+                    className={`p-3 rounded-xl transition-all ${pacientesEmAtraso.length > 0 ? 'bg-red-100 text-red-600' : 'bg-gray-50 text-gray-400'}`}
+                  >
+                    {icons.alert}
+                  </div>
+                  <span
+                    className={`text-[10px] font-black px-2 py-1 rounded-full uppercase ${pacientesEmAtraso.length > 0 ? 'text-red-600 bg-red-100' : 'text-gray-400 bg-gray-100'}`}
+                  >
+                    Risco
+                  </span>
+                </div>
+                <h3
+                  className={`text-3xl font-black mb-1 ${pacientesEmAtraso.length > 0 ? 'text-red-700' : 'text-gray-300'}`}
+                >
+                  {pacientesEmAtraso.length}
+                </h3>
+                <p
+                  className={`text-sm font-medium ${pacientesEmAtraso.length > 0 ? 'text-red-600' : 'text-gray-400'}`}
+                >
+                  {pacientesEmAtraso.length > 0
+                    ? '> 35 Dias s/ Retorno'
+                    : 'Sem atrasos'}
+                </p>
+              </div>
+            </div>
+
+            {/* --- 4. ÁREA DE OPERAÇÕES E NAVEGAÇÃO --- */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* Tabela Resumida */}
+              <div className="lg:col-span-2 bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
+                <div className="p-6 border-b border-gray-50 flex justify-between items-center bg-gray-50/50">
+                  <h3 className="font-bold text-slate-800 flex items-center gap-2 uppercase text-xs tracking-widest">
+                    <span className="w-1.5 h-4 bg-blue-600 rounded-full"></span>
+                    Últimas Movimentações
+                  </h3>
+                  <button
+                    onClick={() => setCurrentView('deliveries')}
+                    className="text-xs font-bold text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-all cursor-pointer"
+                  >
+                    Ver Tudo
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto flex-grow">
+                  <table className="w-full text-sm text-left">
+                    <thead className="text-[10px] text-slate-400 uppercase font-bold tracking-tighter border-b border-gray-50">
+                      <tr>
+                        <th className="px-6 py-4">Data</th>
+                        <th className="px-6 py-4">Paciente</th>
+                        <th className="px-6 py-4">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {recentDeliveries.slice(0, 5).map((r, i) => (
+                        <tr
+                          key={i}
+                          className="hover:bg-slate-50 transition-colors cursor-default"
+                        >
+                          <td className="px-6 py-4">
+                            <span className="font-bold text-slate-700 bg-slate-100 px-2 py-1 rounded text-xs">
+                              {fixDate(r.deliveryDate || r.createdAt)}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="font-bold text-slate-700 text-sm block">
+                              {getPatientNameById(r.patientId)}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span
+                              className={`px-2 py-1 rounded text-[10px] font-bold uppercase border ${
+                                r.status === 'Entregue'
+                                  ? 'bg-green-50 text-green-600 border-green-100'
+                                  : 'bg-yellow-50 text-yellow-600 border-yellow-100'
+                              }`}
+                            >
+                              {r.status}
+                            </span>
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50">
-                        {recentDeliveries.slice(0, 5).map((record) => (
-                          <tr
-                            key={record._id || record.id}
-                            onClick={() => {
-                              setSelectedPatient(
-                                patients.find(
-                                  (p) =>
-                                    (p._id || p.id) ===
-                                    (typeof record.patientId === 'object'
-                                      ? record.patientId._id
-                                      : record.patientId)
-                                )
-                              );
-                              navigate('/patients');
-                            }}
-                            className="hover:bg-green-50/30 transition-colors cursor-pointer"
-                          >
-                            <td className="py-2 px-1 font-medium text-gray-800">
-                              {getPatientNameById(record.patientId)}
-                            </td>
-                            <td className="py-4 px-3 align-middle text-gray-600">
-                              {record.deliveryDate ? (
-                                <span className="bg-green-50 text-green-700 px-2 py-1 rounded text-xs font-medium border border-green-100 cursor-pointer">
-                                  {new Date(
-                                    record.deliveryDate
-                                  ).toLocaleDateString('pt-BR')}
-                                </span>
-                              ) : (
-                                <span className="text-gray-300 text-xs italic cursor-default">
-                                  Pendente
-                                </span>
-                              )}
-                            </td>
-                            <td className="py-2 px-1 text-gray-600">
-                              {record.medications?.length || 0}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  ) : (
-                    <div className="text-center py-8 text-gray-400">
-                      <p>Nenhuma entrega na última semana.</p>
+                      ))}
+                    </tbody>
+                  </table>
+                  {recentDeliveries.length === 0 && (
+                    <div className="p-8 text-center text-gray-400 text-sm italic">
+                      Nenhuma movimentação hoje.
                     </div>
                   )}
                 </div>
-                {recentDeliveries.length > 5 && (
-                  <button
-                    onClick={() => navigate('/deliveries')}
-                    className="mt-4 text-sm font-medium text-blue-600 hover:underline self-start cursor-pointer"
-                  >
-                    Ver todas as entregas recentes
-                  </button>
+              </div>
+
+              {/* NAVEGAÇÃO RÁPIDA (BOTÕES FUNCIONAIS) */}
+              <div className="flex flex-col gap-6">
+                {/* Menu de Operações */}
+                <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6">
+                  <h4 className="font-bold text-slate-800 mb-6 text-xs uppercase tracking-widest flex items-center gap-2">
+                    {icons.plus} Operações Principais
+                  </h4>
+                  <div className="grid grid-cols-1 gap-3">
+                    {/* BOTÃO 2: GERENCIAR USUÁRIOS (Vai para aba Pacientes) */}
+                    <button
+                      onClick={() => setCurrentView('patients')}
+                      className="w-full flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-2xl border border-slate-200 transition-all cursor-pointer active:scale-[0.98]"
+                    >
+                      <div className="flex flex-col items-start">
+                        <span className="font-bold text-sm">
+                          Gerenciar Usuários
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          Cadastrar ou editar
+                        </span>
+                      </div>
+                      <div className="text-slate-400">{icons.users}</div>
+                    </button>
+
+                    {/* BOTÃO 3: NOVO REGISTRO (Atalho para criar Paciente) */}
+                    <button
+                      onClick={() => {
+                        setCurrentView('patients');
+                      }}
+                      className="w-full flex items-center justify-between p-4 bg-white hover:bg-gray-50 text-slate-600 rounded-2xl border border-gray-200 border-dashed transition-all cursor-pointer active:scale-[0.98]"
+                    >
+                      <span className="font-bold text-sm">Novo Registro</span>
+                      <div className="text-slate-400 text-xs">+</div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Lista de Atrasos Críticos (Visualização Rápida) */}
+                {pacientesEmAtraso.length > 0 && (
+                  <div className="bg-red-50 rounded-3xl shadow-sm border border-red-100 p-6">
+                    <h4 className="font-bold text-red-800 mb-4 text-xs uppercase tracking-widest flex items-center gap-2">
+                      {icons.alert} Atrasos Críticos
+                    </h4>
+                    <div className="space-y-2 max-h-[150px] overflow-y-auto custom-scrollbar pr-2">
+                      {pacientesEmAtraso.slice(0, 3).map((p, i) => (
+                        <div
+                          key={i}
+                          className="flex justify-between items-center bg-white p-2 rounded-lg border border-red-100"
+                        >
+                          <span className="text-xs font-bold text-slate-700 truncate max-w-[120px]">
+                            {p.name}
+                          </span>
+                          <span className="text-[10px] font-bold text-red-500">
+                            {calculateDaysLate(p.lastVisit)} dias
+                          </span>
+                        </div>
+                      ))}
+                      <button
+                        onClick={() => setCurrentView('patients')}
+                        className="w-full text-center text-[10px] text-red-600 font-bold hover:underline mt-2 cursor-pointer"
+                      >
+                        Ver lista completa
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
@@ -1065,187 +1087,6 @@ export default function ProfessionalDashboardPage({
             </div>
           </div>
         );
-        return (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-8rem)] lg:h-[calc(100vh-8rem)] animate-fade-in max-w-7xl mx-auto p-4 md:p-0">
-            <div className="lg:col-span-4 bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col overflow-hidden">
-              <div className="p-5 border-b border-gray-100 bg-gray-50/50">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                    {icons.users} Pacientes
-                  </h2>
-                  <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded-full">
-                    {patients.length}
-                  </span>
-                </div>
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Buscar paciente..."
-                    className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                  <div className="absolute left-3 top-2.5 text-gray-400">
-                    {icons.search}
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleEditPatient(null)}
-                  className="mt-3 w-full py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  {icons.plus} Novo Cadastro
-                </button>
-              </div>
-              <div className="flex-grow overflow-y-auto p-2 space-y-1">
-                {filteredPatients.length > 0 ? (
-                  filteredPatients.map((patient) => {
-                    const isSelected =
-                      (selectedPatient?._id || selectedPatient?.id) ===
-                      (patient._id || patient.id);
-                    return (
-                      <div
-                        key={patient._id || patient.id}
-                        onClick={() => setSelectedPatient(patient)}
-                        className={`p-3 rounded-xl cursor-pointer border transition-all flex items-center gap-3 ${isSelected ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-white border-transparent hover:bg-gray-50 hover:border-gray-100'}`}
-                      >
-                        <div
-                          className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${isSelected ? 'bg-blue-200 text-blue-700' : 'bg-gray-100 text-gray-500'}`}
-                        >
-                          {patient.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="overflow-hidden">
-                          <p
-                            className={`text-sm truncate font-medium ${isSelected ? 'text-blue-900' : 'text-gray-800'}`}
-                          >
-                            {patient.name}
-                          </p>
-                          <p className="text-xs text-gray-400 truncate">
-                            {patient.cpf || patient.susCard || 'Sem documento'}
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="text-center py-10 text-gray-400 text-sm">
-                    Nenhum paciente encontrado.
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="lg:col-span-8 bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col overflow-hidden relative">
-              {selectedPatient ? (
-                <>
-                  <div className="bg-gradient-to-r from-blue-50 to-white p-6 border-b border-blue-100">
-                    <div className="flex justify-between items-start">
-                      <div className="flex items-center gap-4">
-                        <div className="w-16 h-16 bg-blue-600 text-white rounded-2xl flex items-center justify-center text-2xl font-bold shadow-lg shadow-blue-200">
-                          {selectedPatient.name.charAt(0)}
-                        </div>
-                        <div>
-                          <h2 className="text-2xl font-bold text-gray-800">
-                            {selectedPatient.name}
-                          </h2>
-                          <div className="flex flex-wrap items-center gap-3 mt-1 text-sm text-gray-500">
-                            <span className="bg-white px-2 py-0.5 rounded border border-gray-200">
-                              CPF: {selectedPatient.cpf || '-'}
-                            </span>
-                            <span className="bg-white px-2 py-0.5 rounded border border-gray-200">
-                              SUS: {selectedPatient.susCard || '-'}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleEditPatient(selectedPatient)}
-                          className="p-2 bg-white border border-gray-200 text-gray-600 rounded-lg hover:text-blue-600 hover:border-blue-200 transition-colors cursor-pointer"
-                          title="Editar"
-                        >
-                          {icons.edit}
-                        </button>
-                        {user?.role !== 'profissional' && (
-                          <button
-                            onClick={() =>
-                              setConfirmation({
-                                isOpen: true,
-                                title: 'Excluir',
-                                message: `Excluir ${selectedPatient.name}?`,
-                                onConfirm: () =>
-                                  handleDeletePatient(
-                                    selectedPatient._id || selectedPatient.id
-                                  ),
-                                isDestructive: true,
-                              })
-                            }
-                            className="p-2 bg-white border border-gray-200 text-gray-600 rounded-lg hover:text-red-600 hover:border-red-200 transition-colors cursor-pointer"
-                            title="Excluir"
-                          >
-                            {icons.trash}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    {(selectedPatient.observations ||
-                      selectedPatient.generalNotes) && (
-                      <div className="mt-6 bg-yellow-50/50 p-4 rounded-xl border border-yellow-100 text-sm text-yellow-800">
-                        {selectedPatient.observations && (
-                          <p className="mb-1">
-                            <strong>Obs:</strong> {selectedPatient.observations}
-                          </p>
-                        )}
-                        {selectedPatient.generalNotes && (
-                          <p>
-                            <strong>Notas:</strong>{' '}
-                            {selectedPatient.generalNotes}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-6 flex-grow flex flex-col min-h-0 bg-gray-50/30">
-                    <div className="flex justify-between items-center mb-4">
-                      <h3 className="font-bold text-gray-700 flex items-center gap-2">
-                        {icons.history} Histórico Clínico
-                      </h3>
-                      <button
-                        onClick={() =>
-                          openRecordModalWithCheck(selectedPatient, null)
-                        }
-                        className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 shadow-sm shadow-green-200 transition-all flex items-center gap-2 cursor-pointer"
-                      >
-                        {icons.plus} Nova Entrada
-                      </button>
-                    </div>
-                    <div className="flex-grow overflow-auto bg-white rounded-xl border border-gray-200 shadow-sm">
-                      <PatientRecordsTable
-                        records={
-                          Array.isArray(patientRecords) ? patientRecords : []
-                        }
-                        medications={medications}
-                      />
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full text-gray-400 bg-gray-50/50">
-                  <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-4 text-3xl">
-                    {icons.user}
-                  </div>
-                  <p className="text-lg font-medium text-gray-600">
-                    Nenhum paciente selecionado
-                  </p>
-                  <button
-                    onClick={() => navigate('/dashboard')}
-                    className="mt-4 text-blue-600 hover:underline lg:hidden cursor-pointer"
-                  >
-                    Voltar ao Dashboard
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        );
 
       case 'historico':
         return (
@@ -1327,7 +1168,7 @@ export default function ProfessionalDashboardPage({
                           </span>
                         </td>
 
-                        {/* --- CORREÇÃO 2: Exibição da Medicação --- */}
+                        {/* --- Correção na exibição de medicações --- */}
                         <td className="py-3 px-4">
                           <div className="flex flex-wrap gap-1">
                             {Array.isArray(record.medications)
@@ -1336,14 +1177,12 @@ export default function ProfessionalDashboardPage({
                                     key={i}
                                     className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded border border-gray-200"
                                   >
-                                    {/* Prioriza o Nome salvo no banco, fallback para o ID */}
                                     {m.name ||
                                       getMedicationName(
                                         m.medicationId,
                                         medications
                                       )}
                                     <span className="text-gray-400 border-l border-gray-300 pl-1 ml-1 font-bold">
-                                      {/* Mostra quantidade formatada ou número + unidade */}
                                       {m.dosage ||
                                         `${m.quantity} ${m.unit || ''}`}
                                     </span>
@@ -1352,7 +1191,6 @@ export default function ProfessionalDashboardPage({
                               : '-'}
                           </div>
                         </td>
-                        {/* ------------------------------------------- */}
 
                         <td className="py-3 px-4">
                           <StatusBadge status={record.status} />
@@ -1383,7 +1221,6 @@ export default function ProfessionalDashboardPage({
                               </>
                             )}
 
-                            {/* --- CORREÇÃO 3: Botão de Editar (Usa função corrigida) --- */}
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1393,7 +1230,6 @@ export default function ProfessionalDashboardPage({
                             >
                               {icons.edit}
                             </button>
-                            {/* -------------------------------------------------------- */}
 
                             {user?.role !== 'profissional' && (
                               <button
@@ -1454,6 +1290,9 @@ export default function ProfessionalDashboardPage({
           </div>
         );
 
+      // ======================================================================
+      // ABA ENTREGAS (CORRIGIDA COM DATA BLINDADA)
+      // ======================================================================
       case 'deliveries':
         return (
           <div className="bg-white/80 backdrop-blur-md rounded-2xl shadow-xl border border-gray-100 p-8 animate-fade-in max-w-7xl mx-auto h-[calc(100vh-8rem)] flex flex-col">
@@ -1501,12 +1340,9 @@ export default function ProfessionalDashboardPage({
                       className="hover:bg-blue-50/40 transition-all duration-200 group"
                     >
                       <td className="py-5 px-6">
+                        {/* --- CORREÇÃO AQUI (Data Blindada) --- */}
                         <span className="font-bold text-green-700 bg-green-50 px-3 py-1.5 rounded-lg border border-green-100">
-                          {r.deliveryDate
-                            ? new Date(r.deliveryDate).toLocaleDateString(
-                                'pt-BR'
-                              )
-                            : '-'}
+                          {fixDate(r.deliveryDate)}
                         </span>
                       </td>
                       <td className="py-5 px-6 font-bold text-gray-800 text-base">
@@ -1529,7 +1365,6 @@ export default function ProfessionalDashboardPage({
                       </td>
                       <td className="py-5 px-6 text-center">
                         <StatusBadge status={r.status} />
-                        {/* Se houver cancelamento, mostramos o motivo de forma discreta mas visível */}
                         {r.status === 'Cancelado' && r.cancelReason && (
                           <div className="mt-2 text-[10px] font-bold text-red-500 flex items-center justify-center gap-1 uppercase italic">
                             <span className="text-red-400">{icons.info}</span>{' '}
@@ -1550,120 +1385,6 @@ export default function ProfessionalDashboardPage({
                   <p className="text-lg font-medium">
                     Nenhuma entrega registrada nos últimos 7 dias.
                   </p>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-        return (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 animate-fade-in max-w-7xl mx-auto h-[calc(100vh-8rem)] flex flex-col">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-              <span className="bg-green-100 text-green-600 p-2 rounded-lg">
-                {icons.check}
-              </span>
-              Entregas da Semana
-            </h2>
-            <div className="flex-grow overflow-auto bg-white rounded-xl border border-gray-200 shadow-sm">
-              <table className="min-w-full text-sm text-left">
-                <thead className="bg-gray-50 text-gray-500 uppercase text-xs border-b">
-                  <tr>
-                    <th className="py-3 px-4 pl-6">Data Entrega</th>
-                    <th className="py-3 px-4">Paciente</th>
-                    <th className="py-3 px-4">Itens</th>
-                    <th className="py-3 px-4">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {recentDeliveries.map((r) => (
-                    <tr
-                      key={r._id || r.id}
-                      className="hover:bg-gray-50 transition-colors"
-                    >
-                      <td className="py-3 px-4 pl-6 font-medium text-green-700">
-                        {r.deliveryDate
-                          ? new Date(r.deliveryDate).toLocaleDateString('pt-BR')
-                          : '-'}
-                      </td>
-                      <td className="py-3 px-4 font-medium text-gray-800">
-                        {getPatientNameById(r.patientId)}
-                      </td>
-
-                      {/* --- CORREÇÃO AQUI --- */}
-                      <td className="py-3 px-4 text-gray-600">
-                        {r.medications
-                          ?.map((m) =>
-                            getSafeMedicationName(m.medicationId, medications)
-                          )
-                          .join(', ')}
-                      </td>
-                      {/* ---------------------- */}
-
-                      <td className="py-3 px-4">
-                        <StatusBadge status={r.status} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {recentDeliveries.length === 0 && (
-                <div className="p-10 text-center text-gray-400">
-                  Nenhuma entrega recente.
-                </div>
-              )}
-            </div>
-          </div>
-        );
-        return (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 animate-fade-in flex flex-col h-[calc(100vh-8rem)] max-w-7xl mx-auto p-4 md:p-6">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-              <span className="bg-green-100 text-green-600 p-2 rounded-lg">
-                {icons.check}
-              </span>{' '}
-              Entregas da Semana
-            </h2>
-            <div className="flex-grow overflow-auto bg-white rounded-xl border border-gray-200 shadow-sm">
-              <table className="min-w-full text-sm text-left">
-                <thead className="bg-gray-50 text-gray-500 font-medium uppercase text-xs border-b border-gray-100">
-                  <tr>
-                    <th className="py-3 px-4 pl-6">Data Entrega</th>
-                    <th className="py-3 px-4">Paciente</th>
-                    <th className="py-3 px-4">Medicações</th>
-                    <th className="py-3 px-4">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {recentDeliveries.map((record) => (
-                    <tr
-                      key={record._id || record.id}
-                      className="hover:bg-gray-50 transition-colors cursor-pointer"
-                    >
-                      <td className="py-3 px-4 pl-6 font-medium text-green-700">
-                        {record.deliveryDate
-                          ? new Date(record.deliveryDate).toLocaleDateString(
-                              'pt-BR'
-                            )
-                          : '-'}
-                      </td>
-                      <td className="py-3 px-4 font-medium text-gray-800">
-                        {getPatientNameById(record.patientId)}
-                      </td>
-                      <td className="py-3 px-4 text-gray-600">
-                        {record.medications
-                          ?.map((m) =>
-                            getMedicationName(m.medicationId, medications)
-                          )
-                          .join(', ')}
-                      </td>
-                      <td className="py-3 px-4">
-                        <StatusBadge status={record.status} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {recentDeliveries.length === 0 && (
-                <div className="p-10 text-center text-gray-400">
-                  Nenhuma entrega nos últimos 7 dias.
                 </div>
               )}
             </div>
@@ -1696,6 +1417,20 @@ export default function ProfessionalDashboardPage({
           handleEditPatient(null);
         }}
       />
+
+      {/* --- MODAL NOVA REMESSA (ADICIONADO) --- */}
+      {isAddShipmentModalOpen && (
+        <AddShipmentItemModal
+          onClose={() => setIsAddShipmentModalOpen(false)}
+          onSuccess={() => {
+            setIsAddShipmentModalOpen(false);
+            addToast('Remessa registrada com sucesso!', 'success');
+            syncGlobalState(setRecords, 'registros'); // Atualiza a lista
+          }}
+          currentShipmentId={null} // Ou lógica para criar novo ID
+        />
+      )}
+
       {isPatientModalOpen && (
         <PatientForm
           patient={editingPatient}
