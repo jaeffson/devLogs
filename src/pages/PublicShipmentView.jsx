@@ -31,7 +31,7 @@ export default function PublicShipmentView() {
     onConfirm: null,
     isDestructive: false,
   });
- const API_URL = import.meta.env.VITE_API_URL || 'https://backendmedlog-4.onrender.com/api';
+ const API_URL = import.meta.env.VITE_API_URL || 'https://api.parari.medlogs.com.br/api';
   useEffect(() => {
     async function load() {
       try {

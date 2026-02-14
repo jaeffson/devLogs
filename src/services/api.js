@@ -3,7 +3,7 @@ import axios from 'axios';
 
 // 1. Definição da URL Base
 const apiUrl =
-  import.meta.env.VITE_API_URL || 'https://backendmedlog-4.onrender.com/api';
+  import.meta.env.VITE_API_URL || 'https://api.parari.medlogs.com.br/api';
 
 const api = axios.create({
   baseURL: apiUrl,
