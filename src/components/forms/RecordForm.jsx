@@ -372,7 +372,7 @@ export default function RecordForm({
       }
     } catch (error) {
       const isNetworkError =
-        error.message === 'Network Error' ||
+        error.message === 'Erro de conexão' ||
         error.message === 'OFFLINE_MODE' ||
         error.code === 'ERR_NETWORK';
       if (isNetworkError) {
