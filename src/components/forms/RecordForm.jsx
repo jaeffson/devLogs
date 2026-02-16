@@ -519,8 +519,6 @@ export default function RecordForm({
                     {distributorList.map((dist, idx) => (
                       <option key={dist._id || idx} value={dist.name} />
                     ))}
-                    <option value="Central">Central</option>
-                    <option value="Unidade Básica">Unidade Básica</option>
                   </datalist>
                   {errors.farmacia && (
                     <p className="text-xs text-red-500 mt-1 pl-1">
