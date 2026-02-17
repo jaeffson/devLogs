@@ -44,13 +44,14 @@ import {
   WiCloud,
 } from 'react-icons/wi';
 
-// Imports de Componentes e Utils
 import { formatUserName } from '../utils/helpers';
 import { icons } from '../utils/icons';
 import LGPDBanner from '../components/common/LGPDBanner';
 import OfflineAlert from '../components/common/OfflineAlert';
 
-// --- HELPERS DE CLIMA (Manutenção da Lógica Existente) ---
+// NOVO: Importando o nosso cérebro de notificações
+import { useSystemAlerts } from '../hooks/useSystemAlerts';
+
 function getWeatherInfo(code, isDay = true) {
   const weatherMap = {
     0: { text: 'Céu limpo', icon: isDay ? WiDaySunny : WiNightClear },
@@ -61,7 +62,6 @@ function getWeatherInfo(code, isDay = true) {
     },
     3: { text: 'Nublado', icon: WiCloudy },
     45: { text: 'Nevoeiro', icon: isDay ? WiDayFog : WiNightFog },
-    // ... restante do mapeamento mantido
   };
   return weatherMap[code] || { text: 'Indefinido', icon: WiCloud };
 }
@@ -71,20 +71,47 @@ export default function MainLayout({
   handleLogout,
   annualBudget,
   records,
+  shipments,
+  patients, // <-- ADICIONADO: Precisamos dos pacientes para calcular atrasos
   filterYear,
   setFilterYear,
 }) {
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Referências para fechar os menus ao clicar fora
   const profileRef = useRef(null);
+  const alertsRef = useRef(null);
 
   // Estados de Interface
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isAlertsOpen, setIsAlertsOpen] = useState(false); // <-- NOVO: Estado do Painel de Alertas
   const [isMouseOverSidebar, setIsMouseOverSidebar] = useState(false);
 
-  // --- NAVEGAÇÃO PROFISSIONAL (ORDEM LÓGICA) ---
+  // NOVO: Inicializa o Hook de Alertas Inteligentes
+  const { alerts, unreadCount } = useSystemAlerts({
+    user,
+    patients,
+    records,
+    shipments,
+  });
+
+  // Efeito para fechar os modais/dropdowns se o usuário clicar fora deles
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (alertsRef.current && !alertsRef.current.contains(event.target)) {
+        setIsAlertsOpen(false);
+      }
+      if (profileRef.current && !profileRef.current.contains(event.target)) {
+        setIsProfileOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const menuItems = useMemo(() => {
     const common = [
       {
@@ -158,7 +185,6 @@ export default function MainLayout({
     return professional;
   }, [user?.role]);
 
-  // --- LOGICA DE UI (SIDEBAR & TIMERS) ---
   const handleMouseEnter = () => {
     setIsMouseOverSidebar(true);
     setIsSidebarCollapsed(false);
@@ -178,13 +204,11 @@ export default function MainLayout({
     <div className="flex h-screen bg-[#F8FAFC] dark:bg-slate-950 transition-colors duration-500 font-sans">
       <OfflineAlert />
 
-      {/* SIDEBAR MODERNA */}
       <aside
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         className={`fixed inset-y-0 left-0 z-[60] bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transition-all duration-500 ease-in-out shadow-2xl md:shadow-none md:translate-x-0 ${isSidebarOpen ? 'translate-x-0 w-72' : '-translate-x-full md:w-20'} ${!isSidebarCollapsed && 'md:w-72'}`}
       >
-        {/* Logo Area */}
         <div className="h-20 flex items-center px-6 border-b border-slate-50 dark:border-slate-800">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-blue-500 flex items-center justify-center text-white shadow-lg shadow-indigo-200">
             <Package size={22} />
@@ -196,7 +220,6 @@ export default function MainLayout({
           </span>
         </div>
 
-        {/* Navigation */}
         <nav className="p-4 space-y-2 overflow-y-auto custom-scrollbar h-[calc(100%-160px)]">
           {menuItems.map((item) => {
             const isActive = location.pathname === item.path;
@@ -222,7 +245,6 @@ export default function MainLayout({
           })}
         </nav>
 
-        {/* User Quick Info (Sidebar Bottom) */}
         {!isSidebarCollapsed && (
           <div className="absolute bottom-6 left-6 right-6 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
@@ -231,13 +253,14 @@ export default function MainLayout({
             <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
               Parari, PB
             </p>
+            <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 mt-3 pt-2 border-t border-slate-200 dark:border-slate-700 uppercase tracking-wider">
+              By <span className="text-indigo-500">Js Sistemas</span>
+            </p>
           </div>
         )}
       </aside>
 
-      {/* MAIN CONTENT AREA */}
       <div className="flex-1 flex flex-col min-w-0 md:ml-20 overflow-hidden">
-        {/* REFINED HEADER */}
         <header className="h-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-8 flex justify-between items-center z-40">
           <div className="flex items-center gap-4">
             <button
@@ -256,10 +279,117 @@ export default function MainLayout({
             </div>
           </div>
 
-          <div className="flex items-center gap-6">
-            {/* Year Selector - UI Senior */}
+          <div className="flex items-center gap-4 md:gap-6">
+            {/* ========================================================================= */}
+            {/* 🔔 CENTRAL DE NOTIFICAÇÕES INTELIGENTE (FACEBOOK STYLE)                   */}
+            {/* ========================================================================= */}
+            <div className="relative" ref={alertsRef}>
+              <button
+                onClick={() => setIsAlertsOpen(!isAlertsOpen)}
+                className={`relative p-2.5 rounded-2xl transition-all duration-300 border cursor-pointer ${
+                  isAlertsOpen
+                    ? 'bg-indigo-50 border-indigo-200 text-indigo-600 dark:bg-indigo-900/40 dark:border-indigo-700 dark:text-indigo-300'
+                    : unreadCount > 0
+                      ? 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400'
+                      : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-700'
+                }`}
+              >
+                {/* O sino treme se houver notificação e o painel estiver fechado */}
+                <Bell
+                  size={20}
+                  className={
+                    unreadCount > 0 && !isAlertsOpen
+                      ? 'animate-[wiggle_1s_ease-in-out_infinite]'
+                      : ''
+                  }
+                />
+
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 ring-2 ring-white dark:ring-slate-900 text-[10px] font-black text-white shadow-sm">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {/* PAINEL FLUTUANTE DE ALERTAS */}
+              {isAlertsOpen && (
+                <div className="absolute right-0 mt-4 w-80 sm:w-[400px] bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in slide-in-from-top-4 z-50">
+                  {/* Cabeçalho do Painel */}
+                  <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
+                    <h3 className="font-black text-slate-800 dark:text-white text-sm">
+                      Notificações
+                    </h3>
+                    <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider bg-slate-200 dark:bg-slate-700 px-2 py-1 rounded-md">
+                      {unreadCount} Novas
+                    </span>
+                  </div>
+
+                  {/* Lista de Alertas */}
+                  <div className="max-h-[350px] overflow-y-auto custom-scrollbar">
+                    {alerts.length > 0 ? (
+                      alerts.map((alert) => (
+                        <div
+                          key={alert.id}
+                          onClick={() => {
+                            navigate(alert.actionPath);
+                            setIsAlertsOpen(false); // Fecha o modal ao clicar e ir pra página
+                          }}
+                          className="p-4 border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors group flex gap-4 items-start"
+                        >
+                          <div
+                            className={`p-2.5 rounded-xl shrink-0 mt-0.5 ${alert.color}`}
+                          >
+                            {alert.icon}
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex justify-between items-center mb-1">
+                              <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                                {alert.title}
+                              </h4>
+                              <span className="text-[9px] font-bold text-slate-400 uppercase ml-2 text-right shrink-0">
+                                {alert.time}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 leading-snug font-medium">
+                              {alert.message}
+                            </p>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-8 text-center flex flex-col items-center justify-center gap-2">
+                        <div className="w-12 h-12 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-300 dark:text-slate-600 mb-2">
+                          <CheckSquare size={24} />
+                        </div>
+                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                          Tudo Atualizado!
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          Seu painel de operações está limpo.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Rodapé do Painel */}
+                  {alerts.length > 0 && (
+                    <div className="p-3 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-700 text-center">
+                      <button
+                        onClick={() => setIsAlertsOpen(false)}
+                        className="text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors uppercase tracking-widest"
+                      >
+                        Fechar painel
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            {/* ========================================================================= */}
+
+            {/* Year Selector - UI Senior (Mantido) */}
             {(user?.role === 'admin' || user?.role === 'secretario') && (
-              <div className="relative">
+              <div className="relative hidden sm:block">
                 <select
                   value={filterYear}
                   onChange={(e) => setFilterYear(parseInt(e.target.value))}
@@ -280,11 +410,11 @@ export default function MainLayout({
               </div>
             )}
 
-            {/* Profile Dropdown */}
+            {/* Profile Dropdown (Mantido e Ajustado) */}
             <div className="relative" ref={profileRef}>
               <button
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
-                className="flex items-center gap-3 p-1.5 pr-4 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer border border-transparent active:scale-95"
+                className="flex items-center gap-2 sm:gap-3 p-1.5 sm:pr-4 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer border border-transparent active:scale-95"
               >
                 <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black shadow-lg shadow-indigo-100">
                   {user?.name?.charAt(0).toUpperCase()}
@@ -299,18 +429,18 @@ export default function MainLayout({
                 </div>
                 <ChevronDown
                   size={16}
-                  className={`text-slate-400 transition-transform ${isProfileOpen ? 'rotate-180' : ''}`}
+                  className={`hidden sm:block text-slate-400 transition-transform ${isProfileOpen ? 'rotate-180' : ''}`}
                 />
               </button>
 
-              {/* PERFIL DROPDOWN MENU */}
               {isProfileOpen && (
-                <div className="absolute right-0 mt-4 w-64 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-800 p-2 animate-in fade-in slide-in-from-top-2">
+                <div className="absolute right-0 mt-4 w-56 sm:w-64 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-800 p-2 animate-in fade-in slide-in-from-top-2">
                   <Link
                     to="/profile"
+                    onClick={() => setIsProfileOpen(false)}
                     className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 text-sm font-bold text-slate-700 dark:text-slate-200"
                   >
-                    <UserIcon size={18} className="text-slate-400" /> Ver Perfil
+                    <UserIcon size={18} className="text-slate-400" /> Meu Perfil
                   </Link>
                   <button
                     onClick={handleLogoutClick}
@@ -324,10 +454,18 @@ export default function MainLayout({
           </div>
         </header>
 
-        {/* CONTENT AREA */}
         <main className="flex-1 overflow-y-auto p-6 md:p-10 custom-scrollbar bg-slate-50/50 dark:bg-slate-950">
           <div className="max-w-7xl mx-auto h-full">
-            <Outlet context={{ filterYear, records, annualBudget, user }} />
+            <Outlet
+              context={{
+                filterYear,
+                records,
+                shipments,
+                patients,
+                annualBudget,
+                user,
+              }}
+            />
           </div>
         </main>
       </div>

@@ -41,6 +41,7 @@ export default function App() {
   const [records, setRecords] = useState([]);
   const [medications, setMedications] = useState([]);
   const [users, setUsers] = useState([]);
+  const [shipments, setShipments] = useState([]); // <--- ADICIONADO: O App agora sabe das remessas!
   const [annualBudget, setAnnualBudget] = useState(5000.0);
   const [activityLog, setActivityLog] = useState([]);
   const [filterYear, setFilterYear] = useState(new Date().getFullYear());
@@ -110,6 +111,32 @@ export default function App() {
     }
   }, [normalizeData]);
 
+ 
+// BUSCA BLINDADA: Traz o /open e o /history ao mesmo tempo para o Admin ver tudo
+  const refetchShipments = useCallback(async () => {
+    try {
+      // Tenta buscar nas rotas (trata plural e singular automaticamente)
+      const [historyRes, openRes] = await Promise.allSettled([
+        api.get('/shipments/history').catch(() => api.get('/shipment/history')),
+        api.get('/shipments/open').catch(() => api.get('/shipment/open'))
+      ]);
+
+      let combined = [];
+      
+      if (historyRes.status === 'fulfilled' && historyRes.value?.data) {
+        combined = [...combined, ...historyRes.value.data];
+      }
+      if (openRes.status === 'fulfilled' && openRes.value?.data) {
+        combined = [...combined, ...openRes.value.data];
+      }
+      const uniqueShipments = Array.from(new Map(combined.map(item => [item._id || item.id, item])).values());
+      
+      setShipments(normalizeData(uniqueShipments));
+    } catch (error) {
+      console.error('Falha ao recarregar remessas:', error);
+    }
+  }, [normalizeData]);
+
   const refetchBudget = useCallback(async () => {
     try {
       const response = await api.get('/settings/budget');
@@ -135,6 +162,7 @@ export default function App() {
       await Promise.all([
         refetchPatients(),
         refetchRecords(),
+        refetchShipments(), // <--- ADICIONADO AQUI
         refetchMedications(),
         refetchUsers(),
         refetchBudget(),
@@ -149,6 +177,7 @@ export default function App() {
   }, [
     refetchPatients,
     refetchRecords,
+    refetchShipments,
     refetchMedications,
     refetchUsers,
     refetchBudget,
@@ -234,6 +263,8 @@ export default function App() {
     setPatients: refetchPatients,
     records,
     setRecords: refetchRecords,
+    shipments, // <--- ADICIONADO AQUI: Passa as remessas para o Layout e para as páginas
+    setShipments: refetchShipments, // <--- ADICIONADO AQUI
     medications,
     setMedications: refetchMedications,
     users,
@@ -250,12 +281,8 @@ export default function App() {
 
   return (
     <>
-      {showWelcomeModal && <WelcomeModal onClose={handleCloseWelcomeModal} />}
-
+    {showWelcomeModal && <WelcomeModal onClose={handleCloseWelcomeModal} user={user} />}
       <Routes>
-        {/* ========================================================= */}
-        {/* 1. ROTAS PÚBLICAS (Acessíveis sem login) - DEVEM VIR PRIMEIRO */}
-        {/* ========================================================= */}
         <Route path="/pedidos/ver/:token" element={<PublicShipmentView />} />
 
         <Route
@@ -277,9 +304,6 @@ export default function App() {
 
         <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
 
-        {/* ========================================================= */}
-        {/* 2. ROTAS PROTEGIDAS (Exigem Login) */}
-        {/* ========================================================= */}
         <Route
           path="/"
           element={
@@ -419,7 +443,7 @@ export default function App() {
             />
           )}
 
-          {/* Rota 404 (Dentro do Layout) */}
+          {/* Rota 404 */}
           <Route
             path="*"
             element={

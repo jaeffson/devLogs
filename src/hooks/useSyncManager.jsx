@@ -40,14 +40,16 @@ export const useSyncManager = () => {
         if (item.type === 'DISPENSE_RECORD') {
            await api.post('/medications/dispense', item.payload);
         }
-        //outros tipos aqui se necessário (ex: CREATE_PATIENT)
 
         // Se der sucesso, remove da fila local
         await removeFromQueue(item.id);
         successCount++;
       } catch (error) {
         console.error('Falha ao sincronizar item:', item.id, error);
-        // Se o erro não for de rede (ex: 400 Bad Request), talvez devêssemos remover ou mover para uma fila de "erros"
+        // Se o erro não for de rede (ex: 400 Bad Request), remove da fila para evitar bloqueio futuro
+        if (error.response && error.response.status < 500) {
+          await removeFromQueue(item.id);
+        }
       }
     }
 
