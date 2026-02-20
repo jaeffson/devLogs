@@ -13,8 +13,7 @@ import MedicationsPage from './MedicationsPage';
 import { icons } from '../utils/icons';
 import { getMedicationName } from '../utils/helpers';
 import { useDebounce } from '../hooks/useDebounce';
-import { FiArrowRight } from 'react-icons/fi'; 
-
+import { FiArrowRight } from 'react-icons/fi';
 
 // ============================================================================
 // ÁREA DE HELPERS (Funções auxiliares - FORA DO COMPONENTE)
@@ -174,7 +173,6 @@ export default function ProfessionalDashboardPage({
   const [searchTerm, setSearchTerm] = useState('');
   const [historySearchTerm, setHistorySearchTerm] = useState('');
   const [selectedPatient, setSelectedPatient] = useState(null);
-  
 
   // Modais
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
@@ -609,25 +607,27 @@ export default function ProfessionalDashboardPage({
       // ======================================================================
       // DASHBOARD (DESIGN SENIOR CORRIGIDO)
       // ======================================================================
-  case 'dashboard':
+      case 'dashboard':
         // --- 1. MÉTRICAS E CÁLCULOS ---
         const totalPacientes = patients?.length || 0;
         const totalMedicamentos = medications?.length || 0;
         const entregasRecentes = recentDeliveries?.length || 0;
 
         // Lógica: Filtra pacientes com mais de 35 dias sem visita
-        const pacientesEmAtraso = patients?.filter((p) => {
+        const pacientesEmAtraso =
+          patients?.filter((p) => {
             if (!p.lastVisit) return false;
             return calculateDaysLate(p.lastVisit) > 35;
-        }) || [];
+          }) || [];
 
         // Lógica: Pacientes com status 'Pendente' há mais de 30 dias
-        const pacientesPendentes = patients?.filter((p) => {
+        const pacientesPendentes =
+          patients?.filter((p) => {
             if (p.status !== 'Pendente') return false;
             const dataBase = p.createdAt || p.lastVisit;
             if (!dataBase) return false;
             return calculateDaysLate(dataBase) > 30;
-        }) || [];
+          }) || [];
 
         return (
           <>
@@ -641,27 +641,38 @@ export default function ProfessionalDashboardPage({
                   <div>
                     <h1 className="text-3xl font-black mb-2 tracking-tight flex items-center gap-3">
                       {getGreeting()},{' '}
-                      <span className="text-blue-400">{user?.name?.split(' ')[0] || 'Profissional'}</span>
+                      <span className="text-blue-400">
+                        {user?.name?.split(' ')[0] || 'Profissional'}
+                      </span>
                     </h1>
                     <div className="max-w-xl text-sm font-light leading-relaxed mt-4 space-y-2">
-                      
                       {pacientesPendentes.length > 0 && (
                         <span className="inline-flex items-center gap-2 text-red-100 font-bold bg-red-600/80 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-red-500/50 shadow-sm cursor-default">
-                          ⚠ {pacientesPendentes.length} {pacientesPendentes.length === 1 ? 'paciente pendente' : 'pacientes pendentes'} há mais de 30 dias!
+                          ⚠ {pacientesPendentes.length}{' '}
+                          {pacientesPendentes.length === 1
+                            ? 'paciente pendente'
+                            : 'pacientes pendentes'}{' '}
+                          há mais de 30 dias!
                         </span>
                       )}
 
                       {pacientesEmAtraso.length > 0 && (
                         <span className="inline-flex items-center gap-2 text-orange-100 font-bold bg-orange-500/30 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-orange-500/30 shadow-sm mt-2 md:mt-0 md:ml-2 cursor-default">
-                          ⏱ {pacientesEmAtraso.length} {pacientesEmAtraso.length === 1 ? 'paciente' : 'pacientes'} sem retorno (&gt;35 dias).
+                          ⏱ {pacientesEmAtraso.length}{' '}
+                          {pacientesEmAtraso.length === 1
+                            ? 'paciente'
+                            : 'pacientes'}{' '}
+                          sem retorno (&gt;35 dias).
                         </span>
                       )}
 
-                      {pacientesEmAtraso.length === 0 && pacientesPendentes.length === 0 && (
-                        <span className="inline-flex items-center gap-2 text-emerald-100 font-medium bg-emerald-500/20 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-emerald-500/30 cursor-default">
-                          {icons.check} O sistema está atualizado e sem pendências no momento.
-                        </span>
-                      )}
+                      {pacientesEmAtraso.length === 0 &&
+                        pacientesPendentes.length === 0 && (
+                          <span className="inline-flex items-center gap-2 text-emerald-100 font-medium bg-emerald-500/20 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-emerald-500/30 cursor-default">
+                            {icons.check} O sistema está atualizado e sem
+                            pendências no momento.
+                          </span>
+                        )}
                     </div>
                   </div>
 
@@ -680,57 +691,104 @@ export default function ProfessionalDashboardPage({
 
               {/* --- 3. CARDS KPI (INDICADORES PRINCIPAIS) --- */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                <div onClick={() => setCurrentView('patients')} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 group hover:shadow-md hover:-translate-y-1 hover:border-blue-300 transition-all duration-300 cursor-pointer">
+                <div
+                  onClick={() => setCurrentView('patients')}
+                  className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 group hover:shadow-md hover:-translate-y-1 hover:border-blue-300 transition-all duration-300 cursor-pointer"
+                >
                   <div className="flex justify-between items-center mb-4">
-                    <div className="p-3 bg-blue-50 text-blue-600 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-colors duration-300 shadow-sm">{icons.users}</div>
-                    <span className="text-[10px] font-bold text-blue-700 bg-blue-50/80 px-2.5 py-1 rounded-full uppercase tracking-wider">Ativos</span>
+                    <div className="p-3 bg-blue-50 text-blue-600 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-colors duration-300 shadow-sm">
+                      {icons.users}
+                    </div>
+                    <span className="text-[10px] font-bold text-blue-700 bg-blue-50/80 px-2.5 py-1 rounded-full uppercase tracking-wider">
+                      Ativos
+                    </span>
                   </div>
-                  <h3 className="text-3xl font-black text-slate-800">{totalPacientes}</h3>
-                  <p className="text-sm text-slate-500 font-medium mt-1 group-hover:text-blue-600 transition-colors">Gerenciar Usuários &rarr;</p>
+                  <h3 className="text-3xl font-black text-slate-800">
+                    {totalPacientes}
+                  </h3>
+                  <p className="text-sm text-slate-500 font-medium mt-1 group-hover:text-blue-600 transition-colors">
+                    Gerenciar Usuários &rarr;
+                  </p>
                 </div>
 
-                <div onClick={() => setCurrentView('medications')} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 group hover:shadow-md hover:-translate-y-1 hover:border-indigo-300 transition-all duration-300 cursor-pointer">
+                <div
+                  onClick={() => setCurrentView('medications')}
+                  className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 group hover:shadow-md hover:-translate-y-1 hover:border-indigo-300 transition-all duration-300 cursor-pointer"
+                >
                   <div className="flex justify-between items-center mb-4">
-                    <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300 shadow-sm">{icons.medication}</div>
-                    <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50/80 px-2.5 py-1 rounded-full uppercase tracking-wider">Estoque</span>
+                    <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300 shadow-sm">
+                      {icons.medication}
+                    </div>
+                    <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50/80 px-2.5 py-1 rounded-full uppercase tracking-wider">
+                      Estoque
+                    </span>
                   </div>
-                  <h3 className="text-3xl font-black text-slate-800">{totalMedicamentos}</h3>
-                  <p className="text-sm text-slate-500 font-medium mt-1 group-hover:text-indigo-600 transition-colors">Medicamentos &rarr;</p>
+                  <h3 className="text-3xl font-black text-slate-800">
+                    {totalMedicamentos}
+                  </h3>
+                  <p className="text-sm text-slate-500 font-medium mt-1 group-hover:text-indigo-600 transition-colors">
+                    Medicamentos &rarr;
+                  </p>
                 </div>
 
-                <div onClick={() => setCurrentView('deliveries')} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 group hover:shadow-md hover:-translate-y-1 hover:border-emerald-300 transition-all duration-300 cursor-pointer">
+                <div
+                  onClick={() => setCurrentView('deliveries')}
+                  className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 group hover:shadow-md hover:-translate-y-1 hover:border-emerald-300 transition-all duration-300 cursor-pointer"
+                >
                   <div className="flex justify-between items-center mb-4">
-                    <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl group-hover:bg-emerald-600 group-hover:text-white transition-colors duration-300 shadow-sm">{icons.check}</div>
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50/80 px-2.5 py-1 rounded-full uppercase tracking-wider">Saídas</span>
+                    <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl group-hover:bg-emerald-600 group-hover:text-white transition-colors duration-300 shadow-sm">
+                      {icons.check}
+                    </div>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50/80 px-2.5 py-1 rounded-full uppercase tracking-wider">
+                      Saídas
+                    </span>
                   </div>
-                  <h3 className="text-3xl font-black text-slate-800">{entregasRecentes}</h3>
-                  <p className="text-sm text-slate-500 font-medium mt-1 group-hover:text-emerald-600 transition-colors">Histórico Recente &rarr;</p>
+                  <h3 className="text-3xl font-black text-slate-800">
+                    {entregasRecentes}
+                  </h3>
+                  <p className="text-sm text-slate-500 font-medium mt-1 group-hover:text-emerald-600 transition-colors">
+                    Histórico Recente &rarr;
+                  </p>
                 </div>
 
-                <div onClick={() => setCurrentView('patients')} className={`p-6 rounded-2xl shadow-sm border transition-all duration-300 group relative overflow-hidden cursor-pointer hover:-translate-y-1 hover:shadow-md ${pacientesPendentes.length > 0 || pacientesEmAtraso.length > 0 ? 'bg-red-50/50 border-red-200 hover:border-red-400' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
-                  {(pacientesPendentes.length > 0 || pacientesEmAtraso.length > 0) && (
+                <div
+                  onClick={() => setCurrentView('patients')}
+                  className={`p-6 rounded-2xl shadow-sm border transition-all duration-300 group relative overflow-hidden cursor-pointer hover:-translate-y-1 hover:shadow-md ${pacientesPendentes.length > 0 || pacientesEmAtraso.length > 0 ? 'bg-red-50/50 border-red-200 hover:border-red-400' : 'bg-white border-slate-200 hover:border-slate-300'}`}
+                >
+                  {(pacientesPendentes.length > 0 ||
+                    pacientesEmAtraso.length > 0) && (
                     <div className="absolute right-0 top-0 w-20 h-20 bg-red-500/5 rounded-bl-[100px] pointer-events-none"></div>
                   )}
                   <div className="flex justify-between items-center mb-4 relative z-10">
-                    <div className={`p-3 rounded-xl transition-colors duration-300 shadow-sm ${pacientesPendentes.length > 0 || pacientesEmAtraso.length > 0 ? 'bg-red-100 text-red-600 group-hover:bg-red-600 group-hover:text-white' : 'bg-slate-50 text-slate-400 group-hover:bg-slate-200'}`}>
+                    <div
+                      className={`p-3 rounded-xl transition-colors duration-300 shadow-sm ${pacientesPendentes.length > 0 || pacientesEmAtraso.length > 0 ? 'bg-red-100 text-red-600 group-hover:bg-red-600 group-hover:text-white' : 'bg-slate-50 text-slate-400 group-hover:bg-slate-200'}`}
+                    >
                       {icons.alert}
                     </div>
-                    <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider ${pacientesPendentes.length > 0 || pacientesEmAtraso.length > 0 ? 'text-red-700 bg-red-100' : 'text-slate-500 bg-slate-100'}`}>
+                    <span
+                      className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider ${pacientesPendentes.length > 0 || pacientesEmAtraso.length > 0 ? 'text-red-700 bg-red-100' : 'text-slate-500 bg-slate-100'}`}
+                    >
                       Atenção
                     </span>
                   </div>
-                  <h3 className={`text-3xl font-black mb-1 ${pacientesPendentes.length > 0 || pacientesEmAtraso.length > 0 ? 'text-red-700' : 'text-slate-400'}`}>
+                  <h3
+                    className={`text-3xl font-black mb-1 ${pacientesPendentes.length > 0 || pacientesEmAtraso.length > 0 ? 'text-red-700' : 'text-slate-400'}`}
+                  >
                     {pacientesPendentes.length + pacientesEmAtraso.length}
                   </h3>
-                  <p className={`text-sm font-medium transition-colors ${pacientesPendentes.length > 0 || pacientesEmAtraso.length > 0 ? 'text-red-500 group-hover:text-red-700' : 'text-slate-400 group-hover:text-slate-600'}`}>
-                    {pacientesPendentes.length > 0 || pacientesEmAtraso.length > 0 ? 'Pendências no sistema &rarr;' : 'Sem alertas &rarr;'}
+                  <p
+                    className={`text-sm font-medium transition-colors ${pacientesPendentes.length > 0 || pacientesEmAtraso.length > 0 ? 'text-red-500 group-hover:text-red-700' : 'text-slate-400 group-hover:text-slate-600'}`}
+                  >
+                    {pacientesPendentes.length > 0 ||
+                    pacientesEmAtraso.length > 0
+                      ? 'Pendências no sistema &rarr;'
+                      : 'Sem alertas &rarr;'}
                   </p>
                 </div>
               </div>
 
               {/* --- 4. ÁREA DE OPERAÇÕES E NAVEGAÇÃO --- */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                
                 {/* TABELA: Últimas Movimentações */}
                 <div className="lg:col-span-2 bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
                   <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/30">
@@ -738,7 +796,10 @@ export default function ProfessionalDashboardPage({
                       <span className="w-2 h-5 bg-blue-600 rounded-full shadow-sm"></span>
                       Últimas Movimentações
                     </h3>
-                    <button onClick={() => setCurrentView('deliveries')} className="text-xs font-bold text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-4 py-2 rounded-xl transition-all cursor-pointer active:scale-95">
+                    <button
+                      onClick={() => setCurrentView('deliveries')}
+                      className="text-xs font-bold text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-4 py-2 rounded-xl transition-all cursor-pointer active:scale-95"
+                    >
                       Ver Tudo &rarr;
                     </button>
                   </div>
@@ -758,7 +819,7 @@ export default function ProfessionalDashboardPage({
                             key={i}
                             className="hover:bg-blue-50/30 transition-colors group cursor-pointer"
                             // A MÁGICA ACONTECE AQUI: ABRE O MODAL COM OS DADOS DA LINHA
-                            onClick={() => setDetalhesMovimentacao(r)} 
+                            onClick={() => setDetalhesMovimentacao(r)}
                           >
                             <td className="px-6 py-4">
                               <span className="font-bold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-lg text-xs border border-slate-200 group-hover:border-blue-200 transition-colors">
@@ -771,7 +832,9 @@ export default function ProfessionalDashboardPage({
                               </span>
                             </td>
                             <td className="px-6 py-4">
-                              <span className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border tracking-wider inline-block ${r.status === 'Entregue' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}>
+                              <span
+                                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border tracking-wider inline-block ${r.status === 'Entregue' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}
+                              >
                                 {r.status}
                               </span>
                             </td>
@@ -793,19 +856,36 @@ export default function ProfessionalDashboardPage({
                   {/* Ações Rápidas */}
                   <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6">
                     <h4 className="font-bold text-slate-800 mb-6 text-xs uppercase tracking-widest flex items-center gap-2">
-                      <span className="text-blue-500">{icons.plus}</span> Ações Rápidas
+                      <span className="text-blue-500">{icons.plus}</span> Ações
+                      Rápidas
                     </h4>
                     <div className="grid grid-cols-1 gap-4">
-                      <button onClick={() => setCurrentView('patients')} className="w-full flex items-center justify-between p-4 bg-slate-50 hover:bg-blue-50 text-slate-700 rounded-2xl border border-slate-200 hover:border-blue-300 transition-all duration-300 cursor-pointer active:scale-[0.98] group shadow-sm hover:shadow">
+                      <button
+                        onClick={() => setCurrentView('patients')}
+                        className="w-full flex items-center justify-between p-4 bg-slate-50 hover:bg-blue-50 text-slate-700 rounded-2xl border border-slate-200 hover:border-blue-300 transition-all duration-300 cursor-pointer active:scale-[0.98] group shadow-sm hover:shadow"
+                      >
                         <div className="flex flex-col items-start">
-                          <span className="font-bold text-sm group-hover:text-blue-700 transition-colors">Gerenciar Usuários</span>
-                          <span className="text-[10px] text-slate-400 font-medium">Cadastrar ou editar perfis</span>
+                          <span className="font-bold text-sm group-hover:text-blue-700 transition-colors">
+                            Gerenciar Usuários
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-medium">
+                            Cadastrar ou editar perfis
+                          </span>
                         </div>
-                        <div className="text-slate-400 group-hover:text-blue-600 transition-colors p-2 bg-white rounded-xl shadow-sm">{icons.users}</div>
+                        <div className="text-slate-400 group-hover:text-blue-600 transition-colors p-2 bg-white rounded-xl shadow-sm">
+                          {icons.users}
+                        </div>
                       </button>
-                      <button onClick={() => setCurrentView('patients')} className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50 text-slate-600 rounded-2xl border border-slate-300 border-dashed hover:border-slate-400 transition-all duration-300 cursor-pointer active:scale-[0.98] group">
-                        <span className="font-bold text-sm group-hover:text-slate-800">Novo Registro</span>
-                        <div className="text-slate-400 font-black text-lg group-hover:scale-110 transition-transform">+</div>
+                      <button
+                        onClick={() => setCurrentView('patients')}
+                        className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50 text-slate-600 rounded-2xl border border-slate-300 border-dashed hover:border-slate-400 transition-all duration-300 cursor-pointer active:scale-[0.98] group"
+                      >
+                        <span className="font-bold text-sm group-hover:text-slate-800">
+                          Novo Registro
+                        </span>
+                        <div className="text-slate-400 font-black text-lg group-hover:scale-110 transition-transform">
+                          +
+                        </div>
                       </button>
                     </div>
                   </div>
@@ -814,12 +894,22 @@ export default function ProfessionalDashboardPage({
                   {pacientesPendentes.length > 0 && (
                     <div className="bg-red-600 rounded-3xl shadow-md border border-red-700 p-6 text-white relative overflow-hidden">
                       <div className="absolute inset-0 opacity-10 bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,#000_10px,#000_20px)] pointer-events-none"></div>
-                      <h4 className="font-bold mb-4 text-xs uppercase tracking-widest flex items-center gap-2 relative z-10 text-red-50">⚠ Status Pendente Crítico</h4>
+                      <h4 className="font-bold mb-4 text-xs uppercase tracking-widest flex items-center gap-2 relative z-10 text-red-50">
+                        ⚠ Status Pendente Crítico
+                      </h4>
                       <div className="space-y-3 max-h-[160px] overflow-y-auto custom-scrollbar pr-2 relative z-10">
                         {pacientesPendentes.slice(0, 3).map((p, i) => (
-                          <div key={i} onClick={() => setCurrentView('patients')} className="flex justify-between items-center bg-red-500 hover:bg-red-400 transition-colors p-3 rounded-xl border border-red-400/50 cursor-pointer shadow-sm group">
-                            <span className="text-sm font-bold text-white truncate max-w-[130px] group-hover:translate-x-1 transition-transform">{p.name}</span>
-                            <span className="text-[10px] font-black bg-red-900/40 px-2 py-1 rounded-md text-red-50 border border-red-900/30">&gt; 30 dias</span>
+                          <div
+                            key={i}
+                            onClick={() => setCurrentView('patients')}
+                            className="flex justify-between items-center bg-red-500 hover:bg-red-400 transition-colors p-3 rounded-xl border border-red-400/50 cursor-pointer shadow-sm group"
+                          >
+                            <span className="text-sm font-bold text-white truncate max-w-[130px] group-hover:translate-x-1 transition-transform">
+                              {p.name}
+                            </span>
+                            <span className="text-[10px] font-black bg-red-900/40 px-2 py-1 rounded-md text-red-50 border border-red-900/30">
+                              &gt; 30 dias
+                            </span>
                           </div>
                         ))}
                       </div>
@@ -828,12 +918,22 @@ export default function ProfessionalDashboardPage({
 
                   {pacientesEmAtraso.length > 0 && (
                     <div className="bg-orange-50 rounded-3xl shadow-sm border border-orange-200 p-6">
-                      <h4 className="font-bold text-orange-800 mb-4 text-xs uppercase tracking-widest flex items-center gap-2">⏱ Sem Retorno Recente</h4>
+                      <h4 className="font-bold text-orange-800 mb-4 text-xs uppercase tracking-widest flex items-center gap-2">
+                        ⏱ Sem Retorno Recente
+                      </h4>
                       <div className="space-y-2 max-h-[150px] overflow-y-auto custom-scrollbar pr-2">
                         {pacientesEmAtraso.slice(0, 3).map((p, i) => (
-                          <div key={i} onClick={() => setCurrentView('patients')} className="flex justify-between items-center bg-white hover:bg-orange-100/50 transition-colors p-2.5 rounded-xl border border-orange-100 cursor-pointer group">
-                            <span className="text-xs font-bold text-slate-700 truncate max-w-[120px] group-hover:text-orange-900 transition-colors">{p.name}</span>
-                            <span className="text-[10px] font-bold text-orange-600 bg-orange-100 px-2 py-1 rounded-md">{calculateDaysLate(p.lastVisit)} dias</span>
+                          <div
+                            key={i}
+                            onClick={() => setCurrentView('patients')}
+                            className="flex justify-between items-center bg-white hover:bg-orange-100/50 transition-colors p-2.5 rounded-xl border border-orange-100 cursor-pointer group"
+                          >
+                            <span className="text-xs font-bold text-slate-700 truncate max-w-[120px] group-hover:text-orange-900 transition-colors">
+                              {p.name}
+                            </span>
+                            <span className="text-[10px] font-bold text-orange-600 bg-orange-100 px-2 py-1 rounded-md">
+                              {calculateDaysLate(p.lastVisit)} dias
+                            </span>
                           </div>
                         ))}
                       </div>
@@ -847,20 +947,21 @@ export default function ProfessionalDashboardPage({
             {/* MODAL DE DETALHES DA MOVIMENTAÇÃO (Renderização Condicional) */}
             {/* ========================================================= */}
             {detalhesMovimentacao && (
-              <div 
+              <div
                 className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-fade-in"
                 onClick={() => setDetalhesMovimentacao(null)} // Fecha ao clicar fora
               >
-                <div 
+                <div
                   className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 flex flex-col animate-slide-up"
                   onClick={(e) => e.stopPropagation()} // Evita fechar ao clicar dentro do card
                 >
                   {/* Cabeçalho do Modal */}
                   <div className="bg-slate-50 p-6 border-b border-slate-100 flex justify-between items-center">
                     <h3 className="font-black text-slate-800 text-lg flex items-center gap-2">
-                      <span className="text-blue-500">{icons.check}</span> Detalhes do Atendimento
+                      <span className="text-blue-500">{icons.check}</span>{' '}
+                      Detalhes do Atendimento
                     </h3>
-                    <button 
+                    <button
                       onClick={() => setDetalhesMovimentacao(null)}
                       className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition-colors"
                     >
@@ -873,48 +974,83 @@ export default function ProfessionalDashboardPage({
                     <div className="grid grid-cols-2 gap-4">
                       {/* Paciente */}
                       <div className="col-span-2 bg-blue-50/50 p-4 rounded-2xl border border-blue-100">
-                        <span className="text-[10px] uppercase font-bold text-blue-500 tracking-wider block mb-1">Paciente</span>
-                        <span className="font-black text-slate-800 text-lg">{getPatientNameById(detalhesMovimentacao.patientId)}</span>
+                        <span className="text-[10px] uppercase font-bold text-blue-500 tracking-wider block mb-1">
+                          Paciente
+                        </span>
+                        <span className="font-black text-slate-800 text-lg">
+                          {getPatientNameById(detalhesMovimentacao.patientId)}
+                        </span>
                       </div>
 
                       {/* Status */}
                       <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                        <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block mb-1">Status</span>
-                        <span className={`px-2 py-1 rounded text-[10px] font-black uppercase border tracking-wider inline-block ${detalhesMovimentacao.status === 'Entregue' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}>
+                        <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block mb-1">
+                          Status
+                        </span>
+                        <span
+                          className={`px-2 py-1 rounded text-[10px] font-black uppercase border tracking-wider inline-block ${detalhesMovimentacao.status === 'Entregue' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}
+                        >
                           {detalhesMovimentacao.status}
                         </span>
                       </div>
 
                       {/* Data e Hora */}
                       <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                        <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block mb-1">Data / Hora</span>
+                        <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block mb-1">
+                          Data / Hora
+                        </span>
                         <span className="font-bold text-slate-700 text-sm">
-                          {new Date(detalhesMovimentacao.deliveryDate || detalhesMovimentacao.createdAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                          {new Date(
+                            detalhesMovimentacao.deliveryDate ||
+                              detalhesMovimentacao.createdAt
+                          ).toLocaleString('pt-BR', {
+                            dateStyle: 'short',
+                            timeStyle: 'short',
+                          })}
                         </span>
                       </div>
 
                       {/* Fornecedor */}
                       <div className="col-span-2 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                        <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block mb-1">Fornecedor</span>
+                        <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block mb-1">
+                          Fornecedor
+                        </span>
                         <span className="font-bold text-slate-700 text-sm">
-                          {detalhesMovimentacao.fornecedor || detalhesMovimentacao.supplier || 'Não informado'}
+                          {detalhesMovimentacao.fornecedor ||
+                            detalhesMovimentacao.supplier ||
+                            'Não informado'}
                         </span>
                       </div>
                     </div>
 
                     {/* Lista de Medicamentos (Estilo Recibo) */}
                     <div>
-                      <span className="text-xs uppercase font-bold text-slate-400 tracking-wider block mb-3 border-b border-slate-100 pb-2">Medicamentos Prescritos</span>
+                      <span className="text-xs uppercase font-bold text-slate-400 tracking-wider block mb-3 border-b border-slate-100 pb-2">
+                        Medicamentos Prescritos
+                      </span>
                       <ul className="space-y-2 max-h-[150px] overflow-y-auto custom-scrollbar pr-2">
-                        {detalhesMovimentacao.medicamentos?.length > 0 || detalhesMovimentacao.medications?.length > 0 ? (
-                          (detalhesMovimentacao.medicamentos || detalhesMovimentacao.medications).map((med, idx) => (
-                            <li key={idx} className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
-                              <span className="font-bold text-slate-700 text-sm">{med.nome || med.name}</span>
-                              <span className="font-black text-blue-600 bg-blue-100/50 px-2 py-1 rounded text-xs">{med.quantidade || med.quantity} un.</span>
+                        {detalhesMovimentacao.medicamentos?.length > 0 ||
+                        detalhesMovimentacao.medications?.length > 0 ? (
+                          (
+                            detalhesMovimentacao.medicamentos ||
+                            detalhesMovimentacao.medications
+                          ).map((med, idx) => (
+                            <li
+                              key={idx}
+                              className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100"
+                            >
+                              <span className="font-bold text-slate-700 text-sm">
+                                {med.nome || med.name}
+                              </span>
+                              <span className="font-black text-blue-600 bg-blue-100/50 px-2 py-1 rounded text-xs">
+                                {med.quantidade || med.quantity} un.
+                              </span>
                             </li>
                           ))
                         ) : (
-                          <li className="text-center text-slate-400 text-sm italic py-2">Nenhum medicamento listado.</li>
+                          <li className="text-center text-slate-400 text-sm italic py-2">
+                            Nenhum medicamento listado.
+                          </li>
                         )}
                       </ul>
                     </div>
@@ -922,7 +1058,7 @@ export default function ProfessionalDashboardPage({
 
                   {/* Rodapé do Modal */}
                   <div className="p-4 bg-slate-50 border-t border-slate-100">
-                    <button 
+                    <button
                       onClick={() => setDetalhesMovimentacao(null)}
                       className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded-xl transition-colors"
                     >
@@ -934,188 +1070,444 @@ export default function ProfessionalDashboardPage({
             )}
           </>
         );
+
       case 'patients':
         return (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 h-[calc(100vh-8rem)] animate-fade-in max-w-7xl mx-auto p-4 md:p-0">
-            {/* Painel Lateral: Lista de Pacientes */}
-            <div className="lg:col-span-4 bg-white/80 backdrop-blur-md rounded-3xl shadow-xl border border-gray-100 flex flex-col overflow-hidden">
-              <div className="p-6 border-b border-gray-100 bg-gray-50/50">
-                <div className="flex justify-between items-center mb-5">
-                  <h2 className="font-extrabold text-gray-900 flex items-center gap-3 tracking-tight">
-                    <span className="bg-blue-100 text-blue-600 p-2 rounded-xl">
-                      {icons.users}
-                    </span>
-                    Pacientes
-                  </h2>
-                  <span className="bg-blue-600 text-white text-[10px] font-black px-2.5 py-1 rounded-full shadow-lg shadow-blue-200">
-                    {patients.length} TOTAL
-                  </span>
-                </div>
-                <div className="relative group">
+          <div className="flex flex-col h-[calc(100vh-8rem)] max-w-7xl mx-auto p-4 md:p-6 animate-fade-in bg-slate-50/50">
+            {/* ========================================================= */}
+            {/* 1. BUSCA NO TOPO E AÇÕES GERAIS */}
+            {/* ========================================================= */}
+            <div className="relative z-50 shrink-0 mb-4">
+              <div className="flex flex-col md:flex-row justify-between items-center gap-3 bg-white p-3 md:p-4 rounded-2xl shadow-sm border border-slate-200">
+                <div className="relative w-full group flex-1">
                   <input
                     type="text"
-                    placeholder="Buscar paciente..."
-                    className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-2xl text-sm focus:ring-4 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all shadow-sm group-hover:border-gray-300"
+                    placeholder="Buscar paciente por nome, CPF ou SUS..."
+                    className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all text-slate-700 font-medium"
                     value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
+                      // Se estava vendo um paciente e digitou algo, fecha o paciente para ver a busca
+                      if (selectedPatient) setSelectedPatient(null);
+                    }}
                   />
-                  <span className="absolute left-3.5 top-3.5 text-gray-400 group-hover:text-blue-500 transition-colors">
+                  <span className="absolute left-4 top-3.5 text-slate-400 group-focus-within:text-indigo-500 transition-colors">
                     {icons.search}
                   </span>
                 </div>
-                <button
-                  onClick={() => handleEditPatient(null)}
-                  className="mt-4 w-full py-3.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-2xl text-sm font-bold hover:shadow-lg hover:shadow-blue-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2"
-                >
-                  {icons.plus} NOVO CADASTRO
-                </button>
+
+                <div className="flex gap-2 w-full md:w-auto">
+                  {selectedPatient && (
+                    <button
+                      onClick={() => setSelectedPatient(null)}
+                      className="w-full md:w-auto px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-95 border border-slate-200"
+                    >
+                      ← FECHAR PACIENTE
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      setSelectedPatient(null);
+                      handleEditPatient(null);
+                    }}
+                    className="w-full md:w-auto px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-sm transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-95 shrink-0"
+                  >
+                    {icons.plus} NOVO PACIENTE
+                  </button>
+                </div>
               </div>
 
-              <div className="flex-grow overflow-y-auto p-4 space-y-2 custom-scrollbar">
-                {filteredPatients.map((p) => {
-                  const active =
-                    (selectedPatient?._id || selectedPatient?.id) ===
-                    (p._id || p.id);
-                  return (
-                    <div
-                      key={p._id || p.id}
-                      onClick={() => setSelectedPatient(p)}
-                      className={`p-4 rounded-2xl cursor-pointer flex items-center gap-4 transition-all duration-200 ${
-                        active
-                          ? 'bg-blue-600 text-white shadow-xl shadow-blue-200 scale-[1.02]'
-                          : 'hover:bg-blue-50 border border-transparent text-gray-700'
-                      }`}
-                    >
-                      <div
-                        className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg shadow-inner ${
-                          active
-                            ? 'bg-white/20 text-white'
-                            : 'bg-blue-100 text-blue-600'
-                        }`}
-                      >
-                        {p.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="overflow-hidden">
-                        <p
-                          className={`font-bold truncate ${active ? 'text-white' : 'text-gray-900'}`}
+              {/* LISTA DE RESULTADOS FLUTUANTE (Aparece só quando digita) */}
+              {searchTerm && !selectedPatient && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden max-h-[60vh] overflow-y-auto custom-scrollbar animate-in slide-in-from-top-2">
+                  {filteredPatients.length > 0 ? (
+                    <div className="p-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                      {filteredPatients.slice(0, 30).map((p) => (
+                        <div
+                          key={p._id || p.id}
+                          onClick={() => {
+                            setSelectedPatient(p);
+                            setSearchTerm(''); // Limpa a barra ao abrir
+                          }}
+                          className="flex items-center gap-3 p-3 hover:bg-indigo-50 rounded-xl cursor-pointer transition-colors border border-transparent hover:border-indigo-100 group"
                         >
-                          {p.name}
-                        </p>
-                        <p
-                          className={`text-[11px] font-medium truncate ${active ? 'text-blue-100' : 'text-gray-400'}`}
-                        >
-                          {p.cpf
-                            ? `CPF: ${p.cpf}`
-                            : p.susCard
-                              ? `SUS: ${p.susCard}`
-                              : 'Sem documento'}
-                        </p>
-                      </div>
+                          <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center font-black text-base shrink-0 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                            {p.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="overflow-hidden">
+                            <p className="font-bold text-slate-800 text-sm truncate group-hover:text-indigo-700">
+                              {p.name}
+                            </p>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 truncate mt-0.5">
+                              {p.cpf
+                                ? `CPF: ${p.cpf}`
+                                : p.susCard
+                                  ? `SUS: ${p.susCard}`
+                                  : 'Sem documento'}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  );
-                })}
-              </div>
+                  ) : (
+                    <div className="p-8 text-center text-slate-500">
+                      <p className="font-bold">
+                        Nenhum paciente encontrado com "{searchTerm}"
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
-            {/* Painel Principal: Detalhes e Prontuários */}
-            <div className="lg:col-span-8 bg-white/80 backdrop-blur-md rounded-3xl shadow-xl border border-gray-100 flex flex-col overflow-hidden">
-              {selectedPatient ? (
-                <>
-                  {/* Header do Paciente */}
-                  <div className="bg-gradient-to-br from-white to-blue-50/50 p-8 border-b border-blue-50 flex flex-col md:flex-row justify-between items-center gap-6">
-                    <div className="flex gap-6 items-center w-full">
-                      <div className="w-20 h-20 bg-blue-600 text-white rounded-3xl flex items-center justify-center text-3xl font-black shadow-2xl shadow-blue-200 ring-4 ring-white">
+            {/* ========================================================= */}
+            {/* 2. ÁREA PRINCIPAL */}
+            {/* ========================================================= */}
+            <div className="flex-1 flex flex-col min-h-0">
+              {!selectedPatient ? (
+                /* --- TELA VAZIA (Sem Grid Gigante, Foco na Busca) --- */
+                <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-8 text-center bg-white rounded-3xl shadow-sm border border-slate-200 border-dashed animate-in fade-in duration-500">
+                  <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-4 border-2 border-slate-100 shadow-inner">
+                    <span className="text-4xl opacity-50">{icons.search}</span>
+                  </div>
+                  <h3 className="text-xl font-black text-slate-700 tracking-tight mb-2">
+                    Busque um paciente
+                  </h3>
+                  <p className="text-sm font-medium text-slate-500 max-w-sm leading-relaxed">
+                    Utilize a barra no topo para pesquisar por nome, CPF ou
+                    cartão SUS. Os resultados aparecerão instantaneamente.
+                  </p>
+                </div>
+              ) : (
+                /* --- PERFIL DO PACIENTE (Header Compacto + Tabela Gigante) --- */
+                <div className="flex-1 flex flex-col bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
+                  {/* HEADER COMPACTO E FINO */}
+                  <div className="bg-slate-50/80 p-4 md:p-5 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4 shrink-0 relative">
+                    <div className="flex gap-4 items-center w-full md:w-auto">
+                      <div className="w-14 h-14 bg-indigo-600 text-white rounded-2xl flex items-center justify-center text-2xl font-black shadow-md shrink-0 border-2 border-white">
                         {selectedPatient.name.charAt(0).toUpperCase()}
                       </div>
-                      <div className="min-w-0">
-                        <h2 className="text-3xl font-black text-gray-900 tracking-tight truncate">
+                      <div className="min-w-0 pr-4">
+                        <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight truncate leading-none mb-1.5">
                           {selectedPatient.name}
                         </h2>
-                        <div className="flex flex-wrap gap-3 mt-2">
-                          <span className="bg-white border border-gray-200 text-gray-500 px-3 py-1 rounded-lg text-xs font-bold shadow-sm">
-                            CPF: {selectedPatient.cpf || '--'}
+                        <div className="flex flex-wrap gap-2">
+                          <span className="text-slate-500 text-[11px] font-bold bg-white px-2 py-0.5 border border-slate-200 rounded-md">
+                            CPF: {selectedPatient.cpf || 'Não inf.'}
                           </span>
-                          <span className="bg-white border border-gray-200 text-gray-500 px-3 py-1 rounded-lg text-xs font-bold shadow-sm">
-                            SUS: {selectedPatient.susCard || '--'}
+                          <span className="text-slate-500 text-[11px] font-bold bg-white px-2 py-0.5 border border-slate-200 rounded-md">
+                            SUS: {selectedPatient.susCard || 'Não inf.'}
                           </span>
                         </div>
                       </div>
                     </div>
-                    <div className="flex gap-3 w-full md:w-auto">
-                      <button
-                        onClick={() => handleEditPatient(selectedPatient)}
-                        className="flex-1 md:flex-none px-4 py-2.5 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 text-gray-600 transition-all shadow-sm font-bold text-sm cursor-pointer flex items-center justify-center gap-2"
-                      >
-                        {icons.edit} EDITAR
-                      </button>
-                      {user?.role !== 'profissional' && (
-                        <button
-                          onClick={() =>
-                            setConfirmation({
-                              isOpen: true,
-                              title: 'Excluir Paciente',
-                              message: `Atenção: Todos os dados de ${selectedPatient.name} serão removidos permanentemente.`,
-                              onConfirm: () =>
-                                handleDeletePatient(
-                                  selectedPatient._id || selectedPatient.id
-                                ),
-                              isDestructive: true,
-                              confirmText: 'EXCLUIR AGORA',
-                            })
-                          }
-                          className="flex-1 md:flex-none px-4 py-2.5 bg-white border border-red-100 rounded-xl hover:bg-red-50 text-red-500 transition-all shadow-sm font-bold text-sm cursor-pointer flex items-center justify-center gap-2"
-                        >
-                          {icons.trash}
-                        </button>
-                      )}
-                    </div>
-                  </div>
 
-                  {/* Tabela de Prontuários (Histórico do Paciente) */}
-                  <div className="p-8 flex-grow flex flex-col bg-gray-50/20">
-                    <div className="flex justify-between items-center mb-6">
-                      <div>
-                        <h3 className="font-black text-gray-800 flex items-center gap-2 text-lg">
-                          {icons.history} Prontuário Digital
-                        </h3>
-                        <p className="text-xs text-gray-400 font-medium">
-                          Histórico de solicitações e entregas.
-                        </p>
-                      </div>
+                    {/* BOTÕES DE AÇÃO (Com Novo Registro verde) */}
+                    <div className="flex gap-2 w-full md:w-auto">
                       <button
                         onClick={() =>
                           openRecordModalWithCheck(selectedPatient, null)
                         }
-                        className="bg-emerald-600 text-white px-6 py-3 rounded-2xl text-sm font-black hover:bg-emerald-700 shadow-lg shadow-emerald-100 transition-all active:scale-95 cursor-pointer flex items-center gap-2"
+                        className="flex-1 md:flex-none px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-black text-xs shadow-sm active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
                       >
-                        {icons.plus} NOVA ENTRADA
+                        {icons.plus} NOVO REGISTRO
+                      </button>
+                      <button
+                        onClick={() => handleEditPatient(selectedPatient)}
+                        className="flex-1 md:flex-none px-4 py-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-700 font-bold text-xs active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        {icons.edit}{' '}
+                        <span className="hidden sm:inline">EDITAR</span>
                       </button>
                     </div>
+                  </div>
 
-                    <div className="flex-grow overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-inner shadow-gray-100">
-                      <PatientRecordsTable
-                        records={patientRecords}
-                        medications={medications}
-                        onViewReason={handleViewCancelReason}
-                      />
+                  {/* TABELA DE HISTÓRICO MAXIMIZADA (Scroll Interno) */}
+                  <div className="flex-1 flex flex-col p-4 md:p-6 min-h-0 bg-white">
+                    <h3 className="font-black text-slate-800 flex items-center gap-2 text-base mb-3 shrink-0">
+                      <span className="text-indigo-500">{icons.history}</span>{' '}
+                      Histórico de Movimentações
+                    </h3>
+
+                    <div className="flex-1 overflow-hidden border border-slate-200 rounded-2xl relative shadow-sm">
+                      <div className="absolute inset-0 overflow-y-auto custom-scrollbar bg-slate-50/30">
+                        <table className="min-w-full text-sm text-left">
+                          <thead className="bg-slate-100/50 text-slate-500 font-bold uppercase tracking-wider text-[10px] sticky top-0 z-10 border-b border-slate-200 backdrop-blur-md">
+                            <tr>
+                              <th className="py-3 px-5">
+                                Data da Movimentação
+                              </th>
+                              <th className="py-3 px-5">
+                                Medicamentos / Dosagem
+                              </th>
+                              <th className="py-3 px-5 text-center">Status</th>
+                              <th className="py-3 px-5 text-right">Ações</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 bg-white">
+                            {patientRecords.map((record) => (
+                              <tr
+                                key={record._id || record.id}
+                                className="hover:bg-slate-50/80 transition-colors group"
+                              >
+                                <td className="py-3 px-5 text-slate-600 font-medium">
+                                  {new Date(
+                                    record.entryDate
+                                  ).toLocaleDateString('pt-BR')}
+                                  <span className="block text-[11px] text-slate-400 mt-0.5">
+                                    {new Date(
+                                      record.entryDate
+                                    ).toLocaleTimeString('pt-BR', {
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                    })}
+                                  </span>
+                                </td>
+
+                                <td className="py-3 px-5">
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {Array.isArray(record.medications) ? (
+                                      record.medications.map((m, i) => (
+                                        <span
+                                          key={i}
+                                          className="flex items-center gap-1.5 px-2.5 py-1 bg-white text-slate-700 text-[11px] rounded-lg border border-slate-200 font-medium shadow-sm"
+                                        >
+                                          <span>
+                                            {m.name ||
+                                              getMedicationName(
+                                                m.medicationId,
+                                                medications
+                                              )}
+                                          </span>
+                                          <span className="text-indigo-600 border-l border-slate-200 pl-1.5 font-black">
+                                            {m.quantity} un.{' '}
+                                            {m.dosage ? `(${m.dosage})` : ''}
+                                          </span>
+                                        </span>
+                                      ))
+                                    ) : (
+                                      <span className="text-slate-400 italic text-xs">
+                                        Sem itens
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+
+                                <td className="py-3 px-5 text-center">
+                                  <StatusBadge status={record.status} />
+                                </td>
+
+                                <td className="py-3 px-5 text-right">
+                                  <div className="flex items-center justify-end gap-2">
+                                    {/* BOTÃO DETALHES SEMPRE VISÍVEL */}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setDetalhesMovimentacao(record);
+                                      }}
+                                      className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-600 rounded-lg text-[11px] font-bold transition-all cursor-pointer border border-slate-200 active:scale-95"
+                                    >
+                                      Detalhes
+                                    </button>
+
+                                    {/* ATENDER E CANCELAR (Somente se Pendente) */}
+                                    {record.status === 'Pendente' && (
+                                      <>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setAttendingRecord(record);
+                                          }}
+                                          className="text-white bg-emerald-500 hover:bg-emerald-600 px-3 py-1.5 rounded-lg text-[11px] font-black transition-all cursor-pointer active:scale-95 shadow-sm"
+                                        >
+                                          ATENDER
+                                        </button>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setCancelingRecord(record);
+                                          }}
+                                          className="text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition-all cursor-pointer border border-transparent hover:border-red-100 active:scale-95"
+                                          title="Cancelar"
+                                        >
+                                          {icons.close}
+                                        </button>
+                                      </>
+                                    )}
+
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleEditRecordClick(record);
+                                      }}
+                                      className="text-slate-400 hover:text-indigo-600 p-1.5 rounded-lg hover:bg-indigo-50 transition-all cursor-pointer active:scale-95"
+                                      title="Editar"
+                                    >
+                                      {icons.edit}
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                            {patientRecords.length === 0 && (
+                              <tr>
+                                <td colSpan="4" className="py-16 text-center">
+                                  <div className="text-4xl text-slate-200 mb-3">
+                                    {icons.history}
+                                  </div>
+                                  <p className="text-slate-500 font-bold text-sm">
+                                    Nenhum histórico encontrado.
+                                  </p>
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
-                </>
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full text-gray-300 animate-pulse">
-                  <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mb-6 border-4 border-dashed border-gray-100">
-                    <span className="text-5xl">{icons.user}</span>
-                  </div>
-                  <p className="text-xl font-black uppercase tracking-widest">
-                    Selecione um Paciente
-                  </p>
-                  <p className="text-sm font-medium mt-2">
-                    Para visualizar o histórico completo e realizar
-                    atendimentos.
-                  </p>
                 </div>
               )}
             </div>
+
+            {/* ========================================================= */}
+            {/* MODAL DETALHES DA MOVIMENTAÇÃO (Agora Inteligente p/ Cancelamentos e Fornecedores) */}
+            {/* ========================================================= */}
+            {detalhesMovimentacao && (
+              <div
+                className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 animate-in fade-in"
+                onClick={() => setDetalhesMovimentacao(null)}
+              >
+                <div
+                  className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200 flex flex-col animate-in zoom-in-95 duration-200"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="bg-slate-50 p-5 border-b border-slate-100 flex justify-between items-center">
+                    <h3 className="font-black text-slate-800 text-lg flex items-center gap-3">
+                      <div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl">
+                        {icons.check}
+                      </div>
+                      Ficha da Movimentação
+                    </h3>
+                    <button
+                      onClick={() => setDetalhesMovimentacao(null)}
+                      className="text-slate-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-full transition-colors cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <div className="p-6 space-y-5">
+                    {/* SE FOI CANCELADO, MOSTRA O MOTIVO EM VERMELHO */}
+                    {detalhesMovimentacao.status === 'Cancelado' && (
+                      <div className="bg-red-50 border border-red-100 p-4 rounded-2xl flex items-start gap-3">
+                        <span className="text-red-500 mt-0.5">
+                          {icons.alert}
+                        </span>
+                        <div>
+                          <p className="text-[10px] uppercase font-black text-red-700 tracking-wider">
+                            Motivo do Cancelamento
+                          </p>
+                          <p className="text-sm font-medium text-red-900 italic mt-1">
+                            "
+                            {detalhesMovimentacao.cancelReason ||
+                              'Nenhum motivo detalhado fornecido.'}
+                            "
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                        <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block mb-2">
+                          Status do Pedido
+                        </span>
+                        <StatusBadge status={detalhesMovimentacao.status} />
+                      </div>
+                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                        <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block mb-1">
+                          Data de Criação
+                        </span>
+                        <span className="font-black text-slate-800 text-sm">
+                          {new Date(
+                            detalhesMovimentacao.entryDate ||
+                              detalhesMovimentacao.createdAt
+                          ).toLocaleString('pt-BR', {
+                            dateStyle: 'short',
+                            timeStyle: 'short',
+                          })}
+                        </span>
+                      </div>
+
+                      {/* FORNECEDOR INTELIGENTE */}
+                      <div className="col-span-2 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                        <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block mb-1">
+                          Origem / Fornecedor
+                        </span>
+                        <span className="font-bold text-slate-800 text-sm">
+                          {detalhesMovimentacao.fornecedor ||
+                            detalhesMovimentacao.supplier ||
+                            detalhesMovimentacao.origin ||
+                            'Dispensação Padrão (Estoque Local)'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="text-[11px] uppercase font-black text-slate-400 tracking-wider block mb-3 border-b border-slate-100 pb-2">
+                        Medicamentos Requisitados
+                      </span>
+                      <ul className="space-y-2 max-h-[160px] overflow-y-auto custom-scrollbar pr-2">
+                        {detalhesMovimentacao.medicamentos?.length > 0 ||
+                        detalhesMovimentacao.medications?.length > 0 ? (
+                          (
+                            detalhesMovimentacao.medicamentos ||
+                            detalhesMovimentacao.medications
+                          ).map((med, idx) => (
+                            <li
+                              key={idx}
+                              className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-200 shadow-sm"
+                            >
+                              <span className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                                {med.nome ||
+                                  med.name ||
+                                  getMedicationName(
+                                    med.medicationId,
+                                    medications
+                                  )}
+                                {med.dosage && (
+                                  <span className="text-slate-400 text-xs font-medium ml-1">
+                                    ({med.dosage})
+                                  </span>
+                                )}
+                              </span>
+                              <span className="font-black text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100 text-xs">
+                                {med.quantidade || med.quantity} un.
+                              </span>
+                            </li>
+                          ))
+                        ) : (
+                          <li className="text-center text-slate-400 text-sm font-medium py-4">
+                            Nenhum item encontrado.
+                          </li>
+                        )}
+                      </ul>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-slate-50 border-t border-slate-100">
+                    <button
+                      onClick={() => setDetalhesMovimentacao(null)}
+                      className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-3.5 rounded-xl transition-all cursor-pointer shadow-md active:scale-95 text-sm"
+                    >
+                      FECHAR
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         );
 
