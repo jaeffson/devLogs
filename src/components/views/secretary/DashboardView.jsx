@@ -18,22 +18,18 @@ import {
   FiCalendar,
 } from 'react-icons/fi';
 
-// --- HELPER DE RESOLUÇÃO DE ID (BLINDAGEM SENIOR) ---
+// --- HELPER DE RESOLUÇÃO DE ID (BLINDAGEM SENIOR COM OPTIONAL CHAINING) ---
 const getSafeMedicationName = (medicationId, meds = []) => {
   if (!medicationId) return 'Desconhecido';
 
-  // Extrai o ID caso venha como objeto (populate do MongoDB)
-  const targetId =
-    typeof medicationId === 'object'
-      ? medicationId._id || medicationId.id
-      : medicationId;
+  // Blindagem: Extrai o ID com Optional Chaining (?.) para não quebrar se for null
+  const targetId = medicationId?._id || medicationId?.id || medicationId;
 
   if (!targetId) return 'Desconhecido';
   const targetIdStr = String(targetId);
 
-  // Busca na lista convertendo tudo para String para evitar erro de tipo
   const found = meds.find(
-    (m) => String(m._id) === targetIdStr || String(m.id) === targetIdStr
+    (m) => String(m?._id) === targetIdStr || String(m?.id) === targetIdStr
   );
 
   return found ? found.name : 'Desconhecido';
@@ -285,17 +281,18 @@ export function DashboardView({
     return months.map((label, i) => ({ label, value: data[i] }));
   }, [recordsByYear]);
 
-  // --- CORREÇÃO: TOP MEDICAMENTOS (MAIS SAÍDOS) ---
+  // --- CORREÇÃO: TOP MEDICAMENTOS (MAIS SAÍDOS COM OPTIONAL CHAINING) ---
   const topMedications = useMemo(() => {
     const countMap = {};
     recordsByYear.forEach((rec) => {
       if (rec.medications && Array.isArray(rec.medications)) {
         rec.medications.forEach((item) => {
-          // Extrai o ID limpo para a contagem
+          // Blindagem de ID aqui também
           const medId =
-            typeof item.medicationId === 'object'
-              ? item.medicationId._id || item.medicationId.id
-              : item.medicationId;
+            item?.medicationId?._id ||
+            item?.medicationId?.id ||
+            item?.medicationId;
+
           if (medId) {
             countMap[medId] =
               (countMap[medId] || 0) + (Number(item.quantity) || 1);
@@ -308,7 +305,6 @@ export function DashboardView({
       .slice(0, 5)
       .map(([id, qtd]) => ({
         id,
-        // Usa a função blindada para buscar o nome correto
         name: getSafeMedicationName(id, medications),
         quantity: qtd,
       }));
@@ -483,7 +479,6 @@ export function DashboardView({
         </div>
 
         <div className="xl:col-span-1 space-y-6">
-          {/* SEÇÃO: MAIS SAÍDOS (CORRIGIDA) */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col h-[400px]">
             <h3 className="font-bold text-gray-800 text-lg mb-6 flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-sm">
@@ -528,74 +523,96 @@ export function DashboardView({
             </button>
           </div>
 
-          {/* SEÇÃO: RECENTES (CORRIGIDA) */}
-{/* Seção: Atividade Recente (CORREÇÃO SENIOR) */}
-<div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-[400px] overflow-hidden flex flex-col">
-  <h3 className="font-bold text-gray-800 text-lg mb-4 flex items-center gap-2">
-    <FiClock className="text-gray-400" /> Recentes
-  </h3>
-  <div className="overflow-y-auto custom-scrollbar flex-grow -mx-4 px-4">
-    {records.length > 0 ? (
-      records.slice(0, 8).map((record, index) => {
-        
-        // --- BLINDAGEM DO PACIENTE (Resolve o 'Desconhecido') ---
-        // 1. Extraímos o ID do registo (pode ser string ou objeto populado)
-        const recPatientId = typeof record.patientId === 'object' 
-          ? (record.patientId._id || record.patientId.id) 
-          : record.patientId;
+          {/* Seção: Atividade Recente (BLINDADA COM OPTIONAL CHAINING) */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-[400px] overflow-hidden flex flex-col">
+            <h3 className="font-bold text-gray-800 text-lg mb-4 flex items-center gap-2">
+              <FiClock className="text-gray-400" /> Recentes
+            </h3>
+            <div className="overflow-y-auto custom-scrollbar flex-grow -mx-4 px-4">
+              {records.length > 0 ? (
+                records.slice(0, 8).map((record, index) => {
+                  // --- A MÁGICA ACONTECE AQUI: A BLINDAGEM DO OPTIONAL CHAINING ---
+                  const recPatientId =
+                    record?.patientId?._id ||
+                    record?.patientId?.id ||
+                    record?.patientId;
 
-        // 2. Buscamos o paciente na lista comparando strings limpas
-        const patient = patients.find(p => {
-          const pId = p._id || p.id;
-          return String(pId) === String(recPatientId);
-        });
+                  const patient = patients.find((p) => {
+                    const pId = p?._id || p?.id;
+                    // Só compara se ambos existirem, evitando quebrar a tela
+                    return (
+                      pId &&
+                      recPatientId &&
+                      String(pId) === String(recPatientId)
+                    );
+                  });
 
-        // 3. Nome final com fallback de segurança
-        const patientDisplayName = patient ? patient.name : (record.patientName || 'Paciente Não Identificado');
-        // -------------------------------------------------------
+                  const patientDisplayName = patient
+                    ? patient.name
+                    : record?.patientName || 'Paciente Não Identificado';
+                  // -------------------------------------------------------
 
-        return (
-          <div
-            key={record._id || index}
-            onClick={() => {
-              if (patient) {
-                navigate('/patient-history', { state: { initialPatient: patient } });
-              }
-            }}
-            className="cursor-pointer flex items-center gap-3 p-3 hover:bg-gray-50 rounded-xl transition-all border-b border-gray-50 last:border-0 group"
-          >
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center shadow-sm shrink-0 ${
-              record.status === 'Atendido' ? 'bg-green-100 text-green-600' : 
-              record.status === 'Pendente' ? 'bg-amber-100 text-amber-600' : 'bg-red-100 text-red-600'
-            }`}>
-              {record.status === 'Atendido' ? <FiCheckCircle size={14} /> : 
-               record.status === 'Pendente' ? <FiClock size={14} /> : <FiAlertCircle size={14} />}
-            </div>
-            
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-bold text-gray-800 group-hover:text-indigo-600 transition-colors truncate">
-                {patientDisplayName}
-              </p>
-              <p className="text-[10px] text-gray-500 truncate">
-                {record.medications?.length || 0} itens • {new Date(record.entryDate).toLocaleDateString('pt-BR')}
-              </p>
-            </div>
+                  return (
+                    <div
+                      key={record?._id || index}
+                      onClick={() => {
+                        if (patient) {
+                          navigate('/patient-history', {
+                            state: { initialPatient: patient },
+                          });
+                        }
+                      }}
+                      className="cursor-pointer flex items-center gap-3 p-3 hover:bg-gray-50 rounded-xl transition-all border-b border-gray-50 last:border-0 group"
+                    >
+                      <div
+                        className={`w-8 h-8 rounded-full flex items-center justify-center shadow-sm shrink-0 ${
+                          record.status === 'Atendido'
+                            ? 'bg-green-100 text-green-600'
+                            : record.status === 'Pendente'
+                              ? 'bg-amber-100 text-amber-600'
+                              : 'bg-red-100 text-red-600'
+                        }`}
+                      >
+                        {record.status === 'Atendido' ? (
+                          <FiCheckCircle size={14} />
+                        ) : record.status === 'Pendente' ? (
+                          <FiClock size={14} />
+                        ) : (
+                          <FiAlertCircle size={14} />
+                        )}
+                      </div>
 
-            <div className="text-right shrink-0">
-              {Number(record.totalValue) > 0 && (
-                <p className="text-xs font-mono font-bold text-gray-600">
-                  R$ {Number(record.totalValue).toFixed(0)}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-gray-800 group-hover:text-indigo-600 transition-colors truncate">
+                          {patientDisplayName}
+                        </p>
+                        <p className="text-[10px] text-gray-500 truncate">
+                          {record.medications?.length || 0} itens •{' '}
+                          {record.entryDate
+                            ? new Date(record.entryDate).toLocaleDateString(
+                                'pt-BR'
+                              )
+                            : '--'}
+                        </p>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        {Number(record.totalValue) > 0 && (
+                          <p className="text-xs font-mono font-bold text-gray-600">
+                            R$ {Number(record.totalValue).toFixed(0)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <p className="text-center text-gray-400 py-10 text-sm">
+                  Nenhuma atividade recente.
                 </p>
               )}
             </div>
           </div>
-        );
-      })
-    ) : (
-      <p className="text-center text-gray-400 py-10 text-sm">Nenhuma atividade recente.</p>
-    )}
-  </div>
-</div>
         </div>
       </div>
     </div>

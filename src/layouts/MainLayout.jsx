@@ -204,13 +204,16 @@ export default function MainLayout({
     <div className="flex h-screen bg-[#F8FAFC] dark:bg-slate-950 transition-colors duration-500 font-sans">
       <OfflineAlert />
 
+      {/* ============================================== */}
+      {/* SIDEBAR (Barra Lateral)                          */}
+      {/* ============================================== */}
       <aside
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         className={`fixed inset-y-0 left-0 z-[60] bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transition-all duration-500 ease-in-out shadow-2xl md:shadow-none md:translate-x-0 ${isSidebarOpen ? 'translate-x-0 w-72' : '-translate-x-full md:w-20'} ${!isSidebarCollapsed && 'md:w-72'}`}
       >
         <div className="h-20 flex items-center px-6 border-b border-slate-50 dark:border-slate-800">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-blue-500 flex items-center justify-center text-white shadow-lg shadow-indigo-200">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-blue-500 flex items-center justify-center text-white shadow-lg shadow-indigo-200 shrink-0">
             <Package size={22} />
           </div>
           <span
@@ -231,7 +234,7 @@ export default function MainLayout({
                 className={`flex items-center p-3 rounded-xl transition-all duration-200 group ${isActive ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 shadow-sm ring-1 ring-indigo-100 dark:ring-indigo-900' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
               >
                 <div
-                  className={`${isActive ? 'scale-110' : 'group-hover:scale-110'} transition-transform duration-200`}
+                  className={`shrink-0 ${isActive ? 'scale-110' : 'group-hover:scale-110'} transition-transform duration-200`}
                 >
                   {item.icon}
                 </div>
@@ -246,7 +249,7 @@ export default function MainLayout({
         </nav>
 
         {!isSidebarCollapsed && (
-          <div className="absolute bottom-6 left-6 right-6 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800">
+          <div className="absolute bottom-6 left-6 right-6 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800 animate-in fade-in duration-300">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
               Unidade
             </p>
@@ -260,12 +263,18 @@ export default function MainLayout({
         )}
       </aside>
 
-      <div className="flex-1 flex flex-col min-w-0 md:ml-20 overflow-hidden">
-        <header className="h-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-8 flex justify-between items-center z-40">
+      {/* ============================================== */}
+      {/* ÁREA PRINCIPAL DA TELA (Conteúdo)                */}
+      {/* ============================================== */}
+      {/* MÁGICA DO "PUSH" ACONTECE AQUI: A margem muda de ml-20 para ml-72 suavemente */}
+      <div
+        className={`flex-1 flex flex-col min-w-0 overflow-hidden transition-all duration-500 ease-in-out ${!isSidebarCollapsed ? 'md:ml-72' : 'md:ml-20'}`}
+      >
+        <header className="h-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-8 flex justify-between items-center z-40 shrink-0">
           <div className="flex items-center gap-4">
             <button
               onClick={() => setIsSidebarOpen(true)}
-              className="md:hidden p-2 text-slate-500"
+              className="md:hidden p-2 text-slate-500 cursor-pointer"
             >
               <Menu size={24} />
             </button>
@@ -280,9 +289,7 @@ export default function MainLayout({
           </div>
 
           <div className="flex items-center gap-4 md:gap-6">
-            {/* ========================================================================= */}
-            {/* 🔔 CENTRAL DE NOTIFICAÇÕES INTELIGENTE (FACEBOOK STYLE)                   */}
-            {/* ========================================================================= */}
+            {/* ... Bloco das Notificações Mantido Igual ... */}
             <div className="relative" ref={alertsRef}>
               <button
                 onClick={() => setIsAlertsOpen(!isAlertsOpen)}
@@ -294,7 +301,6 @@ export default function MainLayout({
                       : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-700'
                 }`}
               >
-                {/* O sino treme se houver notificação e o painel estiver fechado */}
                 <Bell
                   size={20}
                   className={
@@ -303,7 +309,6 @@ export default function MainLayout({
                       : ''
                   }
                 />
-
                 {unreadCount > 0 && (
                   <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 ring-2 ring-white dark:ring-slate-900 text-[10px] font-black text-white shadow-sm">
                     {unreadCount}
@@ -311,10 +316,8 @@ export default function MainLayout({
                 )}
               </button>
 
-              {/* PAINEL FLUTUANTE DE ALERTAS */}
               {isAlertsOpen && (
                 <div className="absolute right-0 mt-4 w-80 sm:w-[400px] bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in slide-in-from-top-4 z-50">
-                  {/* Cabeçalho do Painel */}
                   <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
                     <h3 className="font-black text-slate-800 dark:text-white text-sm">
                       Notificações
@@ -323,8 +326,6 @@ export default function MainLayout({
                       {unreadCount} Novas
                     </span>
                   </div>
-
-                  {/* Lista de Alertas */}
                   <div className="max-h-[350px] overflow-y-auto custom-scrollbar">
                     {alerts.length > 0 ? (
                       alerts.map((alert) => (
@@ -332,7 +333,7 @@ export default function MainLayout({
                           key={alert.id}
                           onClick={() => {
                             navigate(alert.actionPath);
-                            setIsAlertsOpen(false); // Fecha o modal ao clicar e ir pra página
+                            setIsAlertsOpen(false);
                           }}
                           className="p-4 border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors group flex gap-4 items-start"
                         >
@@ -370,13 +371,11 @@ export default function MainLayout({
                       </div>
                     )}
                   </div>
-
-                  {/* Rodapé do Painel */}
                   {alerts.length > 0 && (
                     <div className="p-3 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-700 text-center">
                       <button
                         onClick={() => setIsAlertsOpen(false)}
-                        className="text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors uppercase tracking-widest"
+                        className="text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors uppercase tracking-widest cursor-pointer"
                       >
                         Fechar painel
                       </button>
@@ -385,9 +384,8 @@ export default function MainLayout({
                 </div>
               )}
             </div>
-            {/* ========================================================================= */}
 
-            {/* Year Selector - UI Senior (Mantido) */}
+            {/* Year Selector */}
             {(user?.role === 'admin' || user?.role === 'secretario') && (
               <div className="relative hidden sm:block">
                 <select
@@ -410,20 +408,20 @@ export default function MainLayout({
               </div>
             )}
 
-            {/* Profile Dropdown (Mantido e Ajustado) */}
+            {/* Profile Dropdown */}
             <div className="relative" ref={profileRef}>
               <button
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
                 className="flex items-center gap-2 sm:gap-3 p-1.5 sm:pr-4 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer border border-transparent active:scale-95"
               >
-                <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black shadow-lg shadow-indigo-100">
+                <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black shadow-lg shadow-indigo-100 shrink-0">
                   {user?.name?.charAt(0).toUpperCase()}
                 </div>
                 <div className="hidden lg:block text-left">
                   <p className="text-sm font-bold text-slate-800 dark:text-white leading-tight">
                     {formatUserName(user?.name)}
                   </p>
-                  <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase">
+                  <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">
                     {user?.role}
                   </p>
                 </div>
@@ -434,7 +432,7 @@ export default function MainLayout({
               </button>
 
               {isProfileOpen && (
-                <div className="absolute right-0 mt-4 w-56 sm:w-64 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-800 p-2 animate-in fade-in slide-in-from-top-2">
+                <div className="absolute right-0 mt-4 w-56 sm:w-64 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-800 p-2 animate-in fade-in slide-in-from-top-2 z-50">
                   <Link
                     to="/profile"
                     onClick={() => setIsProfileOpen(false)}
@@ -444,7 +442,7 @@ export default function MainLayout({
                   </Link>
                   <button
                     onClick={handleLogoutClick}
-                    className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 text-sm font-bold text-red-600 transition-colors"
+                    className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 text-sm font-bold text-red-600 transition-colors cursor-pointer"
                   >
                     <LogOut size={18} /> Sair do Sistema
                   </button>
@@ -454,8 +452,9 @@ export default function MainLayout({
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-6 md:p-10 custom-scrollbar bg-slate-50/50 dark:bg-slate-950">
-          <div className="max-w-7xl mx-auto h-full">
+        {/* CONTAINER FLUIDO (100% da tela) */}
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 custom-scrollbar bg-slate-50/50 dark:bg-slate-950 relative">
+          <div className="w-full h-full">
             <Outlet
               context={{
                 filterYear,

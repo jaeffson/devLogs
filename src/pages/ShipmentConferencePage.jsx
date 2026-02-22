@@ -14,10 +14,11 @@ import {
   FiAlertCircle,
   FiPlus,
   FiMinus,
-  FiAlertTriangle, // Novo ícone para o alerta
+  FiAlertTriangle,
+  FiCheck,
 } from 'react-icons/fi';
 import { generateShipmentPDF } from '../utils/pdfGenerator';
-import { ConfirmModal } from '../components/common/Modal'; // Importando Modal Moderno
+import { ConfirmModal } from '../components/common/Modal';
 
 export default function ShipmentConferencePage() {
   const [activeTab, setActiveTab] = useState('incoming');
@@ -25,19 +26,17 @@ export default function ShipmentConferencePage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Estados para controle da conferência visual
   const [expandedId, setExpandedId] = useState(null);
   const [checkedItems, setCheckedItems] = useState({});
   const [adjustedQuantities, setAdjustedQuantities] = useState({});
 
-  // --- NOVO: Estado do Modal de Confirmação ---
   const [confirmation, setConfirmation] = useState({
     isOpen: false,
     title: '',
     message: '',
     confirmText: 'Confirmar',
     isDestructive: false,
-    data: null, // Guarda o ID da remessa para usar na função
+    data: null,
   });
 
   useEffect(() => {
@@ -51,10 +50,8 @@ export default function ShipmentConferencePage() {
       const all = res.data || [];
 
       if (activeTab === 'incoming') {
-        // Busca o que o fornecedor já respondeu
         setShipments(all.filter((s) => s.status === 'aguardando_conferencia'));
       } else {
-        // Busca o que já acabou
         setShipments(all.filter((s) => s.status === 'finalizado'));
       }
     } catch (error) {
@@ -68,7 +65,8 @@ export default function ShipmentConferencePage() {
     setCheckedItems((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const handleQuantityChange = (id, currentVal, delta) => {
+  const handleQuantityChange = (id, currentVal, delta, e) => {
+    e.stopPropagation(); // Impede que clicar no botão de quantidade marque/desmarque o item
     const actualVal =
       adjustedQuantities[id] !== undefined
         ? adjustedQuantities[id]
@@ -120,60 +118,49 @@ export default function ShipmentConferencePage() {
     };
   };
 
-  // --- 1. PRIMEIRO PASSO: Verifica e Abre o Modal ---
   const handleVerifyReceive = (ship) => {
     const progress = getProgress(ship);
     const hasPendingItems = progress.checked < progress.total;
 
     if (hasPendingItems) {
-      // CASO DE ALERTA: Faltam itens
       setConfirmation({
         isOpen: true,
         title: 'Conferência Incompleta!',
-        message: `Atenção: Você conferiu apenas ${progress.checked} de ${progress.total} itens. Os itens NÃO marcados serão ignorados e não entrarão no estoque. Deseja finalizar mesmo assim?`,
+        message: `Atenção: Você conferiu apenas ${progress.checked} de ${progress.total} itens. Os itens NÃO marcados serão registrados como faltantes e não entrarão no estoque. Deseja finalizar mesmo assim?`,
         confirmText: 'Sim, Finalizar Parcialmente',
-        isDestructive: true, // Modal Vermelho
+        isDestructive: true,
         data: ship._id,
       });
     } else {
-      // CASO SUCESSO: Tudo conferido
       setConfirmation({
         isOpen: true,
         title: 'Finalizar Entrada',
         message:
           'Todos os itens foram conferidos. Confirmar a entrada no estoque e fechar a remessa?',
-        confirmText: 'Confirmar Entrada',
-        isDestructive: false, // Modal Azul/Normal
+        confirmText: 'Confirmar Entrada Total',
+        isDestructive: false,
         data: ship._id,
       });
     }
   };
 
-  // --- 2. SEGUNDO PASSO: Executa a Ação (Chamado pelo Modal) ---
   const executeReceive = async () => {
     const shipmentId = confirmation.data;
-
-    // O Modal já tem loading interno, mas podemos usar toast também se preferir
-    // Como o ConfirmModal trata promises, retornamos a promise para ele gerenciar o spinner
-
     try {
       await api.post('/shipments/receive', {
         shipmentId,
         receivedQuantities: adjustedQuantities,
       });
 
-      toast.success('Estoque atualizado com sucesso!');
-
-      // Limpa estados
+      toast.success('Estoque atualizado e conferência finalizada!');
       setExpandedId(null);
       setAdjustedQuantities({});
-      setConfirmation({ ...confirmation, isOpen: false }); // Fecha modal
-
-      fetchShipments(); // Atualiza lista
+      setConfirmation({ ...confirmation, isOpen: false });
+      fetchShipments();
     } catch (error) {
       console.error(error);
       toast.error('Erro ao processar entrada. Tente novamente.');
-      throw error; // Lança erro para o modal saber que falhou
+      throw error;
     }
   };
 
@@ -184,49 +171,61 @@ export default function ShipmentConferencePage() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50/50 p-6 font-sans text-gray-800 pb-20 animate-fade-in">
-      <div className="max-w-5xl mx-auto mb-8 flex flex-col md:flex-row justify-between items-end md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 flex items-center gap-3">
-            <div className="bg-blue-600 text-white p-2 rounded-xl shadow-lg">
-              <FiCheckSquare size={24} />
-            </div>
-            Conferência de Carga
-          </h1>
-          <p className="text-gray-500 mt-1 text-sm font-medium">
-            Bipe ou marque os itens recebidos.
-          </p>
-        </div>
-        <div className="relative w-full md:w-72 group">
-          <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
-          <input
-            type="text"
-            placeholder="Buscar remessa..."
-            className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 shadow-sm outline-none transition-all"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-      </div>
+    <div className="min-h-screen bg-slate-50/50 p-4 md:p-8 font-sans text-slate-800 pb-24 animate-in fade-in duration-500">
+      <div className="max-w-6xl mx-auto">
+        {/* HEADER */}
+        <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+          <div>
+            <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3 tracking-tight">
+              <div className="p-2.5 bg-indigo-600 rounded-xl text-white shadow-lg shadow-indigo-200">
+                <FiCheckSquare size={26} />
+              </div>
+              Conferência de Carga
+            </h1>
+            <p className="text-slate-500 mt-2 text-sm font-medium">
+              Realize a bipagem ou marcação dos itens recebidos para dar entrada
+              no estoque.
+            </p>
+          </div>
+          <div className="relative w-full md:w-80 group">
+            <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+            <input
+              type="text"
+              placeholder="Buscar por fornecedor ou código..."
+              className="w-full pl-11 pr-4 py-3.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm outline-none transition-all text-sm font-medium"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+        </header>
 
-      <div className="max-w-5xl mx-auto">
-        <div className="flex gap-4 mb-6 border-b border-gray-200">
+        {/* ABAS */}
+        <div className="flex bg-slate-200/60 p-1.5 rounded-2xl w-fit mb-8 shadow-inner border border-slate-200/50">
           <button
             onClick={() => setActiveTab('incoming')}
-            className={`pb-3 px-4 font-bold text-sm border-b-2 transition-all cursor-pointer flex items-center gap-2 ${activeTab === 'incoming' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+            className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer flex items-center gap-2 ${
+              activeTab === 'incoming'
+                ? 'bg-white text-indigo-700 shadow-sm ring-1 ring-slate-200/50'
+                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
+            }`}
           >
-            <FiPackage /> A Receber (
+            <FiPackage size={16} /> A Receber (
             {activeTab === 'incoming' ? shipments.length : ''})
           </button>
           <button
             onClick={() => setActiveTab('history')}
-            className={`pb-3 px-4 font-bold text-sm border-b-2 transition-all cursor-pointer flex items-center gap-2 ${activeTab === 'history' ? 'border-green-600 text-green-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+            className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer flex items-center gap-2 ${
+              activeTab === 'history'
+                ? 'bg-white text-emerald-700 shadow-sm ring-1 ring-slate-200/50'
+                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
+            }`}
           >
-            <FiCheckCircle /> Histórico
+            <FiCheckCircle size={16} /> Histórico Finalizado
           </button>
         </div>
 
-        <div className="space-y-4">
+        {/* LISTA DE REMESSAS */}
+        <div className="space-y-6">
           {filteredShipments.map((ship) => {
             const { checked, total, percent } = getProgress(ship);
             const isExpanded = expandedId === ship._id;
@@ -235,58 +234,68 @@ export default function ShipmentConferencePage() {
             return (
               <div
                 key={ship._id}
-                className={`bg-white rounded-2xl border transition-all overflow-hidden ${isExpanded ? 'shadow-lg border-blue-200 ring-1 ring-blue-100' : 'shadow-sm border-gray-200 hover:border-blue-300'}`}
+                className={`bg-white rounded-3xl transition-all overflow-hidden ${
+                  isExpanded
+                    ? 'shadow-xl border-indigo-200 ring-1 ring-indigo-100'
+                    : 'shadow-sm border border-slate-200 hover:border-indigo-300 hover:shadow-md'
+                }`}
               >
+                {/* CABEÇALHO DO CARD (Sempre Visível) */}
                 <div
                   onClick={() => setExpandedId(isExpanded ? null : ship._id)}
-                  className="p-5 flex flex-col md:flex-row items-start md:items-center justify-between cursor-pointer bg-white gap-4"
+                  className="p-5 md:p-6 flex flex-col md:flex-row items-start md:items-center justify-between cursor-pointer gap-4"
                 >
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-5">
                     <div
-                      className={`w-14 h-14 rounded-xl flex items-center justify-center text-2xl shrink-0 ${activeTab === 'incoming' ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-600'}`}
+                      className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shrink-0 shadow-inner ${activeTab === 'incoming' ? 'bg-indigo-50 text-indigo-600' : 'bg-emerald-50 text-emerald-600'}`}
                     >
                       <FiTruck />
                     </div>
                     <div>
-                      <h3 className="font-bold text-gray-800 text-lg">
+                      <h3 className="font-black text-slate-800 text-lg md:text-xl tracking-tight mb-1">
                         {ship.supplier}
                       </h3>
-                      <div className="flex flex-wrap gap-3 mt-1 text-xs text-gray-500">
-                        <span className="font-mono bg-gray-100 px-2 py-0.5 rounded border border-gray-200 font-bold">
-                          {ship.code}
+                      <div className="flex flex-wrap gap-2 text-xs font-bold text-slate-500">
+                        <span className="font-mono bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 tracking-wider">
+                          REF: {ship.code}
                         </span>
                         {activeTab === 'history' ? (
-                          <span className="flex items-center gap-1 text-green-700 bg-green-50 px-2 py-0.5 rounded border border-green-100">
-                            <FiCheckCircle size={10} /> Conferido em:{' '}
-                            {new Date(ship.receivedAt).toLocaleString()}
+                          <span className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100">
+                            <FiCheckCircle size={12} /> Finalizado em:{' '}
+                            {new Date(ship.receivedAt).toLocaleDateString(
+                              'pt-BR'
+                            )}
                           </span>
                         ) : (
-                          <span className="flex items-center gap-1">
-                            <FiClock size={10} /> Enviado em:{' '}
-                            {new Date(ship.updatedAt).toLocaleDateString()}
+                          <span className="flex items-center gap-1.5 text-slate-500 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200">
+                            <FiClock size={12} /> Enviado em:{' '}
+                            {new Date(ship.updatedAt).toLocaleDateString(
+                              'pt-BR'
+                            )}
                           </span>
                         )}
                       </div>
                     </div>
                   </div>
+
                   <div className="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end">
                     {activeTab === 'incoming' && (
-                      <div className="text-right flex-1 md:flex-none">
-                        <p className="text-[10px] font-bold uppercase text-gray-400 mb-1">
-                          Conferência
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <div className="w-full md:w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full transition-all duration-300 ${percent < 100 ? 'bg-blue-500' : 'bg-green-500'}`}
-                              style={{ width: `${percent}%` }}
-                            ></div>
-                          </div>
+                      <div className="text-right flex-1 md:flex-none bg-slate-50 p-3 rounded-xl border border-slate-100">
+                        <div className="flex justify-between items-center mb-1.5">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                            Progresso
+                          </p>
                           <span
-                            className={`text-xs font-bold min-w-[30px] text-right ${percent < 100 ? 'text-blue-600' : 'text-green-600'}`}
+                            className={`text-xs font-black ${percent === 100 ? 'text-emerald-600' : 'text-indigo-600'}`}
                           >
-                            {checked}/{total}
+                            {checked} / {total}
                           </span>
+                        </div>
+                        <div className="w-full md:w-32 h-2.5 bg-slate-200 rounded-full overflow-hidden shadow-inner">
+                          <div
+                            className={`h-full transition-all duration-500 rounded-full ${percent === 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+                            style={{ width: `${percent}%` }}
+                          ></div>
                         </div>
                       </div>
                     )}
@@ -296,69 +305,78 @@ export default function ShipmentConferencePage() {
                           e.stopPropagation();
                           generateShipmentPDF(ship, 'conference');
                         }}
-                        className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md active:scale-95"
                       >
-                        <FiPrinter size={16} />{' '}
-                        <span className="hidden sm:inline">Relatório</span>
+                        <FiPrinter size={16} /> Relatório PDF
                       </button>
                     )}
                     <div
-                      className={`transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
+                      className={`p-2 rounded-full transition-all duration-300 ${isExpanded ? 'rotate-180 bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-400'}`}
                     >
-                      <FiChevronDown className="text-gray-400" size={20} />
+                      <FiChevronDown size={20} />
                     </div>
                   </div>
                 </div>
 
+                {/* DETALHES EXPANDIDOS (Área de Conferência) */}
                 {isExpanded && (
-                  <div className="border-t border-gray-100 bg-gray-50/50 p-6 animate-fade-in">
-                    <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div className="border-t border-slate-100 bg-slate-50/50 p-5 md:p-8 animate-in slide-in-from-top-2 duration-300">
+                    <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
                       <div>
-                        <h4 className="text-sm font-bold text-gray-700 uppercase tracking-wide flex items-center gap-2">
-                          <FiPackage /> Detalhamento da Carga
+                        <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
+                          <span className="text-indigo-500">
+                            <FiPackage size={18} />
+                          </span>{' '}
+                          Resumo da Carga
                         </h4>
-                        {ship.observations && (
-                          <p className="text-xs text-gray-500 mt-1 italic max-w-lg">
-                            Obs: "{ship.observations}"
-                          </p>
-                        )}
+                        <p className="text-xs text-slate-500 mt-1.5 font-medium max-w-lg leading-relaxed">
+                          {activeTab === 'incoming'
+                            ? 'Clique na linha do medicamento para confirmar o recebimento. Ajuste a quantidade caso a caixa venha violada ou com número menor.'
+                            : ship.observations
+                              ? `Obs: "${ship.observations}"`
+                              : 'Carga conferida e finalizada com sucesso.'}
+                        </p>
                       </div>
 
-                      {/* BOTÃO FINALIZAR (AGORA SEMPRE ATIVO) */}
+                      {/* BOTÃO FINALIZAR GIGANTE E INTELIGENTE */}
                       {activeTab === 'incoming' && (
                         <button
                           onClick={() => handleVerifyReceive(ship)}
-                          className={`px-6 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition-all shadow-sm cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0 ${
+                          className={`w-full md:w-auto px-6 py-3.5 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer active:scale-95 ${
                             isComplete
-                              ? 'bg-green-600 text-white hover:bg-green-700 hover:shadow-green-200' // Estilo Sucesso
-                              : 'bg-orange-500 text-white hover:bg-orange-600 hover:shadow-orange-200' // Estilo Alerta
+                              ? 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-emerald-200 ring-2 ring-emerald-500 ring-offset-2'
+                              : 'bg-amber-500 text-white hover:bg-amber-600 shadow-amber-200'
                           }`}
                         >
                           {isComplete ? (
-                            <FiCheckCircle size={18} />
+                            <FiCheckCircle size={20} />
                           ) : (
-                            <FiAlertTriangle size={18} />
+                            <FiAlertTriangle size={20} />
                           )}
                           {isComplete
                             ? 'FINALIZAR E DAR BAIXA'
-                            : 'FINALIZAR COM PENDÊNCIAS'}
+                            : 'FINALIZAR COM FALTAS'}
                         </button>
                       )}
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* GRID DE PACIENTES E MEDICAMENTOS */}
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
                       {ship.items.map((patientItem) => (
                         <div
                           key={patientItem._id}
-                          className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm"
+                          className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col"
                         >
-                          <div className="flex items-center gap-2 mb-3 border-b border-gray-100 pb-2">
-                            <div className="w-2 h-2 rounded-full bg-indigo-500"></div>
-                            <span className="font-bold text-gray-700 text-sm">
+                          <div className="flex items-center gap-3 mb-4 border-b border-slate-100 pb-3">
+                            <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-black text-sm">
+                              {patientItem.patientName.charAt(0).toUpperCase()}
+                            </div>
+                            <span className="font-black text-slate-800 text-base tracking-tight">
                               {patientItem.patientName}
                             </span>
                           </div>
-                          <div className="space-y-2">
+
+                          <div className="space-y-3 flex-1">
                             {patientItem.medications.map((med) => {
                               const uniqueId = `${patientItem._id}-${med._id}`;
                               const isChecked = checkedItems[uniqueId];
@@ -376,93 +394,114 @@ export default function ShipmentConferencePage() {
                               return (
                                 <div key={uniqueId}>
                                   {activeTab === 'incoming' ? (
-                                    // MODO CONFERÊNCIA
+                                    /* --- MODO CONFERÊNCIA (ÁREA DE CLIQUE EXPANDIDA) --- */
                                     <div
-                                      className={`flex items-center justify-between p-2 rounded-lg border transition-all select-none ${isMissing ? 'bg-red-50 border-red-100 opacity-70' : isChecked ? 'bg-green-50 border-green-200 ring-1 ring-green-100' : 'bg-gray-50 border-transparent hover:bg-white hover:border-gray-200'}`}
+                                      onClick={() =>
+                                        !isMissing && toggleCheck(uniqueId)
+                                      }
+                                      className={`group flex flex-col sm:flex-row items-start sm:items-center justify-between p-3.5 rounded-xl border-2 transition-all select-none ${
+                                        isMissing
+                                          ? 'bg-red-50 border-red-100 opacity-60 cursor-not-allowed'
+                                          : isChecked
+                                            ? 'bg-emerald-50/50 border-emerald-400 shadow-sm shadow-emerald-100 cursor-pointer'
+                                            : 'bg-slate-50 border-slate-200 hover:border-indigo-300 hover:bg-white hover:shadow-sm cursor-pointer'
+                                      }`}
                                     >
-                                      <div className="flex items-center gap-3">
+                                      <div className="flex items-center gap-3 w-full sm:w-auto mb-3 sm:mb-0">
                                         {!isMissing && (
-                                          <input
-                                            type="checkbox"
-                                            checked={isChecked || false}
-                                            onChange={() =>
-                                              toggleCheck(uniqueId)
-                                            }
-                                            className="w-5 h-5 text-green-600 rounded focus:ring-green-500 cursor-pointer"
-                                          />
+                                          <div
+                                            className={`w-6 h-6 rounded flex items-center justify-center border-2 shrink-0 transition-colors ${isChecked ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-white border-slate-300 group-hover:border-indigo-400'}`}
+                                          >
+                                            {isChecked && (
+                                              <FiCheck
+                                                size={16}
+                                                strokeWidth={3}
+                                              />
+                                            )}
+                                          </div>
                                         )}
                                         <div className="flex flex-col">
                                           <span
-                                            className={`text-sm font-medium ${isMissing ? 'text-red-600 line-through' : 'text-gray-700'}`}
+                                            className={`text-sm font-bold ${isMissing ? 'text-red-700 line-through' : isChecked ? 'text-emerald-900' : 'text-slate-700'}`}
                                           >
                                             {med.name}
                                           </span>
                                           {isMissing && (
-                                            <span className="text-[10px] font-bold text-red-500 flex items-center gap-1">
-                                              <FiAlertCircle /> ITEM EM FALTA
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-red-500 flex items-center gap-1 mt-0.5">
+                                              <FiAlertCircle size={12} /> FALTA
+                                              NA ORIGEM
                                             </span>
                                           )}
                                         </div>
                                       </div>
 
+                                      {/* CONTROLE DE QUANTIDADE */}
                                       {!isMissing && (
-                                        <div className="flex items-center bg-white border border-gray-200 rounded-lg overflow-hidden h-8 shadow-sm">
+                                        <div
+                                          className="flex items-center bg-white border border-slate-200 rounded-lg overflow-hidden h-9 shadow-sm shrink-0 ml-9 sm:ml-0"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
                                           <button
-                                            onClick={() =>
+                                            onClick={(e) =>
                                               handleQuantityChange(
                                                 uniqueId,
                                                 med.quantity,
-                                                -1
+                                                -1,
+                                                e
                                               )
                                             }
-                                            className="px-2 hover:bg-gray-100 text-gray-500 cursor-pointer h-full border-r border-gray-100"
+                                            className="w-10 flex items-center justify-center hover:bg-slate-100 text-slate-500 cursor-pointer h-full border-r border-slate-100 active:bg-slate-200 transition-colors"
                                           >
-                                            <FiMinus size={10} />
+                                            <FiMinus size={14} />
                                           </button>
-                                          <div className="px-2 text-xs font-bold text-gray-700 min-w-[60px] text-center flex flex-col justify-center leading-tight">
+                                          <div className="px-3 text-sm font-black text-slate-800 min-w-[70px] text-center flex flex-col justify-center leading-none">
                                             <span>{displayQty}</span>
-                                            <span className="text-[9px] text-gray-400 uppercase">
+                                            <span className="text-[9px] text-slate-400 uppercase mt-0.5 tracking-wider">
                                               {smartUnit}
                                             </span>
                                           </div>
                                           <button
-                                            onClick={() =>
+                                            onClick={(e) =>
                                               handleQuantityChange(
                                                 uniqueId,
                                                 med.quantity,
-                                                1
+                                                1,
+                                                e
                                               )
                                             }
-                                            className="px-2 hover:bg-gray-100 text-blue-600 cursor-pointer h-full border-l border-gray-100"
+                                            className="w-10 flex items-center justify-center hover:bg-slate-100 text-indigo-600 cursor-pointer h-full border-l border-slate-100 active:bg-slate-200 transition-colors"
                                           >
-                                            <FiPlus size={10} />
+                                            <FiPlus size={14} />
                                           </button>
                                         </div>
                                       )}
                                     </div>
                                   ) : (
-                                    // MODO HISTÓRICO
+                                    /* --- MODO HISTÓRICO (SOMENTE LEITURA) --- */
                                     <div
-                                      className={`flex items-center justify-between p-2 rounded-lg border ${isMissing ? 'bg-red-50 border-red-100' : 'bg-white border-gray-100'}`}
+                                      className={`flex items-center justify-between p-3.5 rounded-xl border ${isMissing ? 'bg-red-50 border-red-100' : 'bg-slate-50 border-slate-100'}`}
                                     >
                                       <div className="flex flex-col">
                                         <span
-                                          className={`text-sm font-medium ${isMissing ? 'text-red-600' : 'text-gray-700'}`}
+                                          className={`text-sm font-bold ${isMissing ? 'text-red-600 line-through' : 'text-slate-700'}`}
                                         >
                                           {med.name}
                                         </span>
                                         {isMissing && (
-                                          <span className="text-[10px] font-bold text-red-500">
-                                            NÃO RECEBIDO (FALTA)
+                                          <span className="text-[10px] font-black uppercase tracking-widest text-red-500 mt-0.5">
+                                            NÃO RECEBIDO
                                           </span>
                                         )}
                                       </div>
                                       {!isMissing && (
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-xs font-mono font-bold text-gray-600 bg-gray-100 px-2 py-1 rounded">
+                                        <div className="flex items-center gap-3">
+                                          <span className="text-xs font-black font-mono text-slate-700 bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-sm">
                                             {displayQty} {smartUnit}
                                           </span>
-                                          <FiCheckCircle className="text-green-500" />
+                                          <FiCheckCircle
+                                            size={18}
+                                            className="text-emerald-500"
+                                          />
                                         </div>
                                       )}
                                     </div>
@@ -479,31 +518,37 @@ export default function ShipmentConferencePage() {
               </div>
             );
           })}
+
+          {/* EMPTY STATE */}
           {filteredShipments.length === 0 && !loading && (
-            <div className="text-center py-16 bg-white rounded-3xl border border-dashed border-gray-200">
-              <div className="bg-gray-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-300">
+            <div className="text-center py-24 bg-white rounded-3xl border-2 border-dashed border-slate-200 shadow-sm flex flex-col items-center justify-center">
+              <div className="bg-slate-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5 border border-slate-100">
                 {activeTab === 'incoming' ? (
-                  <FiBox size={32} />
+                  <FiBox size={36} className="text-slate-300" />
                 ) : (
-                  <FiCheckCircle size={32} />
+                  <FiCheckCircle size={36} className="text-slate-300" />
                 )}
               </div>
-              <h3 className="text-lg font-bold text-gray-600">
-                Nenhum registro encontrado
+              <h3 className="text-xl font-black text-slate-700 tracking-tight">
+                Nenhuma Carga Encontrada
               </h3>
+              <p className="text-sm font-medium text-slate-500 mt-2 max-w-sm">
+                Não há remessas correspondentes à sua busca ou na aba
+                selecionada no momento.
+              </p>
             </div>
           )}
         </div>
       </div>
 
-      {/* --- RENDERIZAÇÃO DO MODAL DE CONFIRMAÇÃO --- */}
+      {/* MODAL DE CONFIRMAÇÃO */}
       {confirmation.isOpen && (
         <ConfirmModal
           title={confirmation.title}
           message={confirmation.message}
           confirmText={confirmation.confirmText}
           isDestructive={confirmation.isDestructive}
-          onConfirm={executeReceive} 
+          onConfirm={executeReceive}
           onClose={() => setConfirmation({ ...confirmation, isOpen: false })}
         />
       )}

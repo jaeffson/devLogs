@@ -213,7 +213,7 @@ export default function LoginPage({ onLogin }) {
             {/* Campo: EMAIL */}
             <div className="space-y-1.5">
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                E-mail Profissional
+                E-mail 
               </label>
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-indigo-600 transition-colors">
