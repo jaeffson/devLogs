@@ -41,7 +41,7 @@ export default function App() {
   const [records, setRecords] = useState([]);
   const [medications, setMedications] = useState([]);
   const [users, setUsers] = useState([]);
-  const [shipments, setShipments] = useState([]); // <--- ADICIONADO: O App agora sabe das remessas!
+  const [shipments, setShipments] = useState([]); 
   const [annualBudget, setAnnualBudget] = useState(5000.0);
   const [activityLog, setActivityLog] = useState([]);
   const [filterYear, setFilterYear] = useState(new Date().getFullYear());
@@ -112,7 +112,6 @@ export default function App() {
   }, [normalizeData]);
 
  
-// BUSCA BLINDADA: Traz o /open e o /history ao mesmo tempo para o Admin ver tudo
   const refetchShipments = useCallback(async () => {
     try {
       // Tenta buscar nas rotas (trata plural e singular automaticamente)
@@ -162,7 +161,7 @@ export default function App() {
       await Promise.all([
         refetchPatients(),
         refetchRecords(),
-        refetchShipments(), // <--- ADICIONADO AQUI
+        refetchShipments(),
         refetchMedications(),
         refetchUsers(),
         refetchBudget(),

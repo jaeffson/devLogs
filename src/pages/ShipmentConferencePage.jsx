@@ -16,6 +16,7 @@ import {
   FiMinus,
   FiAlertTriangle,
   FiCheck,
+  FiMessageSquare, // NOVO ÍCONE ADICIONADO
 } from 'react-icons/fi';
 import { generateShipmentPDF } from '../utils/pdfGenerator';
 import { ConfirmModal } from '../components/common/Modal';
@@ -66,7 +67,7 @@ export default function ShipmentConferencePage() {
   };
 
   const handleQuantityChange = (id, currentVal, delta, e) => {
-    e.stopPropagation(); // Impede que clicar no botão de quantidade marque/desmarque o item
+    e.stopPropagation();
     const actualVal =
       adjustedQuantities[id] !== undefined
         ? adjustedQuantities[id]
@@ -240,7 +241,7 @@ export default function ShipmentConferencePage() {
                     : 'shadow-sm border border-slate-200 hover:border-indigo-300 hover:shadow-md'
                 }`}
               >
-                {/* CABEÇALHO DO CARD (Sempre Visível) */}
+                {/* CABEÇALHO DO CARD */}
                 <div
                   onClick={() => setExpandedId(isExpanded ? null : ship._id)}
                   className="p-5 md:p-6 flex flex-col md:flex-row items-start md:items-center justify-between cursor-pointer gap-4"
@@ -332,9 +333,7 @@ export default function ShipmentConferencePage() {
                         <p className="text-xs text-slate-500 mt-1.5 font-medium max-w-lg leading-relaxed">
                           {activeTab === 'incoming'
                             ? 'Clique na linha do medicamento para confirmar o recebimento. Ajuste a quantidade caso a caixa venha violada ou com número menor.'
-                            : ship.observations
-                              ? `Obs: "${ship.observations}"`
-                              : 'Carga conferida e finalizada com sucesso.'}
+                            : 'Carga conferida e finalizada com sucesso.'}
                         </p>
                       </div>
 
@@ -359,6 +358,23 @@ export default function ShipmentConferencePage() {
                         </button>
                       )}
                     </div>
+
+                    {/* NOVO: QUADRO DE OBSERVAÇÕES / RESPONSÁVEL NA CONFERÊNCIA */}
+                    {ship.observations && (
+                      <div className="mb-6 bg-amber-50 border border-amber-200 p-4 md:p-5 rounded-2xl flex gap-4 items-start shadow-sm w-full">
+                        <div className="bg-amber-100 p-2 rounded-xl text-amber-600 shrink-0">
+                          <FiMessageSquare size={20} />
+                        </div>
+                        <div className="flex-1">
+                          <h5 className="text-xs font-black uppercase tracking-widest text-amber-800 mb-1">
+                            Responsável / Observações
+                          </h5>
+                          <p className="text-sm font-medium text-amber-700 whitespace-pre-wrap leading-relaxed">
+                            {ship.observations}
+                          </p>
+                        </div>
+                      </div>
+                    )}
 
                     {/* GRID DE PACIENTES E MEDICAMENTOS */}
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
@@ -394,7 +410,7 @@ export default function ShipmentConferencePage() {
                               return (
                                 <div key={uniqueId}>
                                   {activeTab === 'incoming' ? (
-                                    /* --- MODO CONFERÊNCIA (ÁREA DE CLIQUE EXPANDIDA) --- */
+                                    /* --- MODO CONFERÊNCIA --- */
                                     <div
                                       onClick={() =>
                                         !isMissing && toggleCheck(uniqueId)
@@ -477,7 +493,7 @@ export default function ShipmentConferencePage() {
                                       )}
                                     </div>
                                   ) : (
-                                    /* --- MODO HISTÓRICO (SOMENTE LEITURA) --- */
+                                    /* --- MODO HISTÓRICO --- */
                                     <div
                                       className={`flex items-center justify-between p-3.5 rounded-xl border ${isMissing ? 'bg-red-50 border-red-100' : 'bg-slate-50 border-slate-100'}`}
                                     >

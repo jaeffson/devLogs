@@ -54,13 +54,13 @@ export default function AdminSettingsPage({
     budget: '',
   });
 
-  // --- ESTADO DO MODAL DE EXCLUSÃO (CORRIGIDO) ---
+  // --- ESTADO DO MODAL DE EXCLUSÃO ---
   const [deleteModal, setDeleteModal] = useState({
     isOpen: false,
     data: null,
     type: null,
   });
-  const [deleteInputConfirmation, setDeleteInputConfirmation] = useState(''); // O texto que você digita
+  const [deleteInputConfirmation, setDeleteInputConfirmation] = useState('');
 
   // --- CARREGAMENTO INICIAL ---
   useEffect(() => {
@@ -80,9 +80,69 @@ export default function AdminSettingsPage({
   };
 
   // ==================================================================================
+  // LÓGICA DE USUÁRIOS
+  // ==================================================================================
+  const handleSaveUser = async (userData) => {
+    try {
+      if (editingUser) {
+        await api.put(`/users/${editingUser._id}`, userData);
+        toast.success('Usuário atualizado com sucesso!');
+        if (addLog)
+          addLog('ATUALIZAR_USUARIO', `Editou o usuário: ${userData.name}`);
+      } else {
+        await api.post('/users', userData);
+        toast.success('Usuário cadastrado com sucesso!');
+        if (addLog) addLog('CRIAR_USUARIO', `Novo usuário: ${userData.name}`);
+      }
+      setIsUserModalOpen(false);
+
+      if (typeof setUsers === 'function') {
+        setUsers();
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Erro ao salvar o usuário.');
+    }
+  };
+
+  // ==================================================================================
+  // NOVA LÓGICA: ATIVAR/DESATIVAR (CORRIGIDA PARA O BANCO DE DADOS REAL)
+  // ==================================================================================
+  const handleToggleUserStatus = async (userToToggle) => {
+    try {
+      // Verifica se o status atual no banco é "active"
+      const isCurrentlyActive = userToToggle.status === 'active';
+
+      // Se está ativo, muda para inactive. Se está pending ou inactive, muda para active.
+      const newStatus = isCurrentlyActive ? 'inactive' : 'active';
+
+      // Envia a palavra certa para o campo "status" em vez de mandar um "active" booleano
+      await api.put(`/users/${userToToggle._id}`, {
+        ...userToToggle,
+        status: newStatus,
+      });
+
+      toast.success(
+        !isCurrentlyActive ? 'Usuário Aprovado/Ativado!' : 'Usuário Bloqueado!',
+        {
+          icon: !isCurrentlyActive ? '✅' : '🔒',
+        }
+      );
+
+      if (addLog)
+        addLog(
+          'ATUALIZAR_USUARIO',
+          `Alterou o status de ${userToToggle.name} para ${newStatus}`
+        );
+
+      if (typeof setUsers === 'function') setUsers(); // Recarrega a tabela
+    } catch (error) {
+      toast.error('Erro ao alterar status do usuário.');
+    }
+  };
+
+  // ==================================================================================
   // LÓGICA DE FORNECEDORES
   // ==================================================================================
-
   const handleOpenDistributorModal = (dist = null) => {
     if (dist) {
       setEditingDistributor(dist);
@@ -90,7 +150,7 @@ export default function AdminSettingsPage({
         name: dist.name,
         cnpj: dist.cnpj || '',
         contact: dist.contact || '',
-        budget: dist.budget || '', // Carrega o orçamento existente
+        budget: dist.budget || '',
       });
     } else {
       setEditingDistributor(null);
@@ -134,18 +194,16 @@ export default function AdminSettingsPage({
   };
 
   // ==================================================================================
-  // LÓGICA DE EXCLUSÃO SEGURA (AGORA FUNCIONA A DIGITAÇÃO)
+  // LÓGICA DE EXCLUSÃO SEGURA
   // ==================================================================================
-
   const openDeleteModal = (data, type) => {
     setDeleteModal({ isOpen: true, data, type });
-    setDeleteInputConfirmation(''); // Reseta o input ao abrir
+    setDeleteInputConfirmation('');
   };
 
   const handleConfirmDelete = async () => {
     const { data, type } = deleteModal;
 
-    // Validação de segurança
     if (deleteInputConfirmation !== data.name) {
       toast.error('O nome digitado não confere.');
       return;
@@ -155,7 +213,7 @@ export default function AdminSettingsPage({
       if (type === 'user') {
         await api.delete(`/users/${data._id}`);
         toast.success('Usuário excluído.');
-        setUsers();
+        if (typeof setUsers === 'function') setUsers();
       } else if (type === 'distributor') {
         await api.delete(`/distributors/${data._id}`);
         toast.success('Fornecedor removido.');
@@ -170,7 +228,6 @@ export default function AdminSettingsPage({
   // ==================================================================================
   // HELPERS UI
   // ==================================================================================
-
   const getLogStyle = (action) => {
     const act = action ? action.toUpperCase() : '';
     if (
@@ -191,7 +248,11 @@ export default function AdminSettingsPage({
         icon: <FiTrash2 />,
         color: 'text-red-600 bg-red-50 border-red-200',
       };
-    if (act.includes('FECHAR') || act.includes('CONCLUIR'))
+    if (
+      act.includes('FECHAR') ||
+      act.includes('CONCLUIR') ||
+      act.includes('RECEB')
+    )
       return {
         icon: <FiCheckCircle />,
         color: 'text-blue-600 bg-blue-50 border-blue-200',
@@ -222,7 +283,6 @@ export default function AdminSettingsPage({
   // ==================================================================================
   // RENDERIZAÇÃO DAS ABAS
   // ==================================================================================
-
   const renderSubTabView = () => {
     switch (activeSubTab) {
       case 'global':
@@ -351,48 +411,73 @@ export default function AdminSettingsPage({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {users.map((u) => (
-                  <tr
-                    key={u._id}
-                    className="hover:bg-blue-50/50 transition-colors group"
-                  >
-                    <td className="p-4">
-                      <div className="font-bold text-gray-800">{u.name}</div>
-                      <div className="text-xs text-gray-500">{u.email}</div>
-                    </td>
-                    <td className="p-4">
-                      <span
-                        className={`px-2 py-1 rounded text-xs font-bold border ${u.role === 'admin' ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-blue-100 text-blue-700 border-blue-200'}`}
-                      >
-                        {u.role === 'admin' ? 'Administrador' : 'Profissional'}
-                      </span>
-                    </td>
-                    <td className="p-4">
-                      <StatusBadge active={u.active} />
-                    </td>
-                    <td className="p-4 text-right">
-                      <div className="flex justify-end gap-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => {
-                            setEditingUser(u);
-                            setIsUserModalOpen(true);
-                          }}
-                          className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg cursor-pointer"
+                {users.map((u) => {
+                  // NOVO: Lê o status corretamente do banco
+                  const isUserActive = u.status === 'active';
+
+                  return (
+                    <tr
+                      key={u._id}
+                      className="hover:bg-blue-50/50 transition-colors group"
+                    >
+                      <td className="p-4">
+                        <div className="font-bold text-gray-800">{u.name}</div>
+                        <div className="text-xs text-gray-500">{u.email}</div>
+                      </td>
+                      <td className="p-4">
+                        <span
+                          className={`px-2 py-1 rounded text-xs font-bold border ${u.role === 'admin' ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-blue-100 text-blue-700 border-blue-200'}`}
                         >
-                          <FiEdit3 />
-                        </button>
-                        {user.id !== u._id && (
+                          {u.role === 'admin'
+                            ? 'Administrador'
+                            : 'Profissional'}
+                        </span>
+                      </td>
+                      <td className="p-4">
+                        {/* Passa a leitura do texto pro componente de crachá */}
+                        <StatusBadge active={isUserActive} status={u.status} />
+                      </td>
+                      <td className="p-4 text-right">
+                        <div className="flex justify-end gap-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                          {user.id !== u._id && (
+                            <button
+                              onClick={() => handleToggleUserStatus(u)}
+                              className={`p-2 rounded-lg cursor-pointer ${isUserActive ? 'text-amber-500 hover:bg-amber-100' : 'text-emerald-600 hover:bg-emerald-100'}`}
+                              title={
+                                isUserActive
+                                  ? 'Bloquear Usuário'
+                                  : 'Aprovar/Ativar Usuário'
+                              }
+                            >
+                              {isUserActive ? <FiX /> : <FiCheckCircle />}
+                            </button>
+                          )}
+
                           <button
-                            onClick={() => openDeleteModal(u, 'user')}
-                            className="p-2 text-red-600 hover:bg-red-100 rounded-lg cursor-pointer"
+                            onClick={() => {
+                              setEditingUser(u);
+                              setIsUserModalOpen(true);
+                            }}
+                            className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg cursor-pointer"
+                            title="Editar Dados"
                           >
-                            <FiTrash2 />
+                            <FiEdit3 />
                           </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+
+                          {user.id !== u._id && (
+                            <button
+                              onClick={() => openDeleteModal(u, 'user')}
+                              className="p-2 text-red-600 hover:bg-red-100 rounded-lg cursor-pointer"
+                              title="Excluir Usuário"
+                            >
+                              <FiTrash2 />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -461,11 +546,15 @@ export default function AdminSettingsPage({
                         </td>
                         <td className="p-4 align-top">
                           <p className="text-sm text-gray-600 leading-relaxed font-medium">
-                            {log.details || 'Sem detalhes.'}
+                            {log.details ||
+                              log.description ||
+                              log.message ||
+                              log.observation ||
+                              'Sem detalhes fornecidos pelo sistema.'}
                           </p>
                           {log.entity && (
-                            <span className="text-[10px] text-gray-400 mt-1 block">
-                              Ref: {log.entity}
+                            <span className="text-[10px] font-mono text-gray-400 bg-gray-100 px-2 py-0.5 rounded mt-2 inline-block">
+                              ID Ref: {log.entity}
                             </span>
                           )}
                         </td>
@@ -478,7 +567,7 @@ export default function AdminSettingsPage({
                         colSpan="4"
                         className="p-12 text-center text-gray-400"
                       >
-                        Nenhum log encontrado.
+                        Nenhum log de atividade registrado no sistema ainda.
                       </td>
                     </tr>
                   )}
@@ -492,10 +581,6 @@ export default function AdminSettingsPage({
         return null;
     }
   };
-
-  // ==================================================================================
-  // RENDER PRINCIPAL
-  // ==================================================================================
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
@@ -550,7 +635,7 @@ export default function AdminSettingsPage({
         />
       )}
 
-      {/* --- MODAL DE FORNECEDOR (COM ORÇAMENTO) --- */}
+      {/* --- MODAL DE FORNECEDOR --- */}
       {isDistributorModalOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center backdrop-blur-sm p-4 animate-fade-in">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
@@ -662,7 +747,7 @@ export default function AdminSettingsPage({
         </div>
       )}
 
-      {/* --- MODAL DE EXCLUSÃO SEGURO (NATIVO DA PÁGINA) --- */}
+      {/* --- MODAL DE EXCLUSÃO SEGURO --- */}
       {deleteModal.isOpen && deleteModal.data && (
         <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center backdrop-blur-sm p-4 animate-scale-in">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden border border-red-100">

@@ -22,7 +22,9 @@ import {
   FiEye,
   FiCopy,
   FiFilter,
-  FiArrowRight
+  FiArrowRight,
+  FiMessageSquare, // NOVO ÍCONE ADICIONADO
+  FiInfo, // NOVO ÍCONE ADICIONADO
 } from 'react-icons/fi';
 
 import AddShipmentItemModal from '../components/common/AddShipmentItemModal';
@@ -206,65 +208,6 @@ export default function ShipmentsPage() {
       fetchOpenShipments(true);
     } catch (e) {
       toast.error('Erro ao excluir item.');
-    }
-  };
-
-  const handleReorderMissingItems = async (oldShipment) => {
-    const missingItems = oldShipment.items
-      .map((item) => {
-        const missingMeds = item.medications.filter(
-          (m) => m.status === 'falta'
-        );
-        if (missingMeds.length === 0) return null;
-        return {
-          patientId: item.patient?._id || item.patient,
-          patientName: item.patientName,
-          medications: missingMeds.map((m) => ({
-            medicationId: m.medicationId?._id || m.medicationId,
-            quantity: m.quantity,
-          })),
-        };
-      })
-      .filter((i) => i !== null);
-
-    if (missingItems.length === 0) {
-      toast.error('Não há itens em falta neste pedido para reprocessar.');
-      return;
-    }
-
-    if (
-      !window.confirm(
-        `Existem itens em falta para ${missingItems.length} pacientes. Deseja criar um NOVO pedido automaticamente para eles?`
-      )
-    )
-      return;
-
-    const toastId = toast.loading('Criando novo pedido de sobra...');
-
-    try {
-      const createRes = await api.post('/shipments/create', {
-        supplier: oldShipment.supplier,
-      });
-      const newShipment = createRes.data;
-
-      for (const item of missingItems) {
-        await api.post('/shipments/add-item', {
-          shipmentId: newShipment._id,
-          patientId: item.patientId,
-          patientName: item.patientName,
-          medications: item.medications,
-        });
-      }
-
-      toast.success('Novo pedido criado com os itens pendentes!', {
-        id: toastId,
-      });
-      setActiveTab('current');
-      setSelectedHistoryShipment(null);
-      fetchOpenShipments(false);
-    } catch (error) {
-      console.error(error);
-      toast.error('Erro ao gerar pedido de sobra.', { id: toastId });
     }
   };
 
@@ -473,6 +416,23 @@ export default function ShipmentsPage() {
               </div>
             </div>
 
+            {/* NOVO: QUADRO DE OBSERVAÇÕES NO RASCUNHO (Aviso de Saldo) */}
+            {selectedShipment.observations && (
+              <div className="mb-6 bg-indigo-50 border border-indigo-100 p-5 rounded-2xl flex gap-4 items-start shadow-sm w-full shrink-0">
+                <div className="bg-indigo-100 p-2 rounded-xl text-indigo-600 shrink-0">
+                  <FiInfo size={20} />
+                </div>
+                <div className="flex-1">
+                  <h5 className="text-xs font-black uppercase tracking-widest text-indigo-800 mb-1">
+                    Aviso do Sistema / Observações
+                  </h5>
+                  <p className="text-sm font-medium text-indigo-700 whitespace-pre-wrap leading-relaxed">
+                    {selectedShipment.observations}
+                  </p>
+                </div>
+              </div>
+            )}
+
             {selectedShipment.items.length === 0 ? (
               <div className="text-center py-16 bg-white rounded-3xl border border-dashed border-slate-300 shadow-sm">
                 <p className="text-slate-700 font-black text-lg mb-2">
@@ -494,7 +454,6 @@ export default function ShipmentsPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-6">
-                {/* LISTAGEM DOS PACIENTES DO RASCUNHO TOTALMENTE RECUPERADA */}
                 {[...selectedShipment.items]
                   .sort((a, b) => a.patientName.localeCompare(b.patientName))
                   .map((item) => (
@@ -631,7 +590,8 @@ export default function ShipmentsPage() {
                                 default:
                                   return (
                                     <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-700 border border-amber-200 shadow-sm">
-                                      <FiClock size={12} /> Aguardando fornecedor
+                                      <FiClock size={12} /> Aguardando
+                                      fornecedor
                                     </span>
                                   );
                               }
@@ -741,6 +701,24 @@ export default function ShipmentsPage() {
                         ? 'Aguardando fornecedor'
                         : 'Respondido'}
                     </span>
+                    {/* NOME DO RESPONSÁVEL DO FORNECEDOR */}
+                    {selectedHistoryShipment.status !==
+                      'aguardando_fornecedor' &&
+                      selectedHistoryShipment.observations &&
+                      selectedHistoryShipment.observations.includes(
+                        'Responsável do Fornecedor:'
+                      ) && (
+                        <span className="text-[10px] font-bold text-slate-500 mt-1 capitalize text-center bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
+                          por{' '}
+                          {
+                            selectedHistoryShipment.observations
+                              .split('Responsável do Fornecedor:')[1]
+                              .split('\n')[0]
+                              .trim()
+                              .split(' ')[0]
+                          }
+                        </span>
+                      )}
                   </div>
                   <div
                     className={`flex-1 h-2 mx-2 rounded-full transition-colors duration-500 ${selectedHistoryShipment.status === 'finalizado' ? 'bg-emerald-400' : 'bg-slate-200'}`}
@@ -815,6 +793,8 @@ export default function ShipmentsPage() {
                 </div>
 
                 <div className="flex flex-wrap gap-3 w-full xl:w-auto">
+                  {/* BOTÃO DE RECOMPRA OCULTADO (O sistema já faz isso automático agora) */}
+                  {/*
                   {hasMissingItems(selectedHistoryShipment) && (
                     <button
                       onClick={() =>
@@ -825,6 +805,8 @@ export default function ShipmentsPage() {
                       <FiRefreshCw /> RECOMPRA
                     </button>
                   )}
+                  */}
+
                   <button
                     onClick={() =>
                       generateShipmentPDF(selectedHistoryShipment, 'vendor')
@@ -843,6 +825,23 @@ export default function ShipmentsPage() {
                   </button>
                 </div>
               </div>
+
+              {/* NOVO: QUADRO DE OBSERVAÇÕES / RESPONSÁVEL NO HISTÓRICO */}
+              {selectedHistoryShipment.observations && (
+                <div className="mb-6 bg-amber-50 border border-amber-200 p-5 rounded-2xl flex gap-4 items-start shadow-sm w-full shrink-0">
+                  <div className="bg-amber-100 p-2 rounded-xl text-amber-600 shrink-0">
+                    <FiMessageSquare size={20} />
+                  </div>
+                  <div className="flex-1">
+                    <h5 className="text-xs font-black uppercase tracking-widest text-amber-800 mb-1">
+                      Responsável / Observações
+                    </h5>
+                    <p className="text-sm font-medium text-amber-700 whitespace-pre-wrap leading-relaxed">
+                      {selectedHistoryShipment.observations}
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* LISTAGEM DOS PACIENTES DO HISTÓRICO TOTALMENTE RECUPERADA */}
               <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4 md:gap-6 w-full pb-4">
