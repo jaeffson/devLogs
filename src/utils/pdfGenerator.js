@@ -170,6 +170,7 @@ export const generateShipmentPDF = async (shipment, type = 'conference') => {
     const bodyData = tableRowsMeta.map(r => r.data);
 
    // 7. GERAR TABELA
+   // 7. GERAR TABELA
     autoTable(doc, {
         startY: tableStartY, 
         head: columns,
@@ -207,11 +208,11 @@ export const generateShipmentPDF = async (shipment, type = 'conference') => {
                 }
 
                 // ==========================================
-                // CORREÇÃO DA ASSINATURA: ESPAÇO EXTRA
-                // Se for a última linha do paciente (ou a única), adicionamos um espaço em baixo (bottom: 8)
+                // ESPAÇO DA ASSINATURA AUMENTADO
+                // Criamos um "buraco" de 15 pontos embaixo da última medicação do paciente
                 // ==========================================
                 if (meta.isLast) {
-                    data.cell.styles.cellPadding = { top: 2, bottom: 8, left: 2, right: 2 };
+                    data.cell.styles.cellPadding = { top: 2, bottom: 15, left: 2, right: 2 };
                 }
 
                 // 3. APARÊNCIA DE CÉLULA MESCLADA
@@ -230,8 +231,11 @@ export const generateShipmentPDF = async (shipment, type = 'conference') => {
             if (data.section === 'body') {
                 const meta = tableRowsMeta[data.row.index];
                 if (type === 'conference' && data.column.index === 3 && meta.isLast) {
-                    // Agora a linha fica 5 pontos acima da borda de baixo, exatamente no meio do "espaço extra" que criamos
-                    const y = data.cell.y + data.cell.height - 5; 
+                    // Subimos a linha para "-8". 
+                    // Como o fundo tem 15 de espaço, a linha fica no meio, 
+                    // deixando 7 pontos de espaço LIVRE ACIMA para a pessoa assinar, 
+                    // e 8 pontos abaixo para não colar no próximo paciente!
+                    const y = data.cell.y + data.cell.height - 8; 
                     doc.setDrawColor(150);
                     doc.line(data.cell.x + 5, y, data.cell.x + data.cell.width - 5, y);
                 }
