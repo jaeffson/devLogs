@@ -167,7 +167,7 @@ export default function PublicShipmentView() {
     return map[u] ? (qty > 1 ? map[u].p : map[u].s) : unit.toUpperCase();
   };
 
-  const handleItemChange = (patientIndex, medIndex, field, value) => {
+ const handleItemChange = (patientIndex, medIndex, field, value) => {
     if (finished) return;
 
     const newShipment = { ...shipment };
@@ -175,9 +175,10 @@ export default function PublicShipmentView() {
     const item = newShipment.items[patientIndex].medications[medIndex];
 
     if (field === 'unitPrice') {
-      let sanitizedValue = value.replace(',', '.');
+      let sanitizedValue = String(value).replace(',', '.');
       const numValue = parseFloat(sanitizedValue);
       item.unitPrice = isNaN(numValue) ? 0 : numValue;
+      item.hasMemoryPrice = false; // MÁGICA: Tira o selo se ele editar o preço!
     } else if (field === 'quantity') {
       let qty = parseInt(value);
       if (qty < 1) qty = 1;
@@ -211,7 +212,7 @@ export default function PublicShipmentView() {
   const handleConfirmOrderClick = () => {
     if (!senderName.trim()) {
       toast.error(
-        'Por favor, informe seu nome como responsável pelo preenchimento.',
+        'Por favor, informe seu nome como responsável ENVIO.',
         {
           icon: '👤',
           style: { borderRadius: '10px', background: '#333', color: '#fff' },
@@ -235,9 +236,8 @@ export default function PublicShipmentView() {
   const closeConfirmation = () =>
     setConfirmation({ ...confirmation, isOpen: false });
 
-const processOrder = async () => {
+  const processOrder = async () => {
     try {
-  
       const formattedObservations = `Responsável do Fornecedor: ${senderName.trim()}${observations ? `\nObservações: ${observations}` : ''}`;
 
       await axios.post(`${API_URL}/shipments/public/${token}/confirm`, {
@@ -379,12 +379,16 @@ const processOrder = async () => {
           <div className="bg-amber-100 p-2 rounded-xl text-amber-600 shrink-0">
             <FiClock size={20} />
           </div>
-        <div>
+          <div>
             <h3 className="font-black text-amber-800 text-base">
               Atenção: Envio Único e Faturamento Parcial
             </h3>
             <p className="text-sm text-amber-700 mt-1 font-medium">
-              Este link é de <strong>uso único e será desativado após o envio</strong>. Caso não tenha o estoque completo, informe apenas o que pode entregar agora ou marque "Falta". O sistema criará o pedido de saldo automaticamente para a Secretaria.
+              Este link é de{' '}
+              <strong>uso único e será desativado após o envio</strong>. Caso
+              não tenha o estoque completo, informe apenas o que pode entregar
+              agora ou marque "Falta". O sistema criará o pedido de saldo
+              automaticamente para a Secretaria.
             </p>
           </div>
         </div>
@@ -395,7 +399,10 @@ const processOrder = async () => {
               Importante: Regras de Preenchimento
             </h3>
             <p className="text-sm text-amber-700 mt-1 font-medium">
-              Confira os valores com atenção! Após clicar em enviar, <strong>este link será encerrado definitivamente</strong>. Qualquer item com entrega parcial ou marcado como "Falta" será transferido para um saldo futuro pela nossa equipe.
+              Confira os valores com atenção! Após clicar em enviar,{' '}
+              <strong>este link será encerrado definitivamente</strong>.
+              Qualquer item com entrega parcial ou marcado como "Falta" será
+              transferido para um saldo futuro pela nossa equipe.
             </p>
           </div>
           <button
@@ -464,7 +471,6 @@ const processOrder = async () => {
                                 </span>
                               </div>
                             )}
-
 
                             {(med.status === 'falta' ||
                               (med.requestedQuantity > med.quantity &&

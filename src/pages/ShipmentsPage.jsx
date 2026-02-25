@@ -670,6 +670,8 @@ export default function ShipmentsPage() {
               {/* LINHA DO TEMPO */}
               <div className="mb-10 max-w-3xl mx-auto px-4 w-full shrink-0 hidden sm:block">
                 <div className="flex items-center w-full">
+                  
+                  {/* PASSO 1: ENVIADO */}
                   <div className="flex flex-col items-center relative z-10">
                     <div className="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center text-sm font-black shadow-md border-2 border-white ring-4 ring-emerald-100">
                       <FiCheck size={20} />
@@ -677,17 +679,24 @@ export default function ShipmentsPage() {
                     <span className="text-xs font-black uppercase tracking-widest text-emerald-600 mt-3">
                       Enviado
                     </span>
+                    {/* DATA E HORA - ENVIADO */}
+                    {selectedHistoryShipment.createdAt && (
+                      <span className="text-[9px] font-bold text-slate-400 mt-1">
+                        {new Date(selectedHistoryShipment.createdAt).toLocaleDateString('pt-BR')} às {new Date(selectedHistoryShipment.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
                   </div>
+                  
                   <div
                     className={`flex-1 h-2 mx-2 rounded-full transition-colors duration-500 ${selectedHistoryShipment.status === 'aguardando_conferencia' || selectedHistoryShipment.status === 'finalizado' ? 'bg-emerald-400' : 'bg-slate-200'}`}
                   ></div>
+                  
+                  {/* PASSO 2: RESPONDIDO / AGUARDANDO */}
                   <div className="flex flex-col items-center relative z-10">
                     <div
                       className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-black shadow-md border-2 border-white transition-all duration-500 ${selectedHistoryShipment.status === 'aguardando_conferencia' || selectedHistoryShipment.status === 'finalizado' ? 'bg-emerald-500 text-white ring-4 ring-emerald-100' : 'bg-slate-200 text-slate-400'}`}
                     >
-                      {selectedHistoryShipment.status ===
-                        'aguardando_conferencia' ||
-                      selectedHistoryShipment.status === 'finalizado' ? (
+                      {selectedHistoryShipment.status === 'aguardando_conferencia' || selectedHistoryShipment.status === 'finalizado' ? (
                         <FiCheck size={20} />
                       ) : (
                         '2'
@@ -696,33 +705,39 @@ export default function ShipmentsPage() {
                     <span
                       className={`text-xs font-black uppercase tracking-widest mt-3 transition-colors duration-500 ${selectedHistoryShipment.status === 'aguardando_conferencia' ? 'text-indigo-600 animate-pulse' : selectedHistoryShipment.status === 'finalizado' ? 'text-emerald-600' : 'text-slate-400'}`}
                     >
-                      {selectedHistoryShipment.status ===
-                      'aguardando_fornecedor'
+                      {selectedHistoryShipment.status === 'aguardando_fornecedor'
                         ? 'Aguardando fornecedor'
                         : 'Respondido'}
                     </span>
-                    {/* NOME DO RESPONSÁVEL DO FORNECEDOR */}
-                    {selectedHistoryShipment.status !==
-                      'aguardando_fornecedor' &&
+                    {/* NOME DO RESPONSÁVEL E DATA - RESPONDIDO */}
+                    {selectedHistoryShipment.status !== 'aguardando_fornecedor' &&
                       selectedHistoryShipment.observations &&
-                      selectedHistoryShipment.observations.includes(
-                        'Responsável do Fornecedor:'
-                      ) && (
-                        <span className="text-[10px] font-bold text-slate-500 mt-1 capitalize text-center bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
-                          por{' '}
-                          {
-                            selectedHistoryShipment.observations
-                              .split('Responsável do Fornecedor:')[1]
-                              .split('\n')[0]
-                              .trim()
-                              .split(' ')[0]
-                          }
-                        </span>
+                      selectedHistoryShipment.observations.includes('Responsável do Fornecedor:') && (
+                        <div className="flex flex-col items-center gap-0.5 mt-1">
+                          <span className="text-[10px] font-bold text-slate-500 capitalize text-center bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
+                            por{' '}
+                            {
+                              selectedHistoryShipment.observations
+                                .split('Responsável do Fornecedor:')[1]
+                                .split('\n')[0]
+                                .trim()
+                                .split(' ')[0]
+                            }
+                          </span>
+                          {selectedHistoryShipment.updatedAt && (
+                            <span className="text-[9px] font-bold text-slate-400">
+                              {new Date(selectedHistoryShipment.updatedAt).toLocaleDateString('pt-BR')} às {new Date(selectedHistoryShipment.updatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          )}
+                        </div>
                       )}
                   </div>
+                  
                   <div
                     className={`flex-1 h-2 mx-2 rounded-full transition-colors duration-500 ${selectedHistoryShipment.status === 'finalizado' ? 'bg-emerald-400' : 'bg-slate-200'}`}
                   ></div>
+                  
+                  {/* PASSO 3: CONFERIDO */}
                   <div className="flex flex-col items-center relative z-10">
                     <div
                       className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-black shadow-md border-2 border-white transition-all duration-500 ${selectedHistoryShipment.status === 'finalizado' ? 'bg-emerald-500 text-white ring-4 ring-emerald-100' : 'bg-slate-200 text-slate-400'}`}
@@ -738,24 +753,29 @@ export default function ShipmentsPage() {
                     >
                       Conferido
                     </span>
+                    {/* NOME DO CONFERENTE E DATA - CONFERIDO */}
                     {selectedHistoryShipment.status === 'finalizado' &&
-                      (selectedHistoryShipment.receivedByName ||
-                        selectedHistoryShipment.receivedBy?.name) && (
-                        <span className="text-[10px] font-bold text-slate-500 mt-1 capitalize text-center bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
-                          por{' '}
-                          {selectedHistoryShipment.receivedByName
-                            ? selectedHistoryShipment.receivedByName.split(
-                                ' '
-                              )[0]
-                            : selectedHistoryShipment.receivedBy.name.split(
-                                ' '
-                              )[0]}
-                        </span>
+                      (selectedHistoryShipment.receivedByName || selectedHistoryShipment.receivedBy?.name) && (
+                        <div className="flex flex-col items-center gap-0.5 mt-1">
+                          <span className="text-[10px] font-bold text-slate-500 capitalize text-center bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
+                            por{' '}
+                            {selectedHistoryShipment.receivedByName
+                              ? selectedHistoryShipment.receivedByName.split(' ')[0]
+                              : selectedHistoryShipment.receivedBy.name.split(' ')[0]}
+                          </span>
+                          {(selectedHistoryShipment.closedAt || selectedHistoryShipment.updatedAt) && (
+                            <span className="text-[9px] font-bold text-slate-400">
+                              {new Date(selectedHistoryShipment.closedAt || selectedHistoryShipment.updatedAt).toLocaleDateString('pt-BR')} às {new Date(selectedHistoryShipment.closedAt || selectedHistoryShipment.updatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          )}
+                        </div>
                       )}
                   </div>
+
                 </div>
               </div>
-
+            
+        
               {/* CABEÇALHO INTERNO COM OS BOTÕES REFORMULADOS */}
               <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-8 gap-6 bg-slate-50 p-5 md:p-6 rounded-2xl border border-slate-100 shrink-0 w-full">
                 <div className="w-full xl:w-auto">

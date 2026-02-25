@@ -12,11 +12,15 @@ import {
   FiCheck,
   FiChevronDown,
   FiFileText,
+  FiClock,
+  FiShield,
+  FiMinus,
 } from 'react-icons/fi';
 import api, { shipmentService } from '../../services/api';
 import PatientForm from '../forms/PatientForm';
 import MedicationForm from '../forms/MedicationForm';
 import { ClipLoader } from 'react-spinners';
+import toast from 'react-hot-toast';
 
 export default function AddShipmentItemModal({
   onClose,
@@ -27,6 +31,7 @@ export default function AddShipmentItemModal({
   // --- ESTADOS DE DADOS ---
   const [patients, setPatients] = useState([]);
   const [medicationsList, setMedicationsList] = useState([]);
+  const [allShipments, setAllShipments] = useState([]);
 
   // --- ESTADOS DO FORMULÁRIO (PACIENTE) ---
   const [selectedPatientId, setSelectedPatientId] = useState('');
@@ -41,7 +46,6 @@ export default function AddShipmentItemModal({
     { name: '', quantity: 1, unit: 'CX', medicationId: null, observation: '' },
   ]);
 
-  // Controle de Sugestões (Autocomplete Manual Medicamentos)
   const [activeSearchIndex, setActiveSearchIndex] = useState(null);
   const [filteredSuggestions, setFilteredSuggestions] = useState([]);
 
@@ -51,20 +55,17 @@ export default function AddShipmentItemModal({
   const [showPatientForm, setShowPatientForm] = useState(false);
   const [showMedForm, setShowMedForm] = useState(false);
 
-  // Refs para fechar listas ao clicar fora
-  const wrapperRef = useRef(null); // Para itens/medicamentos
-  const patientWrapperRef = useRef(null); // Para busca de paciente
+  const searchTimeout = useRef(null);
+  const wrapperRef = useRef(null);
+  const patientWrapperRef = useRef(null);
 
   useEffect(() => {
     loadInitialData();
 
-    // Fecha as listas de sugestões se clicar fora
     function handleClickOutside(event) {
-      // Fechar lista de medicamentos
       if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
         setActiveSearchIndex(null);
       }
-      // Fechar lista de pacientes
       if (
         patientWrapperRef.current &&
         !patientWrapperRef.current.contains(event.target)
@@ -76,7 +77,35 @@ export default function AddShipmentItemModal({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // SE FOR EDIÇÃO, PREENCHE OS CAMPOS
+  const loadInitialData = async () => {
+    try {
+      const [patRes, medRes, openRes, histRes] = await Promise.all([
+        api.get('/patients'),
+        api.get('/medications?limit=5000'),
+        shipmentService.getOpen().catch(() => ({ data: [] })),
+        shipmentService.getHistory().catch(() => ({ data: [] })),
+      ]);
+
+      setPatients(Array.isArray(patRes.data) ? patRes.data : []);
+
+      const medData = medRes.data;
+      if (Array.isArray(medData)) setMedicationsList(medData);
+      else if (medData?.data && Array.isArray(medData.data))
+        setMedicationsList(medData.data);
+      else setMedicationsList([]);
+
+      const open = Array.isArray(openRes.data)
+        ? openRes.data
+        : openRes.data
+          ? [openRes.data]
+          : [];
+      const hist = Array.isArray(histRes.data) ? histRes.data : [];
+      setAllShipments([...open, ...hist]);
+    } catch (e) {
+      console.error('Erro ao carregar dados iniciais:', e);
+    }
+  };
+
   useEffect(() => {
     if (initialData && patients.length > 0) {
       const patId = initialData.patient?._id || initialData.patient;
@@ -102,49 +131,146 @@ export default function AddShipmentItemModal({
     }
   }, [initialData, patients]);
 
-  const loadInitialData = async () => {
-    try {
-      const [patRes, medRes] = await Promise.all([
-        api.get('/patients'),
-        api.get('/medications?limit=5000'),
-      ]);
-
-      setPatients(Array.isArray(patRes.data) ? patRes.data : []);
-
-      const medData = medRes.data;
-      if (Array.isArray(medData)) setMedicationsList(medData);
-      else if (medData?.data && Array.isArray(medData.data))
-        setMedicationsList(medData.data);
-      else setMedicationsList([]);
-    } catch (e) {
-      console.error('Erro ao carregar dados:', e);
+  // --- MOTOR INTELIGENTE DE CHECAGEM DE DUPLICIDADE ---
+  useEffect(() => {
+    if (selectedPatientId && items.length > 0 && allShipments.length > 0) {
+      runSmartDuplicityCheck();
+    } else {
+      setDuplicityWarning(null);
     }
+  }, [selectedPatientId, items, allShipments]);
+
+  const runSmartDuplicityCheck = () => {
+    if (!selectedPatientId || allShipments.length === 0) return;
+
+    let highestWarning = null;
+
+    for (const item of items) {
+      if (!item.name || item.name.trim() === '') continue;
+
+      for (const ship of allShipments) {
+        const patItems = ship.items.filter(
+          (i) =>
+            i.patientId === selectedPatientId ||
+            (i.patient &&
+              (i.patient._id === selectedPatientId ||
+                i.patient === selectedPatientId))
+        );
+
+        for (const patItem of patItems) {
+          if (initialData && patItem._id === initialData._id) continue;
+
+          const hasMed = patItem.medications.find(
+            (m) =>
+              m.name.toLowerCase() === item.name.toLowerCase() ||
+              (m.medicationId &&
+                item.medicationId &&
+                m.medicationId === item.medicationId)
+          );
+
+          if (hasMed) {
+            const diffTime = Math.abs(
+              new Date() - new Date(ship.createdAt || ship.updatedAt)
+            );
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            const isCurrentDraft = ship._id === currentShipmentId;
+
+            if (isCurrentDraft) {
+              highestWarning = {
+                level: 'red',
+                block: true,
+                message: `A medicação "${item.name}" já foi adicionada neste exato pedido (Ref: ${ship.code}).`,
+              };
+              setDuplicityWarning(highestWarning);
+              return;
+            }
+
+            if (
+              ship.status === 'aberta' ||
+              ship.status === 'rascunho' ||
+              !ship.status
+            ) {
+              highestWarning = {
+                level: 'red',
+                block: true,
+                message: `Paciente já possui "${item.name}" em outro rascunho aberto (Ref: ${ship.code}).`,
+              };
+              setDuplicityWarning(highestWarning);
+              return;
+            }
+
+            if (
+              ship.status === 'aguardando_fornecedor' ||
+              ship.status === 'aguardando_conferencia'
+            ) {
+              highestWarning = {
+                level: 'red',
+                block: true,
+                message: `Pendente! "${item.name}" foi solicitado há ${diffDays} dias e está aguardando entrega (Ref: ${ship.code}).`,
+              };
+              setDuplicityWarning(highestWarning);
+              return;
+            }
+
+            if (ship.status === 'finalizado' && diffDays <= 20) {
+              highestWarning = {
+                level: 'red',
+                block: true,
+                message: `Bloqueado: Paciente RECEBEU "${item.name}" há apenas ${diffDays} dias. Retorno muito recente.`,
+              };
+              setDuplicityWarning(highestWarning);
+              return;
+            }
+          }
+        }
+      }
+    }
+    setDuplicityWarning(highestWarning);
   };
 
-  // --- LÓGICA DE BUSCA PACIENTE (IGUAL MEDICAMENTOS) ---
+  const getSmartUnitDisplay = (qty, unit) => {
+    const u = (unit || '').toUpperCase();
+    const q = Number(qty) || 1;
+    if (u === 'CX' || u === 'CAIXA') return q > 1 ? 'CAIXAS' : 'CAIXA';
+    if (u === 'FR' || u === 'FRASCO') return q > 1 ? 'FRASCOS' : 'FRASCO';
+    if (u === 'TB' || u === 'TUBO') return q > 1 ? 'TUBOS' : 'TUBO';
+    if (u === 'UN' || u === 'UND') return q > 1 ? 'UNIDADES' : 'UNIDADE';
+    if (u === 'AMP') return q > 1 ? 'AMPOLAS' : 'AMPOLA';
+    if (u === 'CART' || u === 'CARTELA') return q > 1 ? 'CARTELAS' : 'CARTELA';
+    if (u === 'BISNAGA' || u === 'BIS') return q > 1 ? 'BISNAGAS' : 'BISNAGA';
+    if (u === 'PCT' || u === 'PACOTE') return q > 1 ? 'PACOTES' : 'PACOTE';
+    if (u === 'LATA') return q > 1 ? 'LATAS' : 'LATA';
+    if (u === 'COMP') return q > 1 ? 'COMPRIMIDOS' : 'COMPRIMIDO';
+    return u;
+  };
+
   const handlePatientSearch = (e) => {
     const value = e.target.value;
     setPatientSearchTerm(value);
-    setSelectedPatientId(''); // Limpa seleção ao digitar para forçar escolha
-    setDuplicityWarning(null);
+    setSelectedPatientId(''); 
 
-    if (value.trim().length > 0) {
-      const lower = value.toLowerCase();
-      // Filtra por Nome OU CPF
-      const results = patients
-        .filter((p) => {
-          const nameMatch = p.name.toLowerCase().includes(lower);
-          const cpfMatch = p.cpf && p.cpf.includes(lower);
-          return nameMatch || cpfMatch;
-        })
-        .slice(0, 30); // Limita a 30 resultados
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
 
-      setFilteredPatientSuggestions(results);
-      setShowPatientSuggestions(true);
-    } else {
-      setFilteredPatientSuggestions([]);
-      setShowPatientSuggestions(false);
-    }
+    searchTimeout.current = setTimeout(() => {
+      if (value.trim().length > 0) {
+        const lower = value.toLowerCase();
+        
+        // MÁGICA AQUI: Agora ele filtra por Nome, CPF ou Cartão SUS
+        const results = patients
+          .filter((p) => 
+            p.name.toLowerCase().includes(lower) || 
+            (p.cpf && p.cpf.includes(lower)) ||
+            (p.susCard && p.susCard.includes(lower))
+          )
+          .slice(0, 30);
+
+        setFilteredPatientSuggestions(results);
+        setShowPatientSuggestions(true);
+      } else {
+        setFilteredPatientSuggestions([]);
+        setShowPatientSuggestions(false);
+      }
+    }, 250); 
   };
 
   const selectPatientSuggestion = (patient) => {
@@ -152,32 +278,30 @@ export default function AddShipmentItemModal({
     setPatientSearchTerm(displayName);
     setSelectedPatientId(patient._id);
     setShowPatientSuggestions(false);
-
-    // Opcional: Se já tiver item preenchido, verifica duplicidade agora
-    if (items.length > 0 && items[0].name) {
-      checkDuplicity(items[0].name, patient._id);
-    }
   };
 
-  // --- LÓGICA DE BUSCA MEDICAMENTOS ---
   const handleNameChange = (index, value) => {
     const newItems = [...items];
     newItems[index].name = value;
     newItems[index].medicationId = null;
     setItems(newItems);
 
-    if (value.trim().length > 0) {
-      const lower = value.toLowerCase();
-      const results = medicationsList
-        .filter((m) => m.name.toLowerCase().includes(lower))
-        .slice(0, 30);
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
 
-      setFilteredSuggestions(results);
-      setActiveSearchIndex(index);
-    } else {
-      setFilteredSuggestions([]);
-      setActiveSearchIndex(null);
-    }
+    searchTimeout.current = setTimeout(() => {
+      if (value.trim().length > 0) {
+        const lower = value.toLowerCase();
+        const results = medicationsList
+          .filter((m) => m.name.toLowerCase().includes(lower))
+          .slice(0, 30);
+
+        setFilteredSuggestions(results);
+        setActiveSearchIndex(index);
+      } else {
+        setFilteredSuggestions([]);
+        setActiveSearchIndex(null);
+      }
+    }, 250);
   };
 
   const selectSuggestion = (index, med) => {
@@ -186,50 +310,27 @@ export default function AddShipmentItemModal({
     newItems[index].medicationId = med._id;
     setItems(newItems);
     setActiveSearchIndex(null);
-
-    if (selectedPatientId) checkDuplicity(med.name, selectedPatientId);
-  };
-
-  const checkDuplicity = async (medName, patientId) => {
-    if (!medName || !patientId) return;
-    const med = medicationsList.find((m) => m.name === medName);
-    if (!med) return;
-
-    try {
-      const res = await api.post('/shipments/check-duplicity', {
-        patientId,
-        medicationId: med._id,
-      });
-
-      if (res.data.exists) {
-        setDuplicityWarning(
-          `⚠️ ATENÇÃO: "${medName}" já foi solicitado em ${new Date(res.data.date).toLocaleDateString()} (Remessa: ${res.data.code}).`
-        );
-      } else {
-        setDuplicityWarning(null);
-      }
-    } catch (e) {
-      console.error(e);
-    }
   };
 
   const updateItem = (index, field, value) => {
     const newItems = [...items];
     if (field === 'unit') {
       newItems[index][field] = value.toUpperCase();
+    } else if (field === 'quantity') {
+      newItems[index][field] = Math.max(1, parseInt(value) || 1);
     } else {
       newItems[index][field] = value;
     }
     setItems(newItems);
   };
 
+  // --- SUBMIT DO MODAL PRINCIPAL ---
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!selectedPatientId)
-      return alert('Selecione um paciente válido da lista.');
-
+      return toast.error('Selecione um paciente válido da lista.');
     if (items.some((i) => i.quantity <= 0))
-      return alert('Quantidade deve ser maior que zero.');
+      return toast.error('Quantidade deve ser maior que zero.');
 
     setLoading(true);
     try {
@@ -256,13 +357,12 @@ export default function AddShipmentItemModal({
           },
         ]);
         setDuplicityWarning(null);
-        // Foca no input de paciente após salvar
         document.getElementById('patient-search-input')?.focus();
       }
 
       onSuccess();
     } catch (error) {
-      alert(
+      toast.error(
         'Erro ao salvar: ' + (error.response?.data?.message || error.message)
       );
     } finally {
@@ -270,30 +370,108 @@ export default function AddShipmentItemModal({
     }
   };
 
-  // --- RENDERIZAÇÃO ---
+  // ==================================================================================
+  // INTEGRAÇÃO PERFEITA COM OS FORMULÁRIOS
+  // ==================================================================================
 
   if (showPatientForm) {
     return (
-      <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl relative overflow-hidden animate-scale-in">
-          <div className="bg-gray-100 px-6 py-4 border-b flex justify-between items-center">
-            <h3 className="font-bold text-gray-700 flex items-center gap-2">
-              <FiUserPlus /> Novo Paciente
+      <div className="fixed inset-0 bg-slate-900/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
+        <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-300">
+          <div className="bg-slate-50 px-6 py-5 border-b border-slate-100 flex justify-between items-center">
+            <h3 className="font-black text-slate-800 flex items-center gap-2 text-lg">
+              <div className="bg-indigo-100 text-indigo-600 p-2 rounded-xl">
+                <FiUserPlus />
+              </div>
+              Novo Paciente
             </h3>
             <button
               onClick={() => setShowPatientForm(false)}
-              className="hover:text-red-500 cursor-pointer"
+              className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition cursor-pointer"
             >
               <FiX size={20} />
             </button>
           </div>
+
+        {/* SUBSTITUA O PATIENT FORM POR ESTE */}
           <PatientForm
             onClose={() => setShowPatientForm(false)}
-            onSave={async (data) => {
-              await api.post('/patients', data);
+            onSave={async (dataToSave) => {
+              try {
+                // Tenta salvar o paciente
+                const res = await api.post('/patients', dataToSave);
+                
+                // Se deu certo de primeira, recarrega e auto-seleciona
+                await loadInitialData();
+                const novoPaciente = res.data;
+                setSelectedPatientId(novoPaciente._id);
+                setPatientSearchTerm(`${novoPaciente.name} ${novoPaciente.cpf ? `(${novoPaciente.cpf})` : ''}`);
+                
+                toast.success('Paciente cadastrado e selecionado!');
+              } catch (error) {
+                // SE DEU ERRO 409 (Clique Duplo Fantasma ou Duplicidade Real)
+                if (error.response?.status === 409) {
+                  // Entra no banco silenciosamente e pesca o paciente!
+                  const getRes = await api.get('/patients');
+                  const pacienteExistente = getRes.data.find(p => 
+                    (dataToSave.susCard && p.susCard === dataToSave.susCard) || 
+                    (dataToSave.cpf && p.cpf === dataToSave.cpf) ||
+                    (p.name.toLowerCase() === dataToSave.name.toLowerCase())
+                  );
+
+                  if (pacienteExistente) {
+                    await loadInitialData();
+                    setSelectedPatientId(pacienteExistente._id);
+                    setPatientSearchTerm(`${pacienteExistente.name} ${pacienteExistente.cpf ? `(${pacienteExistente.cpf})` : ''}`);
+                    toast.success('Paciente auto-selecionado com sucesso!');
+                  } else {
+                    throw error; // Se não achar de jeito nenhum, repassa o erro pro form
+                  }
+                } else {
+                  throw error; // Repassa erros 500, etc.
+                }
+              }
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // ==================================================================================
+  // INTEGRAÇÃO PERFEITA COM OS FORMULÁRIOS (IDÊNTICO À PÁGINA DO PROFISSIONAL)
+  // ==================================================================================
+  
+  if (showPatientForm) {
+    return (
+      <div className="fixed inset-0 bg-slate-900/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
+        <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-300">
+          <div className="bg-slate-50 px-6 py-5 border-b border-slate-100 flex justify-between items-center">
+            <h3 className="font-black text-slate-800 flex items-center gap-2 text-lg">
+              <div className="bg-indigo-100 text-indigo-600 p-2 rounded-xl"><FiUserPlus /></div>
+              Novo Paciente
+            </h3>
+            <button onClick={() => setShowPatientForm(false)} className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition cursor-pointer">
+              <FiX size={20} />
+            </button>
+          </div>
+          
+          <PatientForm
+            onClose={() => setShowPatientForm(false)}
+            addToast={(msg, type) => type === 'error' ? toast.error(msg) : toast.success(msg)}
+            onSave={async (dataToSave) => {
+              // Aqui NÃO TEM try/catch. Deixamos o seu PatientForm cuidar do erro naturalmente!
+              const res = await api.post('/patients', dataToSave);
+              
+              // Se o código chegou aqui, o banco retornou 201 (Salvo no banco de verdade!)
               await loadInitialData();
-              setShowPatientForm(false);
-              alert('Paciente cadastrado!');
+              
+              const novoPaciente = res.data;
+              if (novoPaciente) {
+                setSelectedPatientId(novoPaciente._id);
+                setPatientSearchTerm(`${novoPaciente.name} ${novoPaciente.cpf ? `(${novoPaciente.cpf})` : ''}`);
+                toast.success('Paciente salvo no banco e selecionado com sucesso!');
+              }
             }}
           />
         </div>
@@ -303,91 +481,117 @@ export default function AddShipmentItemModal({
 
   if (showMedForm) {
     return (
-      <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl relative overflow-hidden animate-scale-in">
-          <div className="bg-gray-100 px-6 py-4 border-b flex justify-between items-center">
-            <h3 className="font-bold text-gray-700 flex items-center gap-2">
-              <FiActivity /> Nova Medicação
+      <div className="fixed inset-0 bg-slate-900/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
+        <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-300">
+          <div className="bg-slate-50 px-6 py-5 border-b border-slate-100 flex justify-between items-center">
+            <h3 className="font-black text-slate-800 flex items-center gap-2 text-lg">
+              <div className="bg-indigo-100 text-indigo-600 p-2 rounded-xl"><FiActivity /></div>
+              Nova Medicação
             </h3>
-            <button
-              onClick={() => setShowMedForm(false)}
-              className="hover:text-red-500 cursor-pointer"
-            >
+            <button onClick={() => setShowMedForm(false)} className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition cursor-pointer">
               <FiX size={20} />
             </button>
           </div>
           <MedicationForm
             onClose={() => setShowMedForm(false)}
-            onSave={async (data) => {
-              await api.post('/medications', data);
+            addToast={(msg, type) => type === 'error' ? toast.error(msg) : toast.success(msg)}
+            onSave={async (dataToSave) => {
+              await api.post('/medications', dataToSave);
               await loadInitialData();
             }}
-            addToast={(msg) => alert(msg)}
           />
         </div>
       </div>
     );
   }
 
+  // --- MODAL PRINCIPAL ---
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl p-0 relative animate-scale-in flex flex-col max-h-[90vh]">
-        {/* Header */}
-        <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50 rounded-t-xl">
-          <div>
-            <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+    <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center backdrop-blur-sm p-4 animate-in fade-in duration-300">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl p-0 relative animate-in slide-in-from-bottom-4 flex flex-col max-h-[90vh] border border-slate-100">
+        {/* Header Premium */}
+        <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-white rounded-t-3xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-bl-full pointer-events-none"></div>
+          <div className="relative z-10">
+            <h2 className="text-2xl font-black text-slate-800 flex items-center gap-3 tracking-tight">
               {initialData ? (
                 <>
-                  <FiEdit3 className="text-blue-600" /> Editar Receita
+                  <div className="bg-indigo-100 text-indigo-600 p-2 rounded-xl">
+                    <FiEdit3 />
+                  </div>{' '}
+                  Editar Receita
                 </>
               ) : (
                 <>
-                  <FiPlus className="text-blue-600" /> Adicionar à Remessa
+                  <div className="bg-indigo-600 text-white p-2 rounded-xl shadow-lg shadow-indigo-200">
+                    <FiPlus />
+                  </div>{' '}
+                  Adicionar à Remessa
                 </>
               )}
             </h2>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-slate-500 mt-1 font-medium">
               {initialData
-                ? 'Altere os itens abaixo'
-                : 'Busque o paciente e digite os itens'}
+                ? 'Altere os itens abaixo com atenção'
+                : 'Busque o paciente e digite os itens solicitados'}
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-200 rounded-full transition cursor-pointer"
+            className="p-2.5 bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-500 rounded-xl transition cursor-pointer relative z-10 active:scale-95"
           >
             <FiX size={24} />
           </button>
         </div>
 
-        <div className="p-6 overflow-y-auto custom-scrollbar">
+        <div className="p-6 overflow-y-auto custom-scrollbar bg-slate-50/50">
+          {/* AVISO DE DUPLICIDADE INTELIGENTE (BLOQUEIA O SALVAMENTO) */}
           {duplicityWarning && (
-            <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 mb-6 flex items-start gap-3 animate-pulse">
-              <FiAlertTriangle className="text-yellow-600 text-xl mt-0.5" />
+            <div
+              className={`mb-6 p-5 rounded-2xl flex items-start gap-4 shadow-sm border ${duplicityWarning.level === 'red' ? 'bg-red-50 border-red-200 animate-pulse' : 'bg-amber-50 border-amber-200'}`}
+            >
+              <div
+                className={`p-2 rounded-xl shrink-0 ${duplicityWarning.level === 'red' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'}`}
+              >
+                {duplicityWarning.level === 'red' ? (
+                  <FiShield size={24} />
+                ) : (
+                  <FiAlertTriangle size={24} />
+                )}
+              </div>
               <div>
-                <p className="text-sm text-yellow-800 font-bold">
-                  Possível Duplicidade Detectada
+                <p
+                  className={`text-sm font-black uppercase tracking-widest mb-1 ${duplicityWarning.level === 'red' ? 'text-red-800' : 'text-amber-800'}`}
+                >
+                  {duplicityWarning.level === 'red'
+                    ? 'Operação Bloqueada pelo Sistema!'
+                    : 'Aviso de Duplicidade'}
                 </p>
-                <p className="text-sm text-yellow-700">{duplicityWarning}</p>
+                <p
+                  className={`text-sm font-medium ${duplicityWarning.level === 'red' ? 'text-red-700' : 'text-amber-700'}`}
+                >
+                  {duplicityWarning.message}
+                </p>
               </div>
             </div>
           )}
 
           <form onSubmit={handleSubmit} id="shipment-form">
-            {/* SELEÇÃO DE PACIENTE (AGORA COM LÓGICA DE AUTOCOMPLETE) */}
+            {/* CARD DO PACIENTE */}
             <div
-              className="mb-6 bg-blue-50/50 p-4 rounded-lg border border-blue-100 relative"
+              className="mb-6 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative"
               ref={patientWrapperRef}
             >
-              <div className="flex justify-between items-end mb-2">
-                <label className="block text-sm font-bold text-gray-700">
-                  Paciente
+              <div className="flex justify-between items-end mb-3">
+                <label className="block text-xs font-black uppercase tracking-widest text-slate-500">
+                  <span className="text-indigo-500 mr-1">1.</span> Identificação
+                  do Paciente
                 </label>
                 {!initialData && (
                   <button
                     type="button"
                     onClick={() => setShowPatientForm(true)}
-                    className="text-xs text-blue-600 hover:underline flex items-center gap-1 font-medium bg-white px-2 py-1 rounded border border-blue-200 cursor-pointer shadow-sm hover:shadow-md transition-shadow"
+                    className="text-xs text-indigo-600 hover:bg-indigo-50 flex items-center gap-1.5 font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer active:scale-95"
                   >
                     <FiUserPlus /> Novo Cadastro
                   </button>
@@ -395,42 +599,35 @@ export default function AddShipmentItemModal({
               </div>
 
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <FiSearch className="text-gray-400" />
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
+                  <FiSearch size={18} />
                 </div>
-                <input
+               <input
                   id="patient-search-input"
-                  className="w-full pl-10 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium"
-                  placeholder="Digite o nome ou CPF para buscar..."
+                  className="w-full pl-12 pr-4 py-3.5 border-2 border-slate-100 rounded-xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none bg-slate-50 focus:bg-white font-bold text-slate-700 transition-all text-sm"
+                  placeholder="Digite o nome, CPF ou Cartão SUS..."
                   value={patientSearchTerm}
                   onChange={handlePatientSearch}
-                  onFocus={() => {
-                    // Reabre a lista se tiver algo digitado e não estiver selecionado
-                    if (patientSearchTerm && !selectedPatientId)
-                      handlePatientSearch({
-                        target: { value: patientSearchTerm },
-                      });
-                  }}
+                  onFocus={() => { if (patientSearchTerm && !selectedPatientId) handlePatientSearch({ target: { value: patientSearchTerm } }); }}
                   required
                   disabled={!!initialData}
                   autoComplete="off"
                 />
 
-                {/* LISTA DE SUGESTÕES DE PACIENTES */}
                 {showPatientSuggestions &&
                   filteredPatientSuggestions.length > 0 && (
-                    <ul className="absolute top-12 left-0 w-full bg-white border border-gray-300 rounded-md shadow-xl z-50 max-h-60 overflow-y-auto custom-scrollbar animate-fade-in-down">
+                    <ul className="absolute top-[105%] left-0 w-full bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-60 overflow-y-auto custom-scrollbar animate-in slide-in-from-top-2 p-2">
                       {filteredPatientSuggestions.map((p) => (
                         <li
                           key={p._id}
                           onClick={() => selectPatientSuggestion(p)}
-                          className="px-4 py-3 hover:bg-blue-50 cursor-pointer text-sm text-gray-700 border-b border-gray-100 last:border-0 flex justify-between items-center"
+                          className="px-4 py-3 hover:bg-indigo-50 rounded-lg cursor-pointer text-sm transition-colors border-b border-slate-50 last:border-0 flex justify-between items-center group"
                         >
-                          <span className="font-bold text-gray-800">
+                          <span className="font-bold text-slate-700 group-hover:text-indigo-700">
                             {p.name}
                           </span>
                           {p.cpf && (
-                            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                            <span className="text-[10px] font-mono text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200">
                               {p.cpf}
                             </span>
                           )}
@@ -441,168 +638,217 @@ export default function AddShipmentItemModal({
               </div>
 
               {selectedPatientId && (
-                <div className="text-xs text-green-600 mt-1 flex items-center gap-1 font-bold animate-pulse">
-                  <FiCheck size={12} /> Paciente identificado
+                <div className="absolute top-1/2 right-4 -translate-y-1/2 flex items-center gap-1.5 bg-emerald-100 text-emerald-700 px-3 py-1 rounded-lg text-xs font-black tracking-wide border border-emerald-200 shadow-sm animate-in zoom-in">
+                  <FiCheck size={14} /> Selecionado
                 </div>
               )}
             </div>
 
-            {/* LISTA DE MEDICAMENTOS */}
-            <div className="space-y-3" ref={wrapperRef}>
-              <div className="flex justify-between items-center mb-1 px-1">
-                <label className="block text-sm font-bold text-gray-700">
-                  Medicamentos Prescritos
+            {/* CARD DOS MEDICAMENTOS */}
+            <div
+              className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm"
+              ref={wrapperRef}
+            >
+              <div className="flex justify-between items-center mb-5 pb-3 border-b border-slate-100">
+                <label className="block text-xs font-black uppercase tracking-widest text-slate-500">
+                  <span className="text-indigo-500 mr-1">2.</span> Lista de
+                  Medicamentos
                 </label>
                 <button
                   type="button"
                   onClick={() => setShowMedForm(true)}
-                  className="text-sm text-blue-600 hover:underline flex items-center gap-1 font-medium cursor-pointer"
+                  className="text-xs text-indigo-600 hover:bg-indigo-50 flex items-center gap-1.5 font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer active:scale-95"
                 >
-                  <FiActivity /> Não achou? Cadastrar
+                  <FiActivity /> Cadastrar Novo
                 </button>
               </div>
 
-              {/* HEADER DA TABELA */}
-              <div className="grid grid-cols-[1.5fr_80px_100px_40px] gap-2 px-2 text-xs text-gray-500 font-semibold mb-1">
-                <span>Nome / Observação</span>
-                <span className="text-center">Qtd</span>
-                <span>Unidade</span>
-                <span></span>
-              </div>
-
-              {items.map((item, index) => (
-                <div
-                  key={index}
-                  className="grid grid-cols-[1.5fr_80px_100px_40px] gap-2 items-start bg-gray-50 p-2 rounded-lg border border-gray-200 transition-colors hover:border-blue-300 group"
-                >
-                  {/* COLUNA 1: NOME + OBSERVAÇÃO */}
-                  <div className="flex flex-col gap-1 relative">
-                    <input
-                      placeholder="DIGITE O NOME..."
-                      className="w-full p-2.5 border border-gray-300 rounded-md text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none uppercase font-bold text-gray-800 placeholder-gray-400"
-                      value={item.name}
-                      onChange={(e) => handleNameChange(index, e.target.value)}
-                      onFocus={() => handleNameChange(index, item.name)}
-                      required
-                      autoComplete="off"
-                    />
-
-                    {/* LISTA DE SUGESTÕES DE MEDICAMENTOS */}
-                    {activeSearchIndex === index &&
-                      filteredSuggestions.length > 0 && (
-                        <ul className="absolute top-10 left-0 w-full bg-white border border-gray-300 rounded-md shadow-xl z-50 max-h-48 overflow-y-auto custom-scrollbar animate-fade-in-down">
-                          {filteredSuggestions.map((med) => (
-                            <li
-                              key={med._id}
-                              onClick={() => selectSuggestion(index, med)}
-                              className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm text-gray-700 border-b border-gray-100 last:border-0 font-medium"
-                            >
-                              {med.name}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none text-gray-400">
-                        <FiFileText size={12} />
+              <div className="space-y-4">
+                {items.map((item, index) => (
+                  <div
+                    key={index}
+                    className="grid grid-cols-1 md:grid-cols-[1fr_120px_140px_50px] gap-4 items-start bg-slate-50/80 p-4 rounded-xl border border-slate-100 relative group transition-all hover:border-indigo-200 hover:shadow-md"
+                  >
+                    {/* NOME + OBS */}
+                    <div className="flex flex-col gap-2 relative">
+                      <div className="relative">
+                        <span className="absolute left-3 top-3.5 text-slate-400">
+                          <FiSearch size={16} />
+                        </span>
+                        <input
+                          placeholder="BUSCAR MEDICAMENTO..."
+                          className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none uppercase font-black text-slate-800 placeholder-slate-400 bg-white shadow-sm transition-all"
+                          value={item.name}
+                          onChange={(e) =>
+                            handleNameChange(index, e.target.value)
+                          }
+                          onFocus={() => handleNameChange(index, item.name)}
+                          required
+                          autoComplete="off"
+                        />
                       </div>
-                      <input
-                        placeholder="Obs (ex: Original, Genérico...)"
-                        className="w-full pl-7 p-1.5 border border-gray-300 rounded-md text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none bg-white/50 text-gray-600"
-                        value={item.observation}
-                        onChange={(e) =>
-                          updateItem(index, 'observation', e.target.value)
-                        }
-                      />
+
+                      {activeSearchIndex === index &&
+                        filteredSuggestions.length > 0 && (
+                          <ul className="absolute top-[3.5rem] left-0 w-full bg-white border border-slate-200 rounded-xl shadow-2xl z-50 max-h-48 overflow-y-auto custom-scrollbar animate-in slide-in-from-top-2 p-2">
+                            {filteredSuggestions.map((med) => (
+                              <li
+                                key={med._id}
+                                onClick={() => selectSuggestion(index, med)}
+                                className="px-3 py-2.5 hover:bg-indigo-50 rounded-lg cursor-pointer text-sm text-slate-700 font-bold transition-colors"
+                              >
+                                {med.name}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-indigo-400">
+                          <FiFileText size={14} />
+                        </div>
+                        <input
+                          placeholder="Observação extra (Ex: Genérico, Posologia...)"
+                          className="w-full pl-9 p-2.5 border border-slate-200 rounded-xl text-xs focus:border-indigo-500 outline-none bg-white text-slate-600 transition-all shadow-sm"
+                          value={item.observation}
+                          onChange={(e) =>
+                            updateItem(index, 'observation', e.target.value)
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    {/* QUANTIDADE COM CONTROLE + E - */}
+                    <div className="flex flex-col h-[46px]">
+                      <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden h-full shadow-sm">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateItem(index, 'quantity', item.quantity - 1)
+                          }
+                          className="w-10 flex items-center justify-center hover:bg-slate-100 text-slate-500 cursor-pointer h-full border-r border-slate-100 active:bg-slate-200 transition-colors"
+                        >
+                          <FiMinus size={14} />
+                        </button>
+                        <input
+                          type="number"
+                          min="1"
+                          className="w-full h-full text-center font-black text-slate-800 text-sm outline-none bg-transparent"
+                          value={item.quantity}
+                          onChange={(e) =>
+                            updateItem(index, 'quantity', e.target.value)
+                          }
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateItem(index, 'quantity', item.quantity + 1)
+                          }
+                          className="w-10 flex items-center justify-center hover:bg-slate-100 text-indigo-600 cursor-pointer h-full border-l border-slate-100 active:bg-slate-200 transition-colors"
+                        >
+                          <FiPlus size={14} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* UNIDADE INTELIGENTE */}
+                    <div className="flex flex-col">
+                      <div className="relative h-[46px]">
+                        <input
+                          list="units-options"
+                          className="w-full h-full pl-4 pr-8 border border-slate-200 rounded-xl text-sm focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none uppercase font-black text-slate-700 bg-white shadow-sm transition-all text-center"
+                          placeholder="UN"
+                          value={item.unit}
+                          onChange={(e) =>
+                            updateItem(index, 'unit', e.target.value)
+                          }
+                        />
+                        <FiChevronDown
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                          size={16}
+                        />
+                      </div>
+                      {item.unit && (
+                        <span className="text-[10px] text-center mt-1.5 font-black text-indigo-500 uppercase tracking-widest bg-indigo-50 py-0.5 rounded-md border border-indigo-100">
+                          {item.quantity}{' '}
+                          {getSmartUnitDisplay(item.quantity, item.unit)}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* EXCLUIR LINHA */}
+                    <div className="flex items-start h-full pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (items.length > 1) {
+                            const newItems = items.filter(
+                              (_, i) => i !== index
+                            );
+                            setItems(newItems);
+                          }
+                        }}
+                        className={`w-full h-[42px] rounded-xl flex items-center justify-center transition-all cursor-pointer ${items.length === 1 ? 'bg-slate-100 text-slate-300 cursor-not-allowed' : 'bg-white border border-slate-200 text-slate-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 shadow-sm active:scale-95'}`}
+                        disabled={items.length === 1}
+                        title="Remover medicamento"
+                      >
+                        <FiTrash2 size={18} />
+                      </button>
                     </div>
                   </div>
+                ))}
+              </div>
 
-                  {/* COLUNA 2: QUANTIDADE */}
-                  <div>
-                    <input
-                      type="number"
-                      min="1"
-                      className="w-full p-2.5 border border-gray-300 rounded-md text-sm text-center font-mono focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none h-[42px]"
-                      value={item.quantity}
-                      onChange={(e) =>
-                        updateItem(index, 'quantity', e.target.value)
-                      }
-                      required
-                    />
-                  </div>
-
-                  {/* COLUNA 3: UNIDADE */}
-                  <div className="relative">
-                    <input
-                      list="units-options"
-                      className="w-full p-2.5 border border-gray-300 rounded-md text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none uppercase text-center h-[42px]"
-                      placeholder="UN"
-                      value={item.unit}
-                      onChange={(e) =>
-                        updateItem(index, 'unit', e.target.value)
-                      }
-                    />
-                    <FiChevronDown
-                      className="absolute right-2 top-3 text-gray-400 pointer-events-none"
-                      size={12}
-                    />
-                  </div>
-
-                  {/* COLUNA 4: BOTÃO EXCLUIR */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (items.length > 1) {
-                        const newItems = items.filter((_, i) => i !== index);
-                        setItems(newItems);
-                      }
-                    }}
-                    className="text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors cursor-pointer flex justify-center items-center h-[42px] w-full border border-transparent hover:border-red-100"
-                    disabled={items.length === 1}
-                    title="Remover linha"
-                  >
-                    <FiTrash2 size={18} />
-                  </button>
-                </div>
-              ))}
+              <button
+                type="button"
+                onClick={() =>
+                  setItems([
+                    ...items,
+                    { name: '', quantity: 1, unit: 'CX', observation: '' },
+                  ])
+                }
+                className="mt-5 w-full bg-slate-50 border-2 border-dashed border-slate-200 text-indigo-600 font-bold text-sm flex items-center justify-center gap-2 hover:bg-indigo-50 hover:border-indigo-200 py-3.5 rounded-xl transition-all cursor-pointer active:scale-95"
+              >
+                <FiPlus size={18} /> Adicionar outro medicamento nesta receita
+              </button>
             </div>
-
-            <button
-              type="button"
-              onClick={() =>
-                setItems([
-                  ...items,
-                  { name: '', quantity: 1, unit: 'CX', observation: '' },
-                ])
-              }
-              className="mt-4 text-blue-600 font-bold text-sm flex items-center gap-2 hover:bg-blue-50 px-3 py-2 rounded-lg transition self-start border border-dashed border-blue-200 w-full justify-center cursor-pointer"
-            >
-              <FiPlus /> Adicionar outro medicamento
-            </button>
           </form>
         </div>
 
-        {/* Footer Actions */}
-        <div className="px-6 py-4 border-t bg-gray-50 rounded-b-xl flex justify-end gap-3">
+        {/* Footer Buttons (BOTÃO SALVAR DESATIVA E FICA VERMELHO SE HOUVER DUPLICIDADE) */}
+        <div className="px-6 py-5 border-t border-slate-100 bg-white rounded-b-3xl flex justify-end gap-3 shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2.5 text-gray-700 bg-white border border-gray-300 hover:bg-gray-100 rounded-lg font-medium transition cursor-pointer"
+            className="px-6 py-3.5 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold transition-colors cursor-pointer active:scale-95 text-sm"
           >
             Cancelar
           </button>
           <button
             type="submit"
             form="shipment-form"
-            disabled={loading}
-            className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 shadow-lg shadow-blue-200 disabled:opacity-50 flex items-center gap-2 min-w-[140px] justify-center cursor-pointer"
+            disabled={loading || (duplicityWarning && duplicityWarning.block)}
+            className={`px-8 py-3.5 rounded-xl font-black shadow-xl flex items-center gap-2 min-w-[160px] justify-center transition-all text-sm ${
+              duplicityWarning && duplicityWarning.block
+                ? 'bg-red-100 text-red-500 shadow-none cursor-not-allowed border border-red-200'
+                : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200 cursor-pointer active:scale-95'
+            }`}
           >
             {loading ? (
               <ClipLoader size={20} color="#fff" />
             ) : (
               <>
-                <FiSave /> {initialData ? 'Atualizar' : 'Salvar'}
+                {duplicityWarning && duplicityWarning.block ? (
+                  <FiShield size={18} />
+                ) : (
+                  <FiSave size={18} />
+                )}
+                {duplicityWarning && duplicityWarning.block
+                  ? 'Bloqueado por Duplicidade'
+                  : initialData
+                    ? 'Atualizar Pedido'
+                    : 'Salvar no Rascunho'}
               </>
             )}
           </button>
@@ -611,9 +857,10 @@ export default function AddShipmentItemModal({
         <datalist id="units-options">
           <option value="CX">Caixa</option>
           <option value="FR">Frasco</option>
+          <option value="TB">Tubo</option>
           <option value="UN">Unidade</option>
           <option value="CART">Cartela</option>
-          <option value="BISNAGA">Bisnaga</option>
+          <option value="BIS">Bisnaga</option>
           <option value="PCT">Pacote</option>
           <option value="LATA">Lata</option>
           <option value="AMP">Ampola</option>

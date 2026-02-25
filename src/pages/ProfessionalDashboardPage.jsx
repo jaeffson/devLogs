@@ -528,22 +528,32 @@ export default function ProfessionalDashboardPage({
       return acc;
     }, {});
 
-    return records.map((r) => {
-      let pId = r.patientId;
-      if (typeof pId === 'object') pId = pId._id;
-      let pName = patientMap[pId];
-      if (!pName) {
-        if (r.patientName) pName = r.patientName;
-        else if (typeof r.patientId === 'object' && r.patientId.name)
-          pName = r.patientId.name;
-        else pName = 'Desconhecido';
+return records.map((r) => {
+    let pId = r.patientId;
+    
+   
+    if (pId && typeof pId === 'object') {
+      pId = pId._id;
+    }
+    
+    let pName = patientMap[pId];
+    
+    if (!pName) {
+      if (r.patientName) {
+        pName = r.patientName;
+      } else if (r.patientId && typeof r.patientId === 'object' && r.patientId.name) {
+           pName = r.patientId.name;
+      } else {
+        pName = 'Desconhecido';
       }
-      return {
-        ...r,
-        patientName: pName,
-      };
-    });
-  }, [records, patients]);
+    }
+    
+    return {
+      ...r,
+      patientName: pName,
+    };
+  });
+}, [records, patients]);
 
   const filteredRecords = useMemo(() => {
     let result = recordsWithPatientNames.sort(
