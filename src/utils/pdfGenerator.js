@@ -6,7 +6,7 @@ export const generateShipmentPDF = async (shipment, type = 'conference') => {
   try {
     if (!shipment) return;
 
-    //1. CONFIGURAÇÃO DO MODO (Retrato ou Paisagem)
+    // 1. CONFIGURAÇÃO DO MODO (Retrato ou Paisagem em MILÍMETROS)
     const orientation = type === 'conference' ? 'l' : 'p';
     const doc = new jsPDF(orientation, 'mm', 'a4');
     
@@ -48,7 +48,6 @@ export const generateShipmentPDF = async (shipment, type = 'conference') => {
 
     doc.setFontSize(9);
     
-    // LINHA 1: FORNECEDOR E DATA DO PEDIDO
     doc.setTextColor(100);
     doc.text("FORNECEDOR:", 18, 52);
     doc.setFont('helvetica', 'bold');
@@ -66,7 +65,6 @@ export const generateShipmentPDF = async (shipment, type = 'conference') => {
     doc.setTextColor(0);
     doc.text(dataFechamento, dateX, 57);
 
-    // LINHA 2: CÓDIGO 
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100);
     doc.text("CÓDIGO:", 18, 64);
@@ -82,7 +80,6 @@ export const generateShipmentPDF = async (shipment, type = 'conference') => {
       doc.addImage(qrCodeDataUrl, 'PNG', qrX, 42, 30, 30);
     }
 
-    // INJEÇÃO DINÂMICA DE OBSERVAÇÕES E NOME DO RESPONSÁVEL
     let tableStartY = 80; 
 
     if (shipment.observations) {
@@ -99,17 +96,17 @@ export const generateShipmentPDF = async (shipment, type = 'conference') => {
         tableStartY = 82 + (splitObs.length * 4) + 2;
     }
 
-    // 5. PREPARAR LINHAS DA TABELA (NOVA LÓGICA COMPACTA E OTIMIZADA)
+    // 5. PREPARAR LINHAS DA TABELA
     const sortedItems = [...shipment.items].sort((a, b) => 
         a.patientName.localeCompare(b.patientName)
     );
 
-    const tableRowsMeta = []; // Armazena os dados e os metadados de layout
+    const tableRowsMeta = []; 
     let isAlternate = false;
 
     sortedItems.forEach((item) => {
         isAlternate = !isAlternate; 
-        const medsCount = item.medications.length;
+        const medsCount = item.medications.length; 
         
         item.medications.forEach((m, idx) => {
             const isFirst = idx === 0;
@@ -122,31 +119,22 @@ export const generateShipmentPDF = async (shipment, type = 'conference') => {
 
             let rowData = [];
             if (type === 'vendor') {
-                rowData = [
-                    isFirst ? item.patientName.toUpperCase() : '',
-                    medText
-                ];
+                rowData = [isFirst ? item.patientName.toUpperCase() : '', medText];
             } else {
-                rowData = [
-                    isFirst ? item.patientName.toUpperCase() : '',
-                    medText,
-                    '', 
-                    ''  
-                ];
+                rowData = [isFirst ? item.patientName.toUpperCase() : '', medText, '', ''];
             }
 
-    
             tableRowsMeta.push({
                 data: rowData,
                 isAlternate: isAlternate,
                 isFirst: isFirst,
                 isLast: isLast,
-                isFalta: (type === 'conference' && m.status === 'falta')
+                isFalta: (type === 'conference' && m.status === 'falta'),
+                medsCount: medsCount
             });
         });
     });
 
-    
     let columns = [];
     let colStyles = {};
 
@@ -166,11 +154,9 @@ export const generateShipmentPDF = async (shipment, type = 'conference') => {
         };
     }
 
-    // Extrai apenas os arrays de dados para o corpo da tabela
     const bodyData = tableRowsMeta.map(r => r.data);
 
-   // 7. GERAR TABELA
-   // 7. GERAR TABELA
+    // 7. GERAR TABELA
     autoTable(doc, {
         startY: tableStartY, 
         head: columns,
@@ -180,8 +166,7 @@ export const generateShipmentPDF = async (shipment, type = 'conference') => {
             fontSize: 8, 
             cellPadding: 2, 
             valign: 'middle', 
-            lineColor: [200, 200, 200], 
-            lineWidth: 0.1
+            lineColor: [200, 200, 200]
         },
         headStyles: { 
             fillColor: [0, 51, 102], 
@@ -189,53 +174,50 @@ export const generateShipmentPDF = async (shipment, type = 'conference') => {
             fontStyle: 'bold', 
             halign: 'center',
             fontSize: 9,
-            cellPadding: 3 
+            cellPadding: 3,
+            lineWidth: 0.1 
         },
         columnStyles: colStyles,
         
-        // Lógica de Renderização Visual das Células
         didParseCell: function (data) {
             if (data.section === 'body') {
                 const meta = tableRowsMeta[data.row.index];
                 
-                // 1. FUNDO ZEBRA POR PACIENTE
+                // FUNDO ZEBRA AGRUPADO
                 data.cell.styles.fillColor = meta.isAlternate ? [248, 250, 252] : [255, 255, 255];
 
-                // 2. TEXTO VERMELHO PARA FALTA
                 if (meta.isFalta && data.column.index === 1) {
                     data.cell.styles.textColor = [220, 53, 69]; 
                     data.cell.styles.fontStyle = 'bold';
                 }
 
-                // ==========================================
-                // ESPAÇO DA ASSINATURA AUMENTADO
-                // Criamos um "buraco" de 15 pontos embaixo da última medicação do paciente
-                // ==========================================
-                if (meta.isLast) {
-                    data.cell.styles.cellPadding = { top: 2, bottom: 15, left: 2, right: 2 };
+                // AJUSTE DE ESPAÇO CIRÚRGICO E COMPACTO
+                let customBottomPadding = 2; 
+                if (type === 'conference' && meta.isLast) {
+                    if (meta.medsCount === 1) customBottomPadding = 8; 
+                    else if (meta.medsCount === 2) customBottomPadding = 4;
                 }
+                
+                data.cell.styles.cellPadding = { top: 2, bottom: customBottomPadding, left: 2, right: 2 };
 
-                // 3. APARÊNCIA DE CÉLULA MESCLADA
-                if (data.column.index === 0 || (type === 'conference' && (data.column.index === 2 || data.column.index === 3))) {
-                    let topBorder = meta.isFirst ? 0.2 : 0; 
-                    let bottomBorder = meta.isLast ? 0.2 : 0; 
-                    data.cell.styles.lineWidth = { top: topBorder, bottom: bottomBorder, left: 0.1, right: 0.1 };
-                } else {
-                    data.cell.styles.lineWidth = { top: meta.isFirst ? 0.2 : 0.1, bottom: meta.isLast ? 0.2 : 0.1, left: 0.1, right: 0.1 };
-                }
+                            let topBorder = meta.isFirst ? 0.1 : 0; 
+                let bottomBorder = meta.isLast ? 0.1 : 0; 
+                
+                data.cell.styles.lineWidth = { 
+                    top: topBorder, 
+                    bottom: bottomBorder, 
+                    left: 0.1, 
+                    right: 0.1 
+                };
             }
         },
         
-        // Desenha a linha de assinatura
         didDrawCell: (data) => {
             if (data.section === 'body') {
                 const meta = tableRowsMeta[data.row.index];
+                
                 if (type === 'conference' && data.column.index === 3 && meta.isLast) {
-                    // Subimos a linha para "-8". 
-                    // Como o fundo tem 15 de espaço, a linha fica no meio, 
-                    // deixando 7 pontos de espaço LIVRE ACIMA para a pessoa assinar, 
-                    // e 8 pontos abaixo para não colar no próximo paciente!
-                    const y = data.cell.y + data.cell.height - 8; 
+                             const y = data.cell.y + data.cell.height - 3; 
                     doc.setDrawColor(150);
                     doc.line(data.cell.x + 5, y, data.cell.x + data.cell.width - 5, y);
                 }
