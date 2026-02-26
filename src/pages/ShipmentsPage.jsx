@@ -239,7 +239,7 @@ export default function ShipmentsPage() {
       {/* HEADER FIXO */}
       {/* ========================================================================= */}
       <div className="shrink-0 mb-6">
-        <header className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <header className="mb-3 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3 tracking-tight">
               <div className="p-2.5 bg-indigo-600 rounded-xl text-white shadow-lg shadow-indigo-200">
