@@ -48,8 +48,9 @@ import { formatUserName } from '../utils/helpers';
 import { icons } from '../utils/icons';
 import LGPDBanner from '../components/common/LGPDBanner';
 import OfflineAlert from '../components/common/OfflineAlert';
+import api from '../services/api'; // <-- NOVO: Importação para o Tempo Real
 
-// NOVO: Importando o nosso cérebro de notificações
+// Importando o nosso cérebro de notificações
 import { useSystemAlerts } from '../hooks/useSystemAlerts';
 
 function getWeatherInfo(code, isDay = true) {
@@ -72,14 +73,13 @@ export default function MainLayout({
   annualBudget,
   records,
   shipments,
-  patients, // <-- ADICIONADO: Precisamos dos pacientes para calcular atrasos
+  patients,
   filterYear,
   setFilterYear,
 }) {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Referências para fechar os menus ao clicar fora
   const profileRef = useRef(null);
   const alertsRef = useRef(null);
 
@@ -87,18 +87,63 @@ export default function MainLayout({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [isAlertsOpen, setIsAlertsOpen] = useState(false); // <-- NOVO: Estado do Painel de Alertas
+  const [isAlertsOpen, setIsAlertsOpen] = useState(false);
   const [isMouseOverSidebar, setIsMouseOverSidebar] = useState(false);
 
-  // NOVO: Inicializa o Hook de Alertas Inteligentes
+  // =========================================================================
+  // MÁGICA DO TEMPO REAL: Estado local que atualiza o sininho sem F5
+  // =========================================================================
+  const [liveShipments, setLiveShipments] = useState(shipments || []);
+
+  useEffect(() => {
+    setLiveShipments(shipments || []);
+  }, [shipments]);
+  useEffect(() => {
+    if (!user) return; // Só corre se o utilizador estiver logado
+
+    const interval = setInterval(async () => {
+      try {
+        const resHistory = await api.get('/shipments/history', {
+          params: { t: Date.now() },
+        });
+
+        const resOpen = await api.get('/shipments/open', {
+          params: { t: Date.now() },
+        });
+        const openData = Array.isArray(resOpen.data)
+          ? resOpen.data
+          : resOpen.data
+            ? [resOpen.data]
+            : [];
+        const historyData = Array.isArray(resHistory.data)
+          ? resHistory.data
+          : [];
+
+        const combined = [...openData, ...historyData];
+        const uniqueShipments = Array.from(
+          new Map(combined.map((s) => [s._id, s])).values()
+        );
+
+        console.log(
+          '🔔 [Sino] Dados frescos recebidos! Total:',
+          uniqueShipments.length
+        );
+        setLiveShipments([...uniqueShipments]);
+      } catch (error) {
+        console.error('❌ ERRO NO MOTOR DO SINO:', error.message);
+      }
+    }, 15000); // 15 segundos
+
+    return () => clearInterval(interval);
+  }, [user]);
+
   const { alerts, unreadCount } = useSystemAlerts({
     user,
     patients,
     records,
-    shipments,
+    shipments: liveShipments,
   });
 
-  // Efeito para fechar os modais/dropdowns se o usuário clicar fora deles
   useEffect(() => {
     function handleClickOutside(event) {
       if (alertsRef.current && !alertsRef.current.contains(event.target)) {
@@ -204,9 +249,6 @@ export default function MainLayout({
     <div className="flex h-screen bg-[#F8FAFC] dark:bg-slate-950 transition-colors duration-500 font-sans">
       <OfflineAlert />
 
-      {/* ============================================== */}
-      {/* SIDEBAR (Barra Lateral)                          */}
-      {/* ============================================== */}
       <aside
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -263,10 +305,6 @@ export default function MainLayout({
         )}
       </aside>
 
-      {/* ============================================== */}
-      {/* ÁREA PRINCIPAL DA TELA (Conteúdo)                */}
-      {/* ============================================== */}
-      {/* MÁGICA DO "PUSH" ACONTECE AQUI: A margem muda de ml-20 para ml-72 suavemente */}
       <div
         className={`flex-1 flex flex-col min-w-0 overflow-hidden transition-all duration-500 ease-in-out ${!isSidebarCollapsed ? 'md:ml-72' : 'md:ml-20'}`}
       >
@@ -289,7 +327,6 @@ export default function MainLayout({
           </div>
 
           <div className="flex items-center gap-4 md:gap-6">
-            {/* ... Bloco das Notificações Mantido Igual ... */}
             <div className="relative" ref={alertsRef}>
               <button
                 onClick={() => setIsAlertsOpen(!isAlertsOpen)}
@@ -385,7 +422,6 @@ export default function MainLayout({
               )}
             </div>
 
-            {/* Year Selector */}
             {(user?.role === 'admin' || user?.role === 'secretario') && (
               <div className="relative hidden sm:block">
                 <select
@@ -408,7 +444,6 @@ export default function MainLayout({
               </div>
             )}
 
-            {/* Profile Dropdown */}
             <div className="relative" ref={profileRef}>
               <button
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
@@ -452,14 +487,13 @@ export default function MainLayout({
           </div>
         </header>
 
-        {/* CONTAINER FLUIDO (100% da tela) */}
         <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 custom-scrollbar bg-slate-50/50 dark:bg-slate-950 relative">
           <div className="w-full h-full">
             <Outlet
               context={{
                 filterYear,
                 records,
-                shipments,
+                shipments: liveShipments,
                 patients,
                 annualBudget,
                 user,
