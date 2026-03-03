@@ -99,7 +99,7 @@ export default function MainLayout({
     setLiveShipments(shipments || []);
   }, [shipments]);
   useEffect(() => {
-    if (!user) return; // Só corre se o utilizador estiver logado
+    if (!user) return; 
 
     const interval = setInterval(async () => {
       try {
