@@ -195,11 +195,19 @@ export default function ShipmentConferencePage() {
     }
   };
 
-  const filteredShipments = shipments.filter(
-    (s) =>
+  const filteredShipments = shipments.filter((s) => {
+    const matchSearch =
       s.supplier.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.code.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+      s.code.toLowerCase().includes(searchTerm.toLowerCase());
+    if (!matchSearch) return false;
+
+    if (activeTab === 'incoming') {
+      const prog = getProgress(s);
+      if (prog.total === 0) return false;
+    }
+
+    return true;
+  });
 
   return (
     <div className="min-h-screen bg-slate-50/50 p-4 md:p-8 font-sans text-slate-800 pb-24 animate-in fade-in duration-500">

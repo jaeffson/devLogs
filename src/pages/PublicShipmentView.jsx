@@ -170,6 +170,47 @@ export default function PublicShipmentView() {
     return map[u] ? (qty > 1 ? map[u].p : map[u].s) : unit.toUpperCase();
   };
 
+  // =========================================================================
+  // MÁGICA NOVA: FUNÇÃO PARA DEIXAR SACOLA PARA DEPOIS
+  // =========================================================================
+  const handlePatientAction = (filteredPIndex, action) => {
+    if (finished) return;
+    const newShipment = { ...shipment };
+    newShipment.items = JSON.parse(JSON.stringify(shipment.items));
+
+    const filteredPatient = filteredItems[filteredPIndex];
+    const originalPatientIndex = newShipment.items.findIndex(
+      (p) => p._id === filteredPatient._id
+    );
+    const patient = newShipment.items[originalPatientIndex];
+
+    patient.medications.forEach((med) => {
+      if (action === 'parcial_total') {
+        med.status = 'parcial';
+        med.quantity = 0;
+        med.unitPrice = 0;
+        med.totalPrice = 0;
+      } else if (action === 'desfazer') {
+        med.status = 'disponivel';
+        med.quantity = med.requestedQuantity || 1;
+        med.totalPrice = 0;
+      }
+    });
+
+    let total = 0;
+    newShipment.items.forEach((p) => {
+      p.medications.forEach((m) => {
+        if (m.status !== 'falta' && m.status !== 'parcial') total += m.totalPrice || 0;
+      });
+    });
+    newShipment.totalCost = total;
+    setShipment(newShipment);
+  };
+  // =========================================================================
+
+  // =========================================================================
+  // SEU CÓDIGO ORIGINAL DE MUDAR ITEM (INTACTO!)
+  // =========================================================================
   const handleItemChange = (patientIndex, medIndex, field, value) => {
     if (finished) return;
 
@@ -224,7 +265,6 @@ export default function PublicShipmentView() {
     setShipment(newShipment);
   };
 
-  // NOVA FUNÇÃO: Abre ou Fecha a Sacola do Paciente
   const toggleBagReady = (pId) => {
     setReadyBags((prev) => ({
       ...prev,
@@ -238,7 +278,8 @@ export default function PublicShipmentView() {
     shipment.items.forEach((p) => {
       p.medications.forEach((m) => {
         totalMeds++;
-        if (m.status === 'falta' || parseFloat(m.unitPrice) > 0) {
+        // AJUSTE: Considera "resolvido" se for parcial também!
+        if (m.status === 'falta' || (m.status === 'parcial' && m.quantity === 0) || parseFloat(m.unitPrice) > 0) {
           resolvedMeds++;
         }
       });
@@ -468,12 +509,16 @@ export default function PublicShipmentView() {
             const pId = patientItem._id || pIndex;
             const isBagReady = readyBags[pId];
 
-            // INTELIGÊNCIA: Verifica se o paciente atual já teve todos os remédios preenchidos ou marcados como falta
-            const isPatientResolved = patientItem.medications.every(
-              (m) => m.status === 'falta' || parseFloat(m.unitPrice) > 0
+            // INTELIGÊNCIA NOVA: Identifica se a sacola inteira foi mandada pra depois
+            const isAllParcial = patientItem.medications.every(
+              (m) => m.status === 'parcial' && m.quantity === 0
             );
 
-            // SE A SACOLA ESTÁ PRONTA/FECHADA, MOSTRA SÓ O CARD VERDE ENCOLHIDO
+            // Verifica se o paciente atual já teve todos os remédios preenchidos ou marcados
+            const isPatientResolved = patientItem.medications.every(
+              (m) => m.status === 'falta' || (m.status === 'parcial' && m.quantity === 0) || parseFloat(m.unitPrice) > 0
+            );
+
             if (isBagReady) {
               return (
                 <div
@@ -507,19 +552,35 @@ export default function PublicShipmentView() {
               );
             }
 
-            // SE A SACOLA ESTÁ ABERTA, MOSTRA OS REMÉDIOS NORMALMENTE
             return (
               <div
                 key={pId}
-                className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in duration-300"
+                className={`bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in duration-300 ${isAllParcial ? 'opacity-80 ring-2 ring-amber-200' : ''}`}
               >
-                <div className="bg-slate-50/80 px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                <div className="bg-slate-50/80 px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                   <h3 className="font-black text-slate-800 text-sm flex items-center gap-3">
                     <div className="w-8 h-8 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center">
                       {patientItem.patientName.charAt(0).toUpperCase()}
                     </div>
                     {patientItem.patientName}
                   </h3>
+
+                  {/* NOVO: BOTÃO DE DEIXAR SACOLA PARA DEPOIS */}
+                  {isAllParcial ? (
+                    <button
+                      onClick={() => handlePatientAction(pIndex, 'desfazer')}
+                      className="cursor-pointer bg-white text-slate-600 border border-slate-200 px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-100 flex items-center justify-center gap-2 shadow-sm transition-all active:scale-95"
+                    >
+                      <FiCheck size={14} /> Desfazer Envio para Depois
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handlePatientAction(pIndex, 'parcial_total')}
+                      className="cursor-pointer bg-amber-100 text-amber-700 border border-amber-200 px-4 py-2 rounded-xl text-xs font-bold hover:bg-amber-200 flex items-center justify-center gap-2 shadow-sm transition-all active:scale-95"
+                    >
+                      <FiClock size={14} /> Deixar pedido parcial
+                    </button>
+                  )}
                 </div>
 
                 <div className="w-full">
@@ -571,13 +632,19 @@ export default function PublicShipmentView() {
                                     <FiAlertTriangle size={12} />{' '}
                                     {med.status === 'falta'
                                       ? 'Pedido Parcial: Consulte novo link.'
-                                      : `Saldo pendente: ${med.requestedQuantity - med.quantity} cxs`}
+                                      : `Pedido será enviado como parcial, será necessário pedir um novo link!`}
+                                  </div>
+                                )}
+                                {/* AVISO DE SACOLA PARA DEPOIS */}
+                                {med.status === 'parcial' && med.quantity === 0 && (
+                                  <div className="mt-2 inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-amber-700 bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-200">
+                                    <FiClock size={12} /> Campo preço vazio não gera saldo.
                                   </div>
                                 )}
                               </td>
 
                               <td className="p-5 text-center align-top">
-                                {med.status === 'falta' ? (
+                                {med.status === 'falta' || (med.status === 'parcial' && med.quantity === 0) ? (
                                   <span className="text-slate-300 font-mono font-bold">
                                     -
                                   </span>
@@ -649,7 +716,7 @@ export default function PublicShipmentView() {
                                     min="0"
                                     step="0.01"
                                     className={`w-full pl-8 pr-3 py-3 border-2 rounded-xl outline-none text-right font-mono font-black transition-all duration-500 relative
-                                      ${med.status === 'falta' ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed' : med.hasMemoryPrice ? 'bg-emerald-50 border-emerald-400 text-emerald-900 shadow-[0_0_15px_rgba(52,211,153,0.4)] ring-2 ring-emerald-400/50' : 'bg-slate-50 border-slate-200 text-slate-800 focus:bg-white focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-inner'}`}
+                                      ${med.status === 'falta' || (med.status === 'parcial' && med.quantity === 0) ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed' : med.hasMemoryPrice ? 'bg-emerald-50 border-emerald-400 text-emerald-900 shadow-[0_0_15px_rgba(52,211,153,0.4)] ring-2 ring-emerald-400/50' : 'bg-slate-50 border-slate-200 text-slate-800 focus:bg-white focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-inner'}`}
                                     placeholder="0.00"
                                     value={med.unitPrice || ''}
                                     onChange={(e) =>
@@ -660,7 +727,7 @@ export default function PublicShipmentView() {
                                         e.target.value
                                       )
                                     }
-                                    disabled={med.status === 'falta'}
+                                    disabled={med.status === 'falta' || (med.status === 'parcial' && med.quantity === 0)}
                                   />
                                 </div>
                                 {med.hasMemoryPrice &&
@@ -765,6 +832,12 @@ export default function PublicShipmentView() {
                                   : `Saldo pendente: ${med.requestedQuantity - med.quantity} cxs`}
                               </div>
                             )}
+                            {/* AVISO DE SACOLA PARA DEPOIS MOBILE */}
+                            {med.status === 'parcial' && med.quantity === 0 && (
+                              <div className="mt-2 text-[10px] font-black uppercase tracking-widest text-amber-700 bg-amber-50 px-2 py-1.5 rounded-lg border border-amber-200 inline-flex items-center gap-1.5">
+                                <FiClock size={12} /> Sacola para Depois
+                              </div>
+                            )}
                           </div>
 
                           <div className="flex items-start gap-3">
@@ -780,7 +853,7 @@ export default function PublicShipmentView() {
                               <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
                                 Qtd.
                               </span>
-                              {med.status === 'falta' ? (
+                              {med.status === 'falta' || (med.status === 'parcial' && med.quantity === 0) ? (
                                 <div className="h-10 w-[100px] flex items-center justify-center bg-slate-100 rounded-xl border border-slate-200 text-slate-400 font-black">
                                   -
                                 </div>
@@ -842,7 +915,7 @@ export default function PublicShipmentView() {
                                   min="0"
                                   step="0.01"
                                   className={`w-full pl-8 pr-3 py-2.5 border-2 rounded-xl outline-none text-right font-mono font-black text-sm transition-all duration-500 relative
-                                    ${med.status === 'falta' ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed' : med.hasMemoryPrice ? 'bg-emerald-50 border-emerald-400 text-emerald-900 shadow-[0_0_10px_rgba(52,211,153,0.3)] ring-1 ring-emerald-400/50' : 'bg-white border-slate-200 text-slate-800 focus:border-indigo-500 shadow-sm'}`}
+                                    ${med.status === 'falta' || (med.status === 'parcial' && med.quantity === 0) ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed' : med.hasMemoryPrice ? 'bg-emerald-50 border-emerald-400 text-emerald-900 shadow-[0_0_10px_rgba(52,211,153,0.3)] ring-1 ring-emerald-400/50' : 'bg-white border-slate-200 text-slate-800 focus:border-indigo-500 shadow-sm'}`}
                                   placeholder="0.00"
                                   value={med.unitPrice || ''}
                                   onChange={(e) =>
@@ -853,7 +926,7 @@ export default function PublicShipmentView() {
                                       e.target.value
                                     )
                                   }
-                                  disabled={med.status === 'falta'}
+                                  disabled={med.status === 'falta' || (med.status === 'parcial' && med.quantity === 0)}
                                 />
                               </div>
                               {med.hasMemoryPrice && med.status !== 'falta' && (
@@ -924,7 +997,6 @@ export default function PublicShipmentView() {
                   </div>
                 </div>
 
-                {/* === NOVO: RODAPÉ DO CARD PARA LACRAR A SACOLA === */}
                 <div className="bg-slate-50/80 border-t border-slate-100 p-4 sm:p-5 flex justify-end">
                   <button
                     onClick={() => toggleBagReady(pId)}
