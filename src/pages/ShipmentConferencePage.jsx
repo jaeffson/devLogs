@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api from '../services/api';
+import api, { shipmentService } from '../services/api';
 import toast from 'react-hot-toast';
 import {
   FiTruck,
@@ -8,30 +8,26 @@ import {
   FiSearch,
   FiCheckCircle,
   FiChevronDown,
-  FiPackage,
-  FiClock,
   FiPrinter,
   FiAlertCircle,
-  FiPlus,
-  FiMinus,
   FiAlertTriangle,
   FiCheck,
-  FiMessageSquare,
-  FiX,
+  FiInfo,
+  FiFilter,
+  FiClock,
 } from 'react-icons/fi';
 import { generateShipmentPDF } from '../utils/pdfGenerator';
 import { ConfirmModal } from '../components/common/Modal';
 
-export default function ShipmentConferencePage() {
+// ATENÇÃO: Adicionámos a prop "onGlobalUpdate" que vem do App.jsx
+export default function ShipmentConferencePage({ onGlobalUpdate }) {
   const [activeTab, setActiveTab] = useState('incoming');
   const [shipments, setShipments] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Pesquisa Global
   const [searchTerm, setSearchTerm] = useState('');
-
-  // Pesquisa Local (Bipar Sacola)
   const [patientSearchTerm, setPatientSearchTerm] = useState('');
+  const [hideChecked, setHideChecked] = useState(false);
 
   const [expandedId, setExpandedId] = useState(null);
   const [adjustedQuantities, setAdjustedQuantities] = useState({});
@@ -41,286 +37,413 @@ export default function ShipmentConferencePage() {
     isOpen: false,
     title: '',
     message: '',
-    confirmText: 'Confirmar',
+    confirmText: '',
     isDestructive: false,
-    data: null,
+    onConfirm: () => {},
   });
+
+  // =========================================================================
+  // 🌟 UTILITÁRIOS INTELIGENTES
+  // =========================================================================
+
+  const getSmartUnitDisplay = (qty, unit) => {
+    if (!unit) return qty <= 1 ? 'UNID' : 'UNIDS';
+    const u = String(unit).toUpperCase();
+    const q = Number(qty) || 1;
+    if (u === 'CX' || u === 'CAIXA') return q > 1 ? 'CAIXAS' : 'CAIXA';
+    if (u === 'FR' || u === 'FRASCO') return q > 1 ? 'FRASCOS' : 'FRASCO';
+    if (u === 'TB' || u === 'TUBO') return q > 1 ? 'TUBOS' : 'TUBO';
+    if (u === 'UN' || u === 'UND') return q > 1 ? 'UNIDADES' : 'UNIDADE';
+    if (u === 'AMP') return q > 1 ? 'AMPOLAS' : 'AMPOLA';
+    if (u === 'CART' || u === 'CARTELA') return q > 1 ? 'CARTELAS' : 'CARTELA';
+    if (u === 'BISNAGA' || u === 'BIS') return q > 1 ? 'BISNAGAS' : 'BISNAGA';
+    if (u === 'PCT' || u === 'PACOTE') return q > 1 ? 'PACOTES' : 'PACOTE';
+    if (u === 'LATA') return q > 1 ? 'LATAS' : 'LATA';
+    if (u === 'COMP') return q > 1 ? 'COMPRIMIDOS' : 'COMPRIMIDO';
+    return u;
+  };
+
+  const parseSupplierData = (obsString, shipment) => {
+    let name = shipment?.supplier || 'Fornecedor';
+    let date = new Date(
+      shipment?.updatedAt || shipment?.createdAt
+    ).toLocaleString('pt-BR');
+
+    if (obsString) {
+      const nameMatch =
+        obsString.match(/\[Responsável:\s*(.*?)\]/) ||
+        obsString.match(/Responsável do Fornecedor:\s*(.*?)(?:\n|$)/);
+      if (nameMatch) name = nameMatch[1];
+      const dateMatch = obsString.match(/\[Atualizado em:\s*(.*?)\]/);
+      if (dateMatch) date = dateMatch[1];
+    }
+    return { name, date };
+  };
+
+  const getConferenceItems = (items) => {
+    return items.map((item) => ({
+      ...item,
+      medsToConfer: item.medications || [],
+    }));
+  };
+
+  const checkItemHasPhysicalDelivery = (item) => {
+    return item.medsToConfer.some((med) => {
+      const isFalta =
+        med.unitPrice === -1 || med.status?.toLowerCase() === 'falta';
+      const isPendente =
+        !isFalta && (!med.unitPrice || parseFloat(med.unitPrice) === 0);
+      return !isFalta && !isPendente;
+    });
+  };
+
+  const checkIsPerfectDelivery = (confItems) => {
+    if (!confItems || confItems.length === 0) return false;
+    let hasIssue = false;
+    confItems.forEach((item) => {
+      item.medsToConfer.forEach((med) => {
+        const isFalta =
+          med.unitPrice === -1 || med.status?.toLowerCase() === 'falta';
+        const isPendente =
+          !isFalta && (!med.unitPrice || parseFloat(med.unitPrice) === 0);
+        const isParcial = med.status?.toLowerCase() === 'parcial';
+
+        if (isFalta || isPendente || isParcial) {
+          hasIssue = true;
+        }
+      });
+    });
+    return !hasIssue;
+  };
 
   useEffect(() => {
     fetchShipments();
-  }, [activeTab]);
+    const interval = setInterval(fetchShipments, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const fetchShipments = async () => {
-    setLoading(true);
     try {
-      const res = await api.get('/shipments/history');
-      const all = res.data || [];
-
-      if (activeTab === 'incoming') {
-        setShipments(all.filter((s) => s.status === 'aguardando_conferencia'));
-      } else {
-        setShipments(all.filter((s) => s.status === 'finalizado'));
-      }
+      // Adicionamos um timestamp para forçar o navegador a não usar Cache antigo
+      const res = await api
+        .get(`/shipments/history?t=${new Date().getTime()}`)
+        .catch(() => shipmentService.getHistory());
+      const validShipments = (res.data || []).filter(
+        (s) => s.status !== 'cancelado'
+      );
+      validShipments.sort(
+        (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+      );
+      setShipments(validShipments);
     } catch (error) {
-      toast.error('Erro ao carregar dados.');
+      toast.error('Erro ao carregar remessas para conferência.');
+      console.error(error);
     } finally {
       setLoading(false);
     }
   };
 
-  const toggleBagCheck = (pId) => {
-    setCheckedBags((prev) => ({ ...prev, [pId]: !prev[pId] }));
-  };
-
-  const handleQuantityChange = (id, currentVal, delta, e) => {
-    e.stopPropagation();
-    const actualVal =
-      adjustedQuantities[id] !== undefined
-        ? adjustedQuantities[id]
-        : currentVal;
-    const newVal = actualVal + delta;
-    if (newVal < 0) return;
-    setAdjustedQuantities((prev) => ({ ...prev, [id]: newVal }));
-  };
-
-  const getSmartUnit = (quantity, unit) => {
-    if (!unit) return '';
-    const qty = Number(quantity);
-    const u = unit.toLowerCase().trim();
-
-    const map = {
-      cx: { s: 'Caixa', p: 'Caixas' },
-      caixa: { s: 'Caixa', p: 'Caixas' },
-      fr: { s: 'Frasco', p: 'Frascos' },
-      frasco: { s: 'Frasco', p: 'Frascos' },
-      un: { s: 'Unidade', p: 'Unidades' },
-      und: { s: 'Unidade', p: 'Unidades' },
-      unidade: { s: 'Unidade', p: 'Unidades' },
-      amp: { s: 'Ampola', p: 'Ampolas' },
-      com: { s: 'Comp.', p: 'Comp.' },
-      cp: { s: 'Comp.', p: 'Comp.' },
-    };
-
-    if (map[u]) {
-      return qty > 1 ? map[u].p : map[u].s;
+  const handleExpand = (shipmentId) => {
+    if (expandedId === shipmentId) {
+      setExpandedId(null);
+      return;
     }
-    return unit.toUpperCase();
-  };
+    setExpandedId(shipmentId);
+    setPatientSearchTerm('');
+    setHideChecked(false);
 
-  const getProgress = (ship) => {
-    let total = ship.items.length;
-    let checked = 0;
+    const shipment = shipments.find((s) => s._id === shipmentId);
+    if (shipment) {
+      const initial = {};
+      const initialChecked = {};
 
-    ship.items.forEach((p, pIndex) => {
-      const pId = p._id || `p-${pIndex}`;
-      if (checkedBags[pId]) checked++;
-    });
+      const confItems = getConferenceItems(shipment.items);
+      confItems.forEach((item) => {
+        initialChecked[item._id] = false;
+        item.medsToConfer.forEach((med) => {
+          const key = `${item._id}-${med._id}`;
+          const isFalta =
+            med.unitPrice === -1 || med.status?.toLowerCase() === 'falta';
+          const isPendente =
+            !isFalta && (!med.unitPrice || parseFloat(med.unitPrice) === 0);
 
-    return {
-      total,
-      checked,
-      percent: total === 0 ? 100 : Math.round((checked / total) * 100),
-    };
-  };
-
-  const handleVerifyReceive = (ship) => {
-    const progress = getProgress(ship);
-    const hasPendingItems = progress.checked < progress.total;
-
-    if (hasPendingItems) {
-      setConfirmation({
-        isOpen: true,
-        title: 'Conferência Incompleta!',
-        message: `Atenção: Conferiu apenas ${progress.checked} de ${progress.total} sacolas. As sacolas NÃO marcadas serão registradas como faltantes e não entrarão no estoque. Deseja finalizar mesmo assim?`,
-        confirmText: 'Sim, Finalizar Parcialmente',
-        isDestructive: true,
-        data: ship._id,
-      });
-    } else {
-      setConfirmation({
-        isOpen: true,
-        title: 'Finalizar Entrada',
-        message:
-          'Todas as sacolas foram conferidas. Confirmar a entrada no estoque e fechar a remessa?',
-        confirmText: 'Confirmar Entrada Total',
-        isDestructive: false,
-        data: ship._id,
-      });
-    }
-  };
-
-  const executeReceive = async () => {
-    const shipmentId = confirmation.data;
-    const currentShipment = shipments.find((s) => s._id === shipmentId);
-
-    const finalQuantities = {};
-
-    currentShipment.items.forEach((p, pIndex) => {
-      const pId = p._id || `p-${pIndex}`;
-
-      p.medications.forEach((m, mIndex) => {
-        const mId = m._id || `m-${mIndex}`;
-        const uniqueId = `${pId}-${mId}`;
-
-        if (m.status !== 'falta') {
-          if (checkedBags[pId]) {
-            finalQuantities[uniqueId] =
-              adjustedQuantities[uniqueId] !== undefined
-                ? adjustedQuantities[uniqueId]
-                : m.quantity;
+          if (isFalta || isPendente) {
+            initial[key] = 0;
           } else {
-            finalQuantities[uniqueId] = 0;
+            initial[key] =
+              med.receivedQuantity !== undefined
+                ? med.receivedQuantity
+                : med.quantity || 0;
           }
-        }
+        });
       });
+      setAdjustedQuantities(initial);
+      setCheckedBags(initialChecked);
+    }
+  };
+
+  const handleQtyChange = (itemId, medId, isBloqueado, value) => {
+    if (isBloqueado) return;
+    setAdjustedQuantities((prev) => ({
+      ...prev,
+      [`${itemId}-${medId}`]: Math.max(0, parseInt(value) || 0),
+    }));
+  };
+
+  const toggleBagCheck = (itemId, hasPhysicalDelivery) => {
+    if (!hasPhysicalDelivery) return;
+    setCheckedBags((prev) => ({ ...prev, [itemId]: !prev[itemId] }));
+  };
+
+  const markAllBags = (validItemsForCheck, val) => {
+    const newChecked = { ...checkedBags };
+    validItemsForCheck.forEach((item) => {
+      newChecked[item._id] = val;
     });
+    setCheckedBags(newChecked);
+  };
+
+  const confirmReceive = (shipment, confItems, validItemsForCheck) => {
+    const allChecked = validItemsForCheck.every(
+      (item) => checkedBags[item._id]
+    );
+
+    setConfirmation({
+      isOpen: true,
+      title: 'Finalizar Conferência?',
+      message: allChecked
+        ? 'Excelente! Todas as sacolas físicas foram conferidas. O estoque será atualizado e as pendências mantidas no sistema.'
+        : 'Atenção: Existem sacolas FÍSICAS que não foram marcadas como conferidas. Tem certeza que deseja finalizar agora?',
+      confirmText: 'Confirmar e Atualizar Estoque',
+      isDestructive: !allChecked,
+      onConfirm: () => executeReceive(shipment),
+    });
+  };
+
+  // =========================================================================
+  // ⚡ A MÁGICA: ATUALIZAÇÃO OTIMISTA (SEM PRECISAR DE F5)
+  // =========================================================================
+  const executeReceive = async (shipment) => {
+    const loadingToast = toast.loading('A guardar conferência no sistema...');
 
     try {
-      await api.post('/shipments/receive', {
-        shipmentId,
-        receivedQuantities: finalQuantities,
+      const payloadItems = shipment.items.map((item) => ({
+        _id: item._id,
+        patientName: item.patientName,
+        medications: item.medications.map((med) => {
+          const key = `${item._id}-${med._id}`;
+          const isFalta =
+            med.unitPrice === -1 || med.status?.toLowerCase() === 'falta';
+          const isPendente =
+            !isFalta && (!med.unitPrice || parseFloat(med.unitPrice) === 0);
+
+          let finalQty = 0;
+          if (isFalta || isPendente) {
+            finalQty = 0;
+          } else {
+            finalQty =
+              adjustedQuantities[key] !== undefined
+                ? adjustedQuantities[key]
+                : med.quantity || 0;
+          }
+
+          return { ...med, receivedQuantity: finalQty };
+        }),
+      }));
+
+      // 1. Manda a API guardar os dados
+      await api.put(`/shipments/${shipment._id}/receive`, {
+        items: payloadItems,
       });
 
-      toast.success('Estoque atualizado e conferência finalizada!');
-      setExpandedId(null);
-      setPatientSearchTerm(''); // Limpa a busca ao finalizar
-      setAdjustedQuantities({});
-      setCheckedBags({});
+      // 2. ATUALIZAÇÃO OTIMISTA: Força a remessa a ficar como 'finalizado' instantaneamente na memória da tela!
+      setShipments((prevShipments) =>
+        prevShipments.map((s) =>
+          s._id === shipment._id ? { ...s, status: 'finalizado' } : s
+        )
+      );
+
+      // 3. Limpa os modais e muda de aba imediatamente, para dar a sensação de velocidade
       setConfirmation({ ...confirmation, isOpen: false });
-      fetchShipments();
+      setExpandedId(null);
+      setActiveTab('completed');
+
+      toast.success('Conferência realizada com sucesso!', { id: loadingToast });
+
+      // 4. Dá 1,5 segundos para o Banco de Dados terminar de calcular o stock no fundo
+      // E só então manda o App.jsx e a página atualizar os dados verdadeiros silenciosamente
+      setTimeout(() => {
+        fetchShipments(); // Atualiza a página atual em silêncio
+        if (typeof onGlobalUpdate === 'function') {
+          onGlobalUpdate(); // Atualiza o App.jsx inteiro em silêncio
+        }
+      }, 1500);
     } catch (error) {
-      console.error(error);
-      toast.error('Erro ao processar entrada. Tente novamente.');
-      throw error;
+      toast.error('Erro ao registrar conferência.', { id: loadingToast });
+      setConfirmation({ ...confirmation, isOpen: false });
     }
   };
 
   const filteredShipments = shipments.filter((s) => {
-    const matchSearch =
-      s.supplier.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.code.toLowerCase().includes(searchTerm.toLowerCase());
-    if (!matchSearch) return false;
-
-    if (activeTab === 'incoming') {
-      const prog = getProgress(s);
-      if (prog.total === 0) return false;
-    }
-
-    return true;
+    const isTabMatch =
+      activeTab === 'incoming'
+        ? s.status === 'aguardando_conferencia' || s.status === 'parcial'
+        : s.status === 'finalizado';
+    const matchesSearch =
+      (s.supplier || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (s.code || '').toLowerCase().includes(searchTerm.toLowerCase());
+    return isTabMatch && matchesSearch;
   });
 
   return (
-    <div className="min-h-screen bg-slate-50/50 p-4 md:p-8 font-sans text-slate-800 pb-24 animate-in fade-in duration-500">
-      <div className="max-w-6xl mx-auto">
-        <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+    <div className="h-screen w-full bg-slate-50 flex flex-col font-sans text-slate-800 overflow-hidden">
+      {/* HEADER FIXO SUPERIOR */}
+      <div className="bg-white border-b border-slate-200 shrink-0 px-6 py-5 shadow-sm">
+        <div className="max-w-[1600px] mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3 tracking-tight">
-              <div className="p-2.5 bg-indigo-600 rounded-xl text-white shadow-lg shadow-indigo-200">
+              <div className="p-2.5 bg-emerald-500 rounded-xl text-white shadow-lg shadow-emerald-200">
                 <FiCheckSquare size={26} />
               </div>
-              Conferência de Carga
+              Conferência de Recebimento
             </h1>
-            <p className="text-slate-500 mt-2 text-sm font-medium">
-              Realize a bipagem ou marcação das sacolas recebidas para dar
-              entrada no estoque.
+            <p className="text-slate-500 mt-1 text-sm font-medium">
+              Conferência rápida, bipagem e controlo de stock físico.
             </p>
           </div>
-          <div className="relative w-full md:w-80 group">
-            <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
-            <input
-              type="text"
-              placeholder="Buscar por fornecedor ou código..."
-              className="w-full pl-11 pr-4 py-3.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm outline-none transition-all text-sm font-medium"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+
+          <div className="flex flex-col sm:flex-row items-center gap-4 w-full md:w-auto">
+            <div className="flex bg-slate-100 p-1 rounded-xl w-full sm:w-fit shadow-inner border border-slate-200/50">
+              <button
+                onClick={() => {
+                  setActiveTab('incoming');
+                  setExpandedId(null);
+                }}
+                className={`flex-1 sm:flex-none px-6 py-2.5 rounded-lg font-bold text-sm transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                  activeTab === 'incoming'
+                    ? 'bg-white text-emerald-700 shadow-sm border border-slate-200'
+                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
+                }`}
+              >
+                <FiTruck size={16} /> Pendentes
+              </button>
+              <button
+                onClick={() => {
+                  setActiveTab('completed');
+                  setExpandedId(null);
+                }}
+                className={`flex-1 sm:flex-none px-6 py-2.5 rounded-lg font-bold text-sm transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                  activeTab === 'completed'
+                    ? 'bg-white text-emerald-700 shadow-sm border border-slate-200'
+                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
+                }`}
+              >
+                <FiCheckCircle size={16} /> Histórico
+              </button>
+            </div>
+
+            <div className="relative w-full md:w-80">
+              <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Buscar fornecedor ou código..."
+                className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all shadow-sm"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
           </div>
-        </header>
-
-        <div className="flex bg-slate-200/60 p-1.5 rounded-2xl w-fit mb-8 shadow-inner border border-slate-200/50">
-          <button
-            onClick={() => setActiveTab('incoming')}
-            className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer flex items-center gap-2 ${
-              activeTab === 'incoming'
-                ? 'bg-white text-indigo-700 shadow-sm ring-1 ring-slate-200/50'
-                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
-            }`}
-          >
-            <FiPackage size={16} /> A Receber (
-            {activeTab === 'incoming' ? shipments.length : ''})
-          </button>
-          <button
-            onClick={() => setActiveTab('history')}
-            className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer flex items-center gap-2 ${
-              activeTab === 'history'
-                ? 'bg-white text-emerald-700 shadow-sm ring-1 ring-slate-200/50'
-                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
-            }`}
-          >
-            <FiCheckCircle size={16} /> Histórico Finalizado
-          </button>
         </div>
+      </div>
 
-        <div className="space-y-6">
-          {filteredShipments.map((ship) => {
-            const { checked, total, percent } = getProgress(ship);
-            const isExpanded = expandedId === ship._id;
-            const isComplete = checked === total && total > 0;
+      {/* ÁREA DE ROLAGEM DE CONTEÚDO */}
+      <div className="flex-1 min-h-0 w-full max-w-[1600px] mx-auto p-6 flex flex-col relative overflow-hidden">
+        <div className="absolute inset-x-6 inset-y-6 overflow-y-auto custom-scrollbar pr-2 pb-10">
+          {filteredShipments.map((shipment) => {
+            const isExpanded = expandedId === shipment._id;
+            const supplierInfo = parseSupplierData(
+              shipment.observations,
+              shipment
+            );
+            const confItems = getConferenceItems(shipment.items);
 
-            // FILTRO INTELIGENTE DE PACIENTES (Só atua dentro da remessa expandida)
-            const filteredPatientItems = ship.items.filter((patientItem) => {
-              if (!patientSearchTerm) return true;
-              const searchLower = patientSearchTerm.toLowerCase();
-              return (
-                patientItem.patientName.toLowerCase().includes(searchLower) ||
-                patientItem.medications.some((m) =>
-                  m.name.toLowerCase().includes(searchLower)
-                )
-              );
-            });
+            const validItemsForCheck = confItems.filter(
+              checkItemHasPhysicalDelivery
+            );
+            const checkedCount = validItemsForCheck.filter(
+              (i) => checkedBags[i._id]
+            ).length;
+            const pendingCount = validItemsForCheck.length - checkedCount;
+            const isAllChecked =
+              checkedCount === validItemsForCheck.length &&
+              validItemsForCheck.length > 0;
+            const isPerfectDelivery = checkIsPerfectDelivery(confItems);
 
             return (
               <div
-                key={ship._id}
-                className={`bg-white rounded-3xl transition-all overflow-hidden ${
-                  isExpanded
-                    ? 'shadow-xl border-indigo-200 ring-1 ring-indigo-100'
-                    : 'shadow-sm border border-slate-200 hover:border-indigo-300 hover:shadow-md'
-                }`}
+                key={shipment._id}
+                className={`mb-4 bg-white rounded-2xl border transition-all duration-300 ${isExpanded ? 'border-emerald-400 shadow-xl shadow-emerald-500/5' : 'border-slate-200 shadow-sm hover:border-emerald-300 hover:shadow-md'}`}
               >
+                {/* CABEÇALHO DO CARD */}
                 <div
-                  onClick={() => {
-                    setExpandedId(isExpanded ? null : ship._id);
-                    setPatientSearchTerm(''); // Limpa a busca ao fechar o card
-                  }}
-                  className="p-5 md:p-6 flex flex-col md:flex-row items-start md:items-center justify-between cursor-pointer gap-4"
+                  onClick={() => handleExpand(shipment._id)}
+                  className="p-5 md:p-6 flex flex-col md:flex-row justify-between md:items-center gap-4 cursor-pointer select-none relative overflow-hidden group bg-gradient-to-br from-white to-slate-50 rounded-t-2xl"
                 >
-                  <div className="flex items-center gap-5">
+                  <div className="flex items-center gap-4 relative z-10">
                     <div
-                      className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shrink-0 shadow-inner ${activeTab === 'incoming' ? 'bg-indigo-50 text-indigo-600' : 'bg-emerald-50 text-emerald-600'}`}
+                      className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-colors shadow-sm ${
+                        activeTab === 'completed'
+                          ? 'bg-emerald-100 text-emerald-600'
+                          : isExpanded
+                            ? 'bg-emerald-500 text-white shadow-emerald-200'
+                            : 'bg-white border border-slate-200 text-slate-400 group-hover:border-emerald-300 group-hover:text-emerald-500'
+                      }`}
                     >
-                      <FiTruck />
+                      {activeTab === 'completed' ? (
+                        <FiCheckCircle size={28} />
+                      ) : (
+                        <FiBox size={28} />
+                      )}
                     </div>
                     <div>
-                      <h3 className="font-black text-slate-800 text-lg md:text-xl tracking-tight mb-1">
-                        {ship.supplier}
+                      <h3 className="text-xl font-black text-slate-800 tracking-tight leading-none group-hover:text-emerald-700 transition-colors">
+                        {shipment.supplier}
                       </h3>
-                      <div className="flex flex-wrap gap-2 text-xs font-bold text-slate-500">
-                        <span className="font-mono bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 tracking-wider">
-                          REF: {ship.code}
+
+                      <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+                        <span className="bg-white text-slate-600 px-2.5 py-1 rounded-md text-[10px] font-black tracking-widest uppercase border border-slate-200 shadow-sm">
+                          Ref: {shipment.code}
                         </span>
-                        {activeTab === 'history' ? (
-                          <span className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100">
-                            <FiCheckCircle size={12} /> Finalizado em:{' '}
-                            {new Date(ship.receivedAt).toLocaleDateString(
-                              'pt-BR'
-                            )}
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-1.5 text-slate-500 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200">
-                            <FiClock size={12} /> Enviado em:{' '}
-                            {new Date(ship.updatedAt).toLocaleDateString(
-                              'pt-BR'
+
+                        {activeTab === 'incoming' &&
+                          validItemsForCheck.length > 0 && (
+                            <span
+                              className={`text-[10px] font-black tracking-widest uppercase px-2.5 py-1 rounded-md border shadow-sm ${
+                                isAllChecked
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse'
+                              }`}
+                            >
+                              {pendingCount} Pendentes
+                            </span>
+                          )}
+
+                        {activeTab === 'completed' && (
+                          <span
+                            className={`text-[10px] font-black tracking-widest uppercase px-2.5 py-1 rounded-md border shadow-sm flex items-center gap-1.5 ${
+                              isPerfectDelivery
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : 'bg-purple-50 text-purple-700 border-purple-200'
+                            }`}
+                          >
+                            {isPerfectDelivery ? (
+                              <>
+                                <FiCheck size={12} /> ENTREGA TOTAL
+                              </>
+                            ) : (
+                              <>
+                                <FiAlertCircle size={12} /> TEVE PENDÊNCIAS
+                              </>
                             )}
                           </span>
                         )}
@@ -328,319 +451,395 @@ export default function ShipmentConferencePage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end">
-                    {activeTab === 'incoming' && (
-                      <div className="text-right flex-1 md:flex-none bg-slate-50 p-3 rounded-xl border border-slate-100">
-                        <div className="flex justify-between items-center mb-1.5">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                            Progresso Sacolas
-                          </p>
-                          <span
-                            className={`text-xs font-black ${percent === 100 ? 'text-emerald-600' : 'text-indigo-600'}`}
-                          >
-                            {checked} / {total}
-                          </span>
-                        </div>
-                        <div className="w-full md:w-32 h-2.5 bg-slate-200 rounded-full overflow-hidden shadow-inner">
-                          <div
-                            className={`h-full transition-all duration-500 rounded-full ${percent === 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`}
-                            style={{ width: `${percent}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    )}
-                    {activeTab === 'history' && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          generateShipmentPDF(ship, 'conference');
-                        }}
-                        className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md active:scale-95"
-                      >
-                        <FiPrinter size={16} /> Relatório PDF
-                      </button>
-                    )}
+                  <div className="flex items-center gap-6 relative z-10">
+                    <div className="text-right hidden sm:block">
+                      <p className="text-[10px] uppercase tracking-widest font-black text-slate-400 mb-1">
+                        Progresso Físico
+                      </p>
+                      <p className="font-black text-slate-800 text-2xl leading-none">
+                        {checkedCount}
+                        <span className="text-slate-300 text-lg">
+                          /{validItemsForCheck.length}
+                        </span>
+                      </p>
+                    </div>
                     <div
-                      className={`p-2 rounded-full transition-all duration-300 ${isExpanded ? 'rotate-180 bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-400'}`}
+                      className={`p-2.5 rounded-full transition-all duration-300 ${
+                        isExpanded
+                          ? 'rotate-180 bg-emerald-100 text-emerald-600 shadow-sm'
+                          : 'bg-white border border-slate-200 text-slate-400 group-hover:bg-slate-50'
+                      }`}
                     >
                       <FiChevronDown size={20} />
                     </div>
                   </div>
                 </div>
 
-                {/* DETALHES EXPANDIDOS (Área de Conferência) */}
+                {/* CONTEÚDO EXPANDIDO */}
                 {isExpanded && (
-                  <div className="border-t border-slate-100 bg-slate-50/50 p-5 md:p-8 animate-in slide-in-from-top-2 duration-300">
-                    {/* BARRA DE PESQUISA PARA BIPAR RECEITA */}
-                    <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-6 sticky top-4 z-30">
-                      <div className="relative">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
-                          <FiSearch size={20} />
-                        </span>
-                        <input
-                          type="text"
-                          placeholder="🔍 Bipar ou digitar nome do Paciente da sacola..."
-                          className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-xl focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 outline-none transition-all font-bold text-slate-700 placeholder:font-medium"
-                          value={patientSearchTerm}
-                          onChange={(e) => setPatientSearchTerm(e.target.value)}
-                        />
-                      </div>
-                      {patientSearchTerm && (
-                        <p className="text-xs text-indigo-600 font-bold mt-2 ml-2">
-                          Mostrando resultados para: "{patientSearchTerm}"
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                      <div>
-                        <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
-                          <span className="text-indigo-500">
-                            <FiPackage size={18} />
-                          </span>{' '}
-                          Resumo da Carga
-                        </h4>
-                        <p className="text-xs text-slate-500 mt-1.5 font-medium max-w-lg leading-relaxed">
-                          {activeTab === 'incoming'
-                            ? 'Bipe a receita para encontrar a sacola. Clique em "Confirmar Sacola Completa" se o conteúdo bater com a tela.'
-                            : 'Carga conferida e finalizada com sucesso.'}
-                        </p>
-                      </div>
-
-                      {activeTab === 'incoming' && (
-                        <button
-                          onClick={() => handleVerifyReceive(ship)}
-                          className={`w-full md:w-auto px-6 py-3.5 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer active:scale-95 ${
-                            isComplete
-                              ? 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-emerald-200 ring-2 ring-emerald-500 ring-offset-2'
-                              : 'bg-amber-500 text-white hover:bg-amber-600 shadow-amber-200'
-                          }`}
-                        >
-                          {isComplete ? (
-                            <FiCheckCircle size={20} />
+                  <div className="border-t border-slate-100 bg-slate-50 p-4 md:p-6 rounded-b-2xl animate-in slide-in-from-top-2 duration-300 relative">
+                    {/* BARRA DE AÇÕES */}
+                    {activeTab === 'incoming' && confItems.length > 0 && (
+                      <div className="flex flex-wrap items-center justify-between gap-4 mb-6 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                        <div className="flex flex-1 sm:flex-none gap-3">
+                          {validItemsForCheck.length > 0 ? (
+                            <button
+                              onClick={() =>
+                                markAllBags(validItemsForCheck, !isAllChecked)
+                              }
+                              className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all border cursor-pointer active:scale-95 ${
+                                isAllChecked
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                  : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                              }`}
+                            >
+                              {isAllChecked
+                                ? 'Desmarcar Todos'
+                                : 'Marcar Todos como OK'}
+                            </button>
                           ) : (
-                            <FiAlertTriangle size={20} />
+                            <span className="text-sm font-bold text-amber-600 flex items-center gap-2 px-2">
+                              <FiClock size={16} /> Apenas pendências
+                              informativas
+                            </span>
                           )}
-                          {isComplete
-                            ? 'FINALIZAR E DAR BAIXA'
-                            : 'FINALIZAR COM FALTAS'}
-                        </button>
-                      )}
-                    </div>
-
-                    {ship.observations && (
-                      <div className="mb-6 bg-amber-50 border border-amber-200 p-4 md:p-5 rounded-2xl flex gap-4 items-start shadow-sm w-full">
-                        <div className="bg-amber-100 p-2 rounded-xl text-amber-600 shrink-0">
-                          <FiMessageSquare size={20} />
                         </div>
-                        <div className="flex-1">
-                          <h5 className="text-xs font-black uppercase tracking-widest text-amber-800 mb-1">
-                            Responsável / Observações
-                          </h5>
-                          <p className="text-sm font-medium text-amber-700 whitespace-pre-wrap leading-relaxed">
-                            {ship.observations}
-                          </p>
+                        <div className="flex flex-1 sm:flex-none items-center gap-3">
+                          {validItemsForCheck.length > 0 && (
+                            <button
+                              onClick={() => setHideChecked(!hideChecked)}
+                              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all border cursor-pointer active:scale-95 ${
+                                hideChecked
+                                  ? 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                              }`}
+                            >
+                              <FiFilter size={14} />
+                              {hideChecked
+                                ? 'Mostrando só Pendentes'
+                                : 'Ocultar Conferidos'}
+                            </button>
+                          )}
+                          <button
+                            onClick={() =>
+                              generateShipmentPDF(shipment, 'conference')
+                            }
+                            className="bg-slate-800 text-white hover:bg-slate-900 px-5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors shadow-sm cursor-pointer active:scale-95"
+                          >
+                            <FiPrinter size={16} /> Imprimir Relatório
+                          </button>
                         </div>
                       </div>
                     )}
 
-                    {/* GRID DE PACIENTES E MEDICAMENTOS COM FILTRO APLICADO */}
-                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-                      {filteredPatientItems.map((patientItem, pIndex) => {
-                        const pId = patientItem._id || `p-${pIndex}`;
-                        const isBagChecked = checkedBags[pId];
-
-                        if (activeTab === 'incoming' && isBagChecked) {
-                          return (
-                            <div
-                              key={pId}
-                              className="bg-emerald-50 rounded-2xl shadow-sm border border-emerald-200 p-4 md:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in zoom-in-95 duration-300"
-                            >
-                              <div className="flex items-center gap-4">
-                                <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center text-xl shadow-inner shrink-0">
-                                  <FiCheckCircle />
-                                </div>
-                                <div>
-                                  <h3 className="font-black text-emerald-900 text-base tracking-tight">
-                                    {patientItem.patientName}
-                                  </h3>
-                                  <p className="text-[10px] font-black tracking-widest uppercase mt-0.5 text-emerald-600">
-                                    Sacola Conferida
-                                  </p>
-                                </div>
-                              </div>
-                              <button
-                                onClick={() => toggleBagCheck(pId)}
-                                className="w-full sm:w-auto px-5 py-2.5 bg-white text-emerald-700 border border-emerald-200 rounded-xl font-bold text-xs hover:bg-emerald-100 transition-colors active:scale-95 cursor-pointer flex items-center justify-center gap-2"
-                              >
-                                <FiX size={14} /> Reabrir para Ajuste
-                              </button>
-                            </div>
-                          );
-                        }
-
-                        return (
-                          <div
-                            key={pId}
-                            className="bg-white p-0 rounded-2xl border border-slate-200 shadow-sm flex flex-col overflow-hidden"
-                          >
-                            <div className="flex items-center gap-3 mb-0 p-5 border-b border-slate-100">
-                              <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-black text-sm">
-                                {patientItem.patientName
-                                  .charAt(0)
-                                  .toUpperCase()}
-                              </div>
-                              <span className="font-black text-slate-800 text-base tracking-tight">
-                                {patientItem.patientName}
-                              </span>
-                            </div>
-
-                            <div className="space-y-3 p-5 flex-1">
-                              {patientItem.medications.map((med, mIndex) => {
-                                const mId = med._id || `m-${mIndex}`;
-                                const uniqueId = `${pId}-${mId}`;
-                                const isMissing = med.status === 'falta';
-
-                                const displayQty =
-                                  adjustedQuantities[uniqueId] !== undefined
-                                    ? adjustedQuantities[uniqueId]
-                                    : med.quantity;
-                                const smartUnit = getSmartUnit(
-                                  displayQty,
-                                  med.unit
-                                );
-
-                                return (
-                                  <div key={uniqueId}>
-                                    {activeTab === 'incoming' ? (
-                                      <div
-                                        className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-3.5 rounded-xl border-2 transition-all select-none ${isMissing ? 'bg-red-50 border-red-100 opacity-60' : 'bg-slate-50 border-slate-200'}`}
-                                      >
-                                        <div className="flex flex-col">
-                                          <span
-                                            className={`text-sm font-bold ${isMissing ? 'text-red-700 line-through' : 'text-slate-700'}`}
-                                          >
-                                            {med.name}
-                                          </span>
-                                          {isMissing && (
-                                            <span className="text-[10px] font-black uppercase tracking-widest text-red-500 flex items-center gap-1 mt-0.5">
-                                              <FiAlertCircle size={12} /> FALTA
-                                              NA ORIGEM
-                                            </span>
-                                          )}
-                                        </div>
-
-                                        {!isMissing && (
-                                          <div
-                                            className="flex items-center bg-white border border-slate-200 rounded-lg overflow-hidden h-9 shadow-sm shrink-0 mt-3 sm:mt-0"
-                                            onClick={(e) => e.stopPropagation()}
-                                          >
-                                            <button
-                                              onClick={(e) =>
-                                                handleQuantityChange(
-                                                  uniqueId,
-                                                  med.quantity,
-                                                  -1,
-                                                  e
-                                                )
-                                              }
-                                              className="w-10 flex items-center justify-center hover:bg-slate-100 text-slate-500 cursor-pointer h-full border-r border-slate-100 active:bg-slate-200 transition-colors"
-                                            >
-                                              <FiMinus size={14} />
-                                            </button>
-                                            <div className="px-3 text-sm font-black text-slate-800 min-w-[70px] text-center flex flex-col justify-center leading-none">
-                                              <span>{displayQty}</span>
-                                              <span className="text-[9px] text-slate-400 uppercase mt-0.5 tracking-wider">
-                                                {smartUnit}
-                                              </span>
-                                            </div>
-                                            <button
-                                              onClick={(e) =>
-                                                handleQuantityChange(
-                                                  uniqueId,
-                                                  med.quantity,
-                                                  1,
-                                                  e
-                                                )
-                                              }
-                                              className="w-10 flex items-center justify-center hover:bg-slate-100 text-indigo-600 cursor-pointer h-full border-l border-slate-100 active:bg-slate-200 transition-colors"
-                                            >
-                                              <FiPlus size={14} />
-                                            </button>
-                                          </div>
-                                        )}
-                                      </div>
-                                    ) : (
-                                      <div
-                                        className={`flex items-center justify-between p-3.5 rounded-xl border ${isMissing ? 'bg-red-50 border-red-100' : 'bg-slate-50 border-slate-100'}`}
-                                      >
-                                        <div className="flex flex-col">
-                                          <span
-                                            className={`text-sm font-bold ${isMissing ? 'text-red-600 line-through' : 'text-slate-700'}`}
-                                          >
-                                            {med.name}
-                                          </span>
-                                          {isMissing && (
-                                            <span className="text-[10px] font-black uppercase tracking-widest text-red-500 mt-0.5">
-                                              NÃO RECEBIDO
-                                            </span>
-                                          )}
-                                        </div>
-                                        {!isMissing && (
-                                          <div className="flex items-center gap-3">
-                                            <span className="text-xs font-black font-mono text-slate-700 bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-sm">
-                                              {med.receivedQuantity !==
-                                              undefined
-                                                ? med.receivedQuantity
-                                                : med.quantity}{' '}
-                                              {smartUnit}
-                                            </span>
-                                            <FiCheckCircle
-                                              size={18}
-                                              className="text-emerald-500"
-                                            />
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-
-                            {/* BOTÃO DE CONFIRMAR SACOLA */}
-                            {activeTab === 'incoming' && (
-                              <div className="bg-slate-50/80 border-t border-slate-100 p-4 sm:p-5 flex justify-end">
-                                <button
-                                  onClick={() => toggleBagCheck(pId)}
-                                  className="w-full sm:w-auto px-6 py-3.5 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border border-emerald-200 rounded-xl font-black text-sm transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2 shadow-sm"
-                                >
-                                  <FiCheck size={18} /> Confirmar Sacola
-                                  Completa
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-
-                      {/* MENSAGEM CASO A BUSCA NÃO ENCONTRE NADA */}
-                      {filteredPatientItems.length === 0 && (
-                        <div className="bg-white p-12 rounded-3xl border-2 border-dashed border-slate-200 text-center col-span-full">
-                          <FiSearch
-                            className="mx-auto text-slate-300 mb-4"
-                            size={48}
-                          />
-                          <h3 className="text-xl font-black text-slate-700">
-                            Nenhuma sacola encontrada
-                          </h3>
-                          <p className="text-slate-500 mt-2 font-medium">
-                            Não achámos nenhuma receita com o nome "
-                            {patientSearchTerm}".
+                    {/* BARRA DE AÇÃO HISTÓRICO */}
+                    {activeTab === 'completed' && (
+                      <div className="flex flex-wrap items-center justify-between gap-4 mb-6 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                        <div>
+                          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                            Remessa Finalizada
+                          </span>
+                          <p className="text-sm font-bold text-slate-700">
+                            A visualizar dados do histórico original
                           </p>
                         </div>
-                      )}
-                    </div>
+                        <button
+                          onClick={() =>
+                            generateShipmentPDF(shipment, 'conference')
+                          }
+                          className="bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 px-6 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-colors shadow-sm cursor-pointer active:scale-95"
+                        >
+                          <FiPrinter size={18} /> Descarregar Relatório Original
+                        </button>
+                      </div>
+                    )}
+
+                    {/* BUSCA INTERNA DE PACIENTE */}
+                    {activeTab === 'incoming' && confItems.length > 0 && (
+                      <div className="relative w-full mb-6">
+                        <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          placeholder="Buscar paciente na lista (para bipagem rápida)..."
+                          className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all shadow-sm"
+                          value={patientSearchTerm}
+                          onChange={(e) => setPatientSearchTerm(e.target.value)}
+                          autoFocus
+                        />
+                      </div>
+                    )}
+
+                    {/* LISTAGEM DE ITENS */}
+                    {confItems.length === 0 ? (
+                      <div className="text-center py-10">
+                        <p className="font-black text-slate-500 text-lg">
+                          Lista vazia.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {confItems
+                          .filter((item) =>
+                            item.patientName
+                              .toLowerCase()
+                              .includes(patientSearchTerm.toLowerCase())
+                          )
+                          .filter((item) => {
+                            if (!hideChecked) return true;
+                            const hasPhysicalDelivery =
+                              checkItemHasPhysicalDelivery(item);
+                            if (!hasPhysicalDelivery) return true;
+                            return !checkedBags[item._id];
+                          })
+                          .map((item) => {
+                            const hasPhysicalDelivery =
+                              checkItemHasPhysicalDelivery(item);
+                            const isChecked = checkedBags[item._id];
+
+                            return (
+                              <div
+                                key={item._id}
+                                className={`bg-white rounded-2xl border transition-all duration-200 overflow-hidden ${
+                                  !hasPhysicalDelivery
+                                    ? 'border-amber-200 bg-amber-50/20 shadow-none'
+                                    : isChecked
+                                      ? 'border-emerald-300 shadow-sm opacity-70 hover:opacity-100'
+                                      : 'border-slate-200 shadow-md hover:border-emerald-400'
+                                }`}
+                              >
+                                <div
+                                  className={`px-5 py-4 flex items-center justify-between transition-colors ${
+                                    !hasPhysicalDelivery
+                                      ? 'bg-amber-50'
+                                      : isChecked
+                                        ? 'bg-emerald-50'
+                                        : 'bg-white hover:bg-slate-50'
+                                  }`}
+                                  onClick={() =>
+                                    activeTab === 'incoming' &&
+                                    toggleBagCheck(
+                                      item._id,
+                                      hasPhysicalDelivery
+                                    )
+                                  }
+                                  style={{
+                                    cursor:
+                                      hasPhysicalDelivery &&
+                                      activeTab === 'incoming'
+                                        ? 'pointer'
+                                        : 'default',
+                                  }}
+                                >
+                                  <div className="flex items-center gap-4">
+                                    {activeTab === 'incoming' &&
+                                      (hasPhysicalDelivery ? (
+                                        <div
+                                          className={`w-6 h-6 rounded-lg flex items-center justify-center border-2 transition-all shadow-sm ${
+                                            isChecked
+                                              ? 'bg-emerald-500 border-emerald-500 text-white'
+                                              : 'bg-white border-slate-300 text-transparent'
+                                          }`}
+                                        >
+                                          <FiCheck
+                                            size={16}
+                                            className="stroke-[3px]"
+                                          />
+                                        </div>
+                                      ) : (
+                                        <div className="w-6 h-6 flex items-center justify-center text-amber-500">
+                                          <FiClock size={20} />
+                                        </div>
+                                      ))}
+                                    <h4
+                                      className={`font-black text-base md:text-lg ${
+                                        !hasPhysicalDelivery
+                                          ? 'text-amber-900'
+                                          : isChecked
+                                            ? 'text-emerald-900'
+                                            : 'text-slate-800'
+                                      }`}
+                                    >
+                                      {item.patientName}
+                                    </h4>
+                                  </div>
+
+                                  {activeTab === 'incoming' &&
+                                    (!hasPhysicalDelivery ? (
+                                      <span className="text-[10px] font-black text-amber-700 bg-amber-100 border border-amber-200 px-2.5 py-1 rounded-md uppercase tracking-widest flex items-center gap-1 shadow-sm">
+                                        100% PENDENTE
+                                      </span>
+                                    ) : !isChecked ? (
+                                      <span className="text-[10px] font-black text-slate-500 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-md uppercase tracking-widest shadow-sm">
+                                        Aguardar Bipagem
+                                      </span>
+                                    ) : null)}
+                                </div>
+
+                                <div
+                                  className={`px-5 pb-4 overflow-x-auto ${!hasPhysicalDelivery ? 'opacity-80' : ''}`}
+                                >
+                                  <table className="w-full text-left text-sm whitespace-nowrap">
+                                    <thead
+                                      className={`text-[10px] font-black uppercase tracking-widest border-b ${
+                                        !hasPhysicalDelivery
+                                          ? 'text-amber-600/60 border-amber-200'
+                                          : 'text-slate-400 border-slate-100'
+                                      }`}
+                                    >
+                                      <tr>
+                                        <th className="py-3 pl-2">
+                                          Medicamento
+                                        </th>
+                                        <th className="py-3 text-center">
+                                          Status Físico
+                                        </th>
+                                        <th className="py-3 pr-2 text-right">
+                                          Qtd Solicitada / Recebida
+                                        </th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                      {item.medsToConfer.map((med, idx) => {
+                                        const isFalta =
+                                          med.unitPrice === -1 ||
+                                          med.status?.toLowerCase() === 'falta';
+                                        const isPendente =
+                                          !isFalta &&
+                                          (!med.unitPrice ||
+                                            parseFloat(med.unitPrice) === 0);
+                                        const isBloqueado =
+                                          isFalta || isPendente;
+                                        const key = `${item._id}-${med._id}`;
+                                        const currentQty =
+                                          adjustedQuantities[key];
+
+                                        return (
+                                          <tr
+                                            key={idx}
+                                            className={`${isFalta ? 'bg-red-50/30' : isPendente ? 'bg-amber-50/30' : 'hover:bg-slate-50/50 transition-colors'}`}
+                                          >
+                                            <td className="py-3 pl-2">
+                                              <div
+                                                className={`font-bold text-base ${isFalta ? 'text-red-500 line-through' : isPendente ? 'text-amber-700' : 'text-slate-700'}`}
+                                              >
+                                                {med.name}
+                                              </div>
+                                              {med.observation && (
+                                                <div className="text-xs font-medium text-slate-500 mt-0.5">
+                                                  <FiInfo className="inline mr-1" />{' '}
+                                                  {med.observation}
+                                                </div>
+                                              )}
+                                            </td>
+
+                                            <td className="py-3 text-center">
+                                              {isFalta ? (
+                                                <span className="bg-white border border-red-200 text-red-600 px-3 py-1 rounded-lg text-[10px] font-black uppercase shadow-sm">
+                                                  Falta Declarada
+                                                </span>
+                                              ) : isPendente ? (
+                                                <span className="bg-white border border-amber-200 text-amber-600 px-3 py-1 rounded-lg text-[10px] font-black uppercase shadow-sm">
+                                                  Pendente Fornecedor
+                                                </span>
+                                              ) : (
+                                                <span className="bg-white border border-emerald-200 text-emerald-600 px-3 py-1 rounded-lg text-[10px] font-black uppercase shadow-sm">
+                                                  Recebido (Caixa)
+                                                </span>
+                                              )}
+                                            </td>
+
+                                            <td className="py-3 pr-2 text-right flex items-center justify-end gap-3">
+                                              <span className="text-slate-500 font-bold text-[11px] uppercase tracking-wider bg-slate-100 border border-slate-200 px-2 py-1 rounded-md shadow-sm">
+                                                Sol: {med.quantity}{' '}
+                                                {getSmartUnitDisplay(
+                                                  med.quantity,
+                                                  med.unit
+                                                )}
+                                              </span>
+
+                                              <input
+                                                type="number"
+                                                min="0"
+                                                disabled={
+                                                  isBloqueado ||
+                                                  activeTab === 'completed'
+                                                }
+                                                value={
+                                                  currentQty !== undefined
+                                                    ? currentQty
+                                                    : ''
+                                                }
+                                                onChange={(e) =>
+                                                  handleQtyChange(
+                                                    item._id,
+                                                    med._id,
+                                                    isBloqueado,
+                                                    e.target.value
+                                                  )
+                                                }
+                                                className={`w-16 text-center font-black rounded-lg py-1.5 border outline-none transition-all shadow-inner ${
+                                                  isFalta
+                                                    ? 'bg-red-50 text-red-300 border-red-100 cursor-not-allowed'
+                                                    : isPendente
+                                                      ? 'bg-amber-50 text-amber-300 border-amber-100 cursor-not-allowed'
+                                                      : activeTab ===
+                                                          'completed'
+                                                        ? 'bg-slate-50 text-slate-600 border-slate-200 cursor-default'
+                                                        : currentQty <
+                                                            med.quantity
+                                                          ? 'bg-amber-50 text-amber-700 border-amber-300 focus:ring-2 focus:ring-amber-500/20'
+                                                          : 'bg-white text-emerald-700 border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20'
+                                                }`}
+                                              />
+
+                                              <span className="text-indigo-600 font-black text-[11px] uppercase tracking-widest w-20 text-left bg-indigo-50 border border-indigo-100 px-2 py-1.5 rounded-md text-center shadow-sm">
+                                                {getSmartUnitDisplay(
+                                                  currentQty,
+                                                  med.unit
+                                                )}
+                                              </span>
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    )}
+
+                    {/* BOTÃO FINALIZAR (STICKY E DESTACADO) */}
+                    {activeTab === 'incoming' && confItems.length > 0 && (
+                      <div className="mt-6 pt-4 border-t border-slate-200 flex justify-end sticky bottom-0 bg-slate-50/80 backdrop-blur-md pb-2 z-20">
+                        <button
+                          onClick={() =>
+                            confirmReceive(
+                              shipment,
+                              confItems,
+                              validItemsForCheck
+                            )
+                          }
+                          className={`px-8 py-3.5 rounded-xl font-black text-sm transition-all shadow-lg flex items-center gap-3 cursor-pointer active:scale-95 ${
+                            isAllChecked
+                              ? 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-emerald-500/30'
+                              : 'bg-slate-800 text-white hover:bg-slate-900 shadow-slate-800/20'
+                          }`}
+                        >
+                          {isAllChecked ? (
+                            <FiCheckCircle size={20} />
+                          ) : (
+                            <FiAlertTriangle
+                              size={20}
+                              className="text-amber-400"
+                            />
+                          )}
+                          Guardar e Atualizar Stock
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -648,20 +847,20 @@ export default function ShipmentConferencePage() {
           })}
 
           {filteredShipments.length === 0 && !loading && (
-            <div className="text-center py-24 bg-white rounded-3xl border-2 border-dashed border-slate-200 shadow-sm flex flex-col items-center justify-center">
-              <div className="bg-slate-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5 border border-slate-100">
+            <div className="text-center py-28 bg-white rounded-3xl border border-dashed border-slate-300 shadow-sm flex flex-col items-center justify-center max-w-2xl mx-auto mt-10">
+              <div className="bg-slate-50 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 border border-slate-100">
                 {activeTab === 'incoming' ? (
-                  <FiBox size={36} className="text-slate-300" />
+                  <FiBox size={40} className="text-slate-300" />
                 ) : (
-                  <FiCheckCircle size={36} className="text-slate-300" />
+                  <FiCheckCircle size={40} className="text-slate-300" />
                 )}
               </div>
-              <h3 className="text-xl font-black text-slate-700 tracking-tight">
-                Nenhuma Carga Encontrada
+              <h3 className="text-2xl font-black text-slate-800 tracking-tight">
+                Nenhuma Remessa Encontrada
               </h3>
-              <p className="text-sm font-medium text-slate-500 mt-2 max-w-sm">
-                Não há remessas correspondentes à sua busca ou na aba
-                selecionada no momento.
+              <p className="text-slate-500 mt-2 font-medium max-w-sm">
+                A aba atual está vazia ou a sua busca não retornou nenhum
+                resultado compatível.
               </p>
             </div>
           )}
@@ -674,8 +873,9 @@ export default function ShipmentConferencePage() {
           message={confirmation.message}
           confirmText={confirmation.confirmText}
           isDestructive={confirmation.isDestructive}
-          onConfirm={executeReceive}
+          onConfirm={confirmation.onConfirm}
           onClose={() => setConfirmation({ ...confirmation, isOpen: false })}
+          onCancel={() => setConfirmation({ ...confirmation, isOpen: false })}
         />
       )}
     </div>

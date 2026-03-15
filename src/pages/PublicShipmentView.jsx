@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import {
@@ -28,12 +28,30 @@ export default function PublicShipmentView() {
   const [loading, setLoading] = useState(true);
   const [finished, setFinished] = useState(false);
   const [observations, setObservations] = useState('');
+
+  // Controle do remetente
   const [senderName, setSenderName] = useState('');
+  const [isSenderLocked, setIsSenderLocked] = useState(false);
+  const [lastUpdateDate, setLastUpdateDate] = useState('');
+
+  const [daysLeft, setDaysLeft] = useState(7);
+  const [isExpired, setIsExpired] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState('');
 
-  // NOVO ESTADO: Controla quais sacolas (pacientes) já foram lacradas pelo fornecedor
+  // Controla quais sacolas (pacientes) já foram lacradas pelo fornecedor
   const [readyBags, setReadyBags] = useState({});
+
+  // CORREÇÃO 1: Função para fechar a sacola instantaneamente no 1º clique
+  const toggleBagReady = useCallback((pId) => {
+    setReadyBags((prev) => {
+      const isCurrentlyReady = prev[pId] === true;
+      return {
+        ...prev,
+        [pId]: !isCurrentlyReady,
+      };
+    });
+  }, []);
 
   const [confirmation, setConfirmation] = useState({
     isOpen: false,
@@ -55,32 +73,108 @@ export default function PublicShipmentView() {
   const API_URL =
     import.meta.env.VITE_API_URL || 'https://api.parari.medlogs.com.br/api';
 
-  useEffect(() => {
-    let isMounted = true;
+  // FUNÇÃO MÁGICA: Varre tudo e garante que a soma do Orçamento está 100% correta
+  const recalculateShipmentTotal = (shipmentObj) => {
+    let total = 0;
+    shipmentObj.items.forEach((p) => {
+      p.medications.forEach((m) => {
+        // Se é falta ou parcial, zera o subtotal desse remédio e não soma
+        if (m.status === 'falta' || m.unitPrice === -1) {
+          m.totalPrice = 0;
+        } else if (m.status === 'parcial' || m.quantity === 0) {
+          m.totalPrice = 0;
+        } else {
+          // Se tem preço, multiplica pela quantidade e soma no Carrinho
+          const price = parseFloat(m.unitPrice) || 0;
+          m.totalPrice = price * (m.quantity || 1);
+          total += m.totalPrice;
+        }
+      });
+    });
+    shipmentObj.totalCost = total; // Atualiza o Total Geral lá do rodapé
+    return shipmentObj;
+  };
 
-    async function loadData(isFirstLoad = true) {
+  const loadData = useCallback(
+    async (isFirstLoad = true) => {
       try {
         const res = await axios.get(`${API_URL}/shipments/public/${token}`);
-        if (!isMounted) return;
+        const shipmentData = res.data;
 
-        if (isFirstLoad) {
-          const dataWithMemory = res.data;
-          dataWithMemory.items.forEach((p) =>
-            p.medications.forEach((m) => {
-              m.requestedQuantity = m.quantity;
-            })
-          );
-          setShipment(dataWithMemory);
-          if (res.data.observations) setObservations(res.data.observations);
-        }
+        // CORREÇÃO 2: LÓGICA DE VALIDADE E STATUS FINALIZADO
+        const isAlreadyFinished =
+          shipmentData.status === 'conferido' ||
+          shipmentData.status === 'finalizado';
 
-        if (res.data.status !== 'aguardando_fornecedor') {
+        if (isAlreadyFinished) {
+          // Se já está finalizado, mostra sucesso e NUNCA expira
+          setIsExpired(false);
+          setDaysLeft(0);
           setFinished(true);
+        } else {
+          // Se não estiver finalizado, calcula os dias normalmente
+          const createdAt = new Date(shipmentData.createdAt || new Date());
+          const now = new Date();
+          const diffTime = now.getTime() - createdAt.getTime();
+          const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+          const expired = diffDays >= 7;
+          const remainingDays = expired ? 0 : 7 - diffDays;
+
+          setIsExpired(expired);
+          setDaysLeft(remainingDays);
+          setFinished(expired); // Se expirou, vai para a tela de finalizado/expirado
         }
+
+        // 2. LÓGICA DO NOME BLOQUEADO E DATA DE ATUALIZAÇÃO
+        if (isFirstLoad && shipmentData.observations) {
+          // Procura a tag oculta de Responsável
+          const nameMatch = shipmentData.observations.match(
+            /\[Responsável:\s*(.*?)\]/
+          );
+          if (nameMatch) {
+            setSenderName(nameMatch[1].trim());
+            setIsSenderLocked(true);
+          }
+
+          // Procura a tag oculta de Data
+          const dateMatch = shipmentData.observations.match(
+            /\[Atualizado em:\s*(.*?)\]/
+          );
+          if (dateMatch) {
+            setLastUpdateDate(dateMatch[1]);
+          }
+
+          // Limpa as tags do texto para o fornecedor ver só a observação dele (Evita a duplicação!)
+          const cleanObs = shipmentData.observations
+            .replace(/\[Responsável:.*?\]\n?/g, '')
+            .replace(/\[Atualizado em:.*?\]\n?/g, '')
+            .trim();
+
+          setObservations(cleanObs);
+        }
+        // 3. IDENTIFICA O QUE JÁ FOI ENVIADO E RESTAURA FALTAS
+        const dataWithMemory = shipmentData;
+        dataWithMemory.items.forEach((p) =>
+          p.medications.forEach((m) => {
+            m.requestedQuantity = m.quantity;
+
+            if (m.unitPrice === -1) m.status = 'falta';
+            else if (m.quantity === 0) m.status = 'parcial';
+
+            m.alreadySubmitted =
+              (parseFloat(m.unitPrice) > 0 && !m.hasMemoryPrice) ||
+              m.status === 'falta';
+          })
+        );
+
+        const finalData = recalculateShipmentTotal(dataWithMemory);
+        setShipment(finalData);
+        setShipment(dataWithMemory);
 
         if (isFirstLoad) {
           const hasSeenTour = localStorage.getItem('medlogs_supplier_tour_v3');
-          if (!hasSeenTour && res.data.status === 'aguardando_fornecedor') {
+          if (!hasSeenTour && shipmentData.status === 'aguardando_fornecedor') {
             setTimeout(() => setShowTour(true), 1000);
           }
         }
@@ -91,44 +185,39 @@ export default function PublicShipmentView() {
       } finally {
         if (isFirstLoad) setLoading(false);
       }
-    }
+    },
+    [token, API_URL]
+  );
 
-    loadData(true);
-
-    const interval = setInterval(() => {
-      if (!finished) loadData(false);
-    }, 30000);
-
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-    };
-  }, [token, finished]);
+  useEffect(() => {
+    let isMounted = true;
+    if (isMounted) loadData(true);
+  }, [loadData]);
 
   const tourSteps = [
     {
       title: 'Bem-vindo ao Portal!',
-      text: 'Este é o seu ambiente seguro para responder às cotações. Vamos te mostrar as novidades em 5 passos rápidos.',
+      text: 'Este é o seu ambiente seguro para responder às cotações.',
       target: null,
     },
     {
       title: 'Busca Inteligente 🔍',
-      text: 'Digite o nome do paciente ou bipe a receita para focar apenas na sacola que você está montando agora!',
+      text: 'Digite o nome do paciente para focar apenas na sacola atual!',
       target: searchRef,
     },
     {
       title: 'Passo 1: Quantidade e Preço',
-      text: 'Ajuste a quantidade se necessário e preencha o valor. Se o sistema lembrar do seu último preço, a caixa brilha em verde.',
+      text: 'Ajuste a quantidade e preencha o valor. Se o sistema lembrar do seu último preço, a caixa brilha em verde.',
       target: priceRef,
     },
     {
       title: 'Passo 2: Itens em Falta',
-      text: "Se você não tiver o medicamento, clique em 'Marcar Falta'. O sistema gera o saldo para entregar depois.",
+      text: "Se não tiver o medicamento, clique em 'Marcar Falta'.",
       target: missingRef,
     },
     {
       title: 'NOVO: Lacrar Sacola 📦',
-      text: 'Terminou de montar a sacola do paciente? Clique no botão no rodapé do paciente para "Lacrar a Sacola" e limpar a tela!',
+      text: 'Terminou de montar a sacola do paciente? Clique em "Lacrar a Sacola" e limpe a tela!',
       target: null,
     },
   ];
@@ -170,9 +259,22 @@ export default function PublicShipmentView() {
     return map[u] ? (qty > 1 ? map[u].p : map[u].s) : unit.toUpperCase();
   };
 
-  // =========================================================================
-  // MÁGICA NOVA: FUNÇÃO PARA DEIXAR SACOLA PARA DEPOIS
-  // =========================================================================
+  const filteredItems =
+    shipment?.items
+      ?.map((patientItem) => {
+        const searchLower = searchTerm.toLowerCase();
+        const patientMatches = patientItem.patientName
+          .toLowerCase()
+          .includes(searchLower);
+        const matchingMeds = patientItem.medications.filter(
+          (med) =>
+            patientMatches ||
+            (med.name && med.name.toLowerCase().includes(searchLower))
+        );
+        return { ...patientItem, medications: matchingMeds };
+      })
+      .filter((patientItem) => patientItem.medications.length > 0) || [];
+
   const handlePatientAction = (filteredPIndex, action) => {
     if (finished) return;
     const newShipment = { ...shipment };
@@ -185,6 +287,9 @@ export default function PublicShipmentView() {
     const patient = newShipment.items[originalPatientIndex];
 
     patient.medications.forEach((med) => {
+      // Ignora itens já submetidos no banco
+      if (med.alreadySubmitted) return;
+
       if (action === 'parcial_total') {
         med.status = 'parcial';
         med.quantity = 0;
@@ -198,26 +303,25 @@ export default function PublicShipmentView() {
     });
 
     let total = 0;
-    newShipment.items.forEach((p) => {
+    const finalShipment = recalculateShipmentTotal(newShipment);
+    setShipment(finalShipment);
+    newShipment.items.forEach((p) =>
       p.medications.forEach((m) => {
-        if (m.status !== 'falta' && m.status !== 'parcial') total += m.totalPrice || 0;
-      });
-    });
+        if (m.status !== 'falta' && m.status !== 'parcial')
+          total += m.totalPrice || 0;
+      })
+    );
     newShipment.totalCost = total;
     setShipment(newShipment);
   };
-  // =========================================================================
 
-  // =========================================================================
-  // SEU CÓDIGO ORIGINAL DE MUDAR ITEM (INTACTO!)
-  // =========================================================================
-  const handleItemChange = (patientIndex, medIndex, field, value) => {
+  const handleItemChange = (filteredPIndex, medIndex, field, value) => {
     if (finished) return;
 
     const newShipment = { ...shipment };
     newShipment.items = JSON.parse(JSON.stringify(shipment.items));
 
-    const filteredPatient = filteredItems[patientIndex];
+    const filteredPatient = filteredItems[filteredPIndex];
     const originalPatientIndex = newShipment.items.findIndex(
       (p) => p._id === filteredPatient._id
     );
@@ -242,34 +346,17 @@ export default function PublicShipmentView() {
     } else if (field === 'status') {
       const isMissing = value;
       item.status = isMissing ? 'falta' : 'disponivel';
+
       if (item.status === 'falta') {
-        item.unitPrice = 0;
-        item.totalPrice = 0;
+        item.unitPrice = -1; // Código secreto para o backend
+      } else {
+        item.unitPrice = 0; // Desfez a falta, zera pra digitar de novo
       }
     }
 
-    if (item.status !== 'falta') {
-      item.totalPrice = (item.unitPrice || 0) * (item.quantity || 1);
-    } else {
-      item.totalPrice = 0;
-    }
-
-    let total = 0;
-    newShipment.items.forEach((p) => {
-      p.medications.forEach((m) => {
-        if (m.status === 'disponivel') total += m.totalPrice || 0;
-      });
-    });
-    newShipment.totalCost = total;
-
-    setShipment(newShipment);
-  };
-
-  const toggleBagReady = (pId) => {
-    setReadyBags((prev) => ({
-      ...prev,
-      [pId]: !prev[pId],
-    }));
+    // Passa na nossa calculadora e atualiza a tela na hora!
+    const finalShipment = recalculateShipmentTotal(newShipment);
+    setShipment(finalShipment);
   };
 
   let totalMeds = 0;
@@ -278,8 +365,12 @@ export default function PublicShipmentView() {
     shipment.items.forEach((p) => {
       p.medications.forEach((m) => {
         totalMeds++;
-        // AJUSTE: Considera "resolvido" se for parcial também!
-        if (m.status === 'falta' || (m.status === 'parcial' && m.quantity === 0) || parseFloat(m.unitPrice) > 0) {
+        if (
+          m.alreadySubmitted ||
+          m.status === 'falta' ||
+          (m.status === 'parcial' && m.quantity === 0) ||
+          parseFloat(m.unitPrice) > 0
+        ) {
           resolvedMeds++;
         }
       });
@@ -303,19 +394,19 @@ export default function PublicShipmentView() {
     if (!isFullyResolved) {
       setConfirmation({
         isOpen: true,
-        title: 'Atenção: Enviar Incompleto?',
-        message: `Você preencheu apenas ${resolvedMeds} de ${totalMeds} itens. Os itens que continuam com o preço zerado NÃO SERÃO COTADOS e nem serão enviados como parcial,\n\nDeseja enviar mesmo assim?`,
-        confirmText: 'Sim, Enviar Incompleto',
+        title: 'Enviar Parcialmente?',
+        message: `Você preencheu ${resolvedMeds} de ${totalMeds} itens. Os itens restantes continuarão pendentes neste link para você preencher depois.\n\nDeseja enviar os preenchidos agora para a conferência?`,
+        confirmText: 'Sim, Salvar e Enviar Parcial',
         isDestructive: true,
         onConfirm: processOrder,
       });
     } else {
       setConfirmation({
         isOpen: true,
-        title: 'Confirmar Envio',
+        title: 'Finalizar Cotação Completa',
         message:
           'Você preencheu todos os itens! Confirma o envio definitivo deste pedido?',
-        confirmText: 'Sim, Enviar Agora',
+        confirmText: 'Sim, Finalizar Cotação',
         isDestructive: false,
         onConfirm: processOrder,
       });
@@ -325,39 +416,65 @@ export default function PublicShipmentView() {
   const closeConfirmation = () =>
     setConfirmation({ ...confirmation, isOpen: false });
 
+  // LÓGICA DE ENVIO
   const processOrder = async () => {
     try {
-      const formattedObservations = `Responsável do Fornecedor: ${senderName.trim()}${observations ? `\nObservações: ${observations}` : ''}`;
+      // Pega a data e hora atual do sistema
+      const dataAtual = new Date().toLocaleString('pt-BR');
+
+      // Formata a observação com tags escondidas para o sistema ler depois sem duplicar
+      const formattedObservations = `[Responsável: ${senderName.trim()}]\n[Atualizado em: ${dataAtual}]\n${observations}`;
+
       await axios.post(`${API_URL}/shipments/public/${token}/confirm`, {
         items: shipment.items,
         totalCost: shipment.totalCost,
         observations: formattedObservations,
+        isFullyResolved: isFullyResolved,
       });
-      setFinished(true);
-      toast.success('Pedido enviado com sucesso!');
-      window.scrollTo(0, 0);
+
+      if (isFullyResolved) {
+        setFinished(true);
+        toast.success('Cotação finalizada e enviada com sucesso!');
+      } else {
+        toast.success(
+          'Itens confirmados foram enviados! O link continua ativo.',
+          { duration: 5000 }
+        );
+        await loadData(false);
+      }
+
       closeConfirmation();
+      window.scrollTo(0, 0);
     } catch (error) {
-      toast.error('Erro ao enviar pedido. Tente novamente.');
-      throw error;
+      console.error(
+        'Erro detalhado do Backend:',
+        error.response?.data || error.message
+      );
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        'Erro de conexão com o servidor. Tente novamente.';
+      toast.error(`Falha no envio: ${errorMessage}`);
+      closeConfirmation();
     }
   };
 
-  const filteredItems =
-    shipment?.items
-      ?.map((patientItem) => {
-        const searchLower = searchTerm.toLowerCase();
-        const patientMatches = patientItem.patientName
-          .toLowerCase()
-          .includes(searchLower);
-        const matchingMeds = patientItem.medications.filter(
-          (med) =>
-            patientMatches ||
-            (med.name && med.name.toLowerCase().includes(searchLower))
-        );
-        return { ...patientItem, medications: matchingMeds };
-      })
-      .filter((patientItem) => patientItem.medications.length > 0) || [];
+  // DIVISÃO VISUAL ESTRITA: PENDENTES VS COMPLETOS
+  const pendingPatients = [];
+  const completedPatients = []; // Lista estritamente de leitura (somente consulta)
+
+  filteredItems.forEach((patientItem, filteredIndex) => {
+    // Só vai para a lista de concluídos se TODOS os remédios vieram do backend com "alreadySubmitted"
+    const isTotallySubmittedFromDb = patientItem.medications.every(
+      (m) => m.alreadySubmitted
+    );
+
+    if (isTotallySubmittedFromDb) {
+      completedPatients.push({ ...patientItem, filteredIndex });
+    } else {
+      pendingPatients.push({ ...patientItem, filteredIndex });
+    }
+  });
 
   if (loading)
     return (
@@ -365,10 +482,11 @@ export default function PublicShipmentView() {
         Carregando pedido seguro...
       </div>
     );
-  if (!shipment)
+
+  if (!shipment || (isExpired && !shipment))
     return (
       <div className="min-h-screen flex items-center justify-center text-red-600 font-bold bg-red-50">
-        Pedido não encontrado ou link expirado.
+        Remessa inválida ou finalizada pela secretaria.
       </div>
     );
 
@@ -380,11 +498,17 @@ export default function PublicShipmentView() {
             <FiCheckCircle size={48} />
           </div>
           <h1 className="text-3xl font-black text-slate-800 mb-3 tracking-tight">
-            Sucesso!
+            {isExpired ? 'Link Expirado' : 'Sucesso!'}
           </h1>
           <p className="text-slate-600 mb-8 font-medium leading-relaxed">
-            Obrigado, <strong>{shipment.supplier}</strong>.<br />A sua resposta
-            foi enviada e a Secretaria de Saúde já foi notificada.
+            {isExpired ? (
+              'O prazo de 7 dias para este link encerrou e ele não está mais disponível para preenchimento.'
+            ) : (
+              <>
+                Obrigado, <strong>{shipment.supplier}</strong>.<br />A sua
+                resposta foi enviada e a Secretaria já foi notificada.
+              </>
+            )}
           </p>
           <button
             onClick={() => window.print()}
@@ -470,20 +594,38 @@ export default function PublicShipmentView() {
               Portal do Fornecedor
             </p>
           </div>
-          <div className="text-center md:text-right">
+          <div className="text-center md:text-right flex flex-col md:items-end items-center">
             <div className="font-bold text-lg">{shipment.supplier}</div>
-            <div className="text-sm text-indigo-300 font-mono bg-indigo-800/50 px-3 py-0.5 rounded-full inline-block mt-1">
-              Ref: {shipment.code}
+            <div className="flex gap-2 mt-1">
+              <div className="text-sm text-indigo-300 font-mono bg-indigo-800/50 px-3 py-0.5 rounded-full inline-block">
+                Ref: {shipment.code}
+              </div>
+              <div className="text-sm font-bold bg-amber-500/20 text-amber-200 px-3 py-0.5 rounded-full inline-flex items-center gap-1 border border-amber-500/30">
+                <FiClock size={14} /> Expira em: {daysLeft} dias
+              </div>
             </div>
           </div>
         </div>
       </header>
 
       <div className="max-w-5xl mx-auto mt-8 p-4">
+        <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-xl mb-6 flex items-start gap-3 shadow-sm print:hidden">
+          <FiInfo className="mt-0.5 shrink-0 text-blue-600" size={18} />
+          <div>
+            <p className="font-bold text-sm">
+              Este link ficará ativo por até 7 dias!
+            </p>
+            <p className="text-xs mt-1 text-blue-700">
+              Você pode preencher as receitas parcialmente e enviar. O link
+              continuará válido para os itens restantes até ser finalizado por
+              completo.
+            </p>
+          </div>
+        </div>
+
         <div
           className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-6 print:hidden sticky top-[88px] z-30"
           ref={searchRef}
-          style={showTour && tourStep === 1 ? highlightStyle : {}}
         >
           <div className="relative">
             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
@@ -497,168 +639,332 @@ export default function PublicShipmentView() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          {searchTerm && (
-            <p className="text-xs text-indigo-600 font-bold mt-2 ml-2">
-              Mostrando resultados para: "{searchTerm}"
-            </p>
-          )}
         </div>
 
-        <div className="space-y-6">
-          {filteredItems.map((patientItem, pIndex) => {
-            const pId = patientItem._id || pIndex;
-            const isBagReady = readyBags[pId];
+        {/* ================= SESSÃO 1: RECEITAS PENDENTES ================= */}
+        {pendingPatients.length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-lg font-black text-slate-700 mb-4 flex items-center gap-2">
+              <FiClock className="text-amber-500" /> Receitas Pendentes
+            </h2>
+            <div className="space-y-6">
+              {pendingPatients.map((patientItem) => {
+                const pIndex = patientItem.filteredIndex;
+                const pId = patientItem._id || pIndex;
+                const isAllParcial = patientItem.medications.every(
+                  (m) => m.status === 'parcial' && m.quantity === 0
+                );
 
-            // INTELIGÊNCIA NOVA: Identifica se a sacola inteira foi mandada pra depois
-            const isAllParcial = patientItem.medications.every(
-              (m) => m.status === 'parcial' && m.quantity === 0
-            );
+                // Se a sacola foi lacrada pelo usuário agora, minimiza ela.
+                const isBagReady = readyBags[pId];
 
-            // Verifica se o paciente atual já teve todos os remédios preenchidos ou marcados
-            const isPatientResolved = patientItem.medications.every(
-              (m) => m.status === 'falta' || (m.status === 'parcial' && m.quantity === 0) || parseFloat(m.unitPrice) > 0
-            );
-
-            if (isBagReady) {
-              return (
-                <div
-                  key={pId}
-                  className="bg-emerald-50 rounded-3xl shadow-sm border border-emerald-200 p-4 md:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in zoom-in-95 duration-300"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center text-2xl shadow-inner shrink-0">
-                      <FiCheckCircle />
+                if (isBagReady) {
+                  return (
+                    <div
+                      key={pId}
+                      className="bg-slate-100 rounded-3xl shadow-sm border border-slate-200 p-4 md:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in zoom-in-95 duration-300"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-slate-200 text-slate-500 rounded-2xl flex items-center justify-center text-2xl shadow-inner shrink-0">
+                          <FiPackage />
+                        </div>
+                        <div>
+                          <h3 className="font-black text-slate-700 text-base">
+                            {patientItem.patientName}
+                          </h3>
+                          <p className="text-[10px] font-black tracking-widest uppercase mt-0.5 text-slate-500">
+                            Sacola Pronta (Aguardando Envio)
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => toggleBagReady(pId)}
+                        className="w-full sm:w-auto px-5 py-2.5 bg-white text-slate-600 border border-slate-200 rounded-xl font-bold text-xs hover:bg-slate-50 transition-colors active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                      >
+                        <FiX size={14} /> Reabrir Sacola
+                      </button>
                     </div>
-                    <div>
-                      <h3 className="font-black text-emerald-900 text-base">
+                  );
+                }
+
+                return (
+                  <div
+                    key={pId}
+                    className={`bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in duration-300 ${isAllParcial ? 'opacity-80 ring-2 ring-amber-200' : ''}`}
+                  >
+                    <div className="bg-slate-50/80 px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                      <h3 className="font-black text-slate-800 text-sm flex items-center gap-3">
+                        <div className="w-8 h-8 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center">
+                          {patientItem.patientName.charAt(0).toUpperCase()}
+                        </div>
                         {patientItem.patientName}
                       </h3>
-                      <p
-                        className={`text-[10px] font-black tracking-widest uppercase mt-0.5 ${isPatientResolved ? 'text-emerald-600' : 'text-amber-600'}`}
-                      >
-                        {isPatientResolved
-                          ? 'Sacola Pronta e Lacrada'
-                          : 'Sacola Fechada (Com Pendências)'}
-                      </p>
+                      {isAllParcial ? (
+                        <button
+                          onClick={() =>
+                            handlePatientAction(pIndex, 'desfazer')
+                          }
+                          className="cursor-pointer bg-white text-slate-600 border border-slate-200 px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-100 flex items-center justify-center gap-2 active:scale-95"
+                        >
+                          <FiCheck size={14} /> Desfazer Envio para Depois
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() =>
+                            handlePatientAction(pIndex, 'parcial_total')
+                          }
+                          className="cursor-pointer bg-amber-100 text-amber-700 border border-amber-200 px-4 py-2 rounded-xl text-xs font-bold hover:bg-amber-200 flex items-center justify-center gap-2 active:scale-95"
+                        >
+                          <FiClock size={14} /> Deixar pedido parcial
+                        </button>
+                      )}
                     </div>
-                  </div>
-                  <button
-                    onClick={() => toggleBagReady(pId)}
-                    className="w-full sm:w-auto px-5 py-2.5 bg-white text-emerald-700 border border-emerald-200 rounded-xl font-bold text-xs hover:bg-emerald-100 transition-colors active:scale-95 cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    <FiX size={14} /> Reabrir Sacola
-                  </button>
-                </div>
-              );
-            }
 
-            return (
-              <div
-                key={pId}
-                className={`bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in duration-300 ${isAllParcial ? 'opacity-80 ring-2 ring-amber-200' : ''}`}
-              >
-                <div className="bg-slate-50/80 px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                  <h3 className="font-black text-slate-800 text-sm flex items-center gap-3">
-                    <div className="w-8 h-8 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center">
-                      {patientItem.patientName.charAt(0).toUpperCase()}
-                    </div>
-                    {patientItem.patientName}
-                  </h3>
+                    <div className="w-full">
+                      {/* DESKTOP TABLE */}
+                      <div className="hidden md:block overflow-x-auto">
+                        <table className="w-full text-left min-w-[700px]">
+                          <thead className="bg-white text-slate-400 text-[10px] uppercase font-black tracking-widest border-b border-slate-100">
+                            <tr>
+                              <th className="p-5 w-1/3">Medicamento</th>
+                              <th className="p-5 text-center w-32">
+                                Qtd Solicitada
+                              </th>
+                              <th className="p-5 w-40 print:hidden text-right">
+                                Valor Unit. (R$)
+                              </th>
+                              <th className="p-5 text-right w-32">Subtotal</th>
+                              <th className="p-5 text-center w-32 print:hidden">
+                                Ação
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-50">
+                            {patientItem.medications.map((med, mIndex) => {
+                              // Se o item já foi submetido parcialmente antes (ex: 1 remédio de 3 já foi enviado)
+                              if (med.alreadySubmitted) {
+                                return (
+                                  <tr
+                                    key={`desktop-${mIndex}`}
+                                    className="bg-slate-50/50 opacity-60"
+                                  >
+                                    <td className="p-5">
+                                      <div className="font-bold text-sm text-slate-600">
+                                        {med.name || med.medicationId?.name}
+                                      </div>
+                                      <div className="text-[10px] text-emerald-600 font-bold uppercase mt-1 flex items-center gap-1">
+                                        <FiCheck /> Já Enviado
+                                      </div>
+                                    </td>
+                                    <td className="p-5 text-center font-bold text-slate-500">
+                                      {med.quantity}
+                                    </td>
+                                    <td className="p-5 text-right font-mono font-bold text-slate-500">
+                                      {med.status === 'falta'
+                                        ? 'FALTA'
+                                        : `R$ ${med.unitPrice}`}
+                                    </td>
+                                    <td className="p-5 text-right font-mono font-bold text-slate-500">
+                                      {med.status === 'falta'
+                                        ? '---'
+                                        : `R$ ${med.totalPrice}`}
+                                    </td>
+                                    <td className="p-5 text-center"></td>
+                                  </tr>
+                                );
+                              }
 
-                  {/* NOVO: BOTÃO DE DEIXAR SACOLA PARA DEPOIS */}
-                  {isAllParcial ? (
-                    <button
-                      onClick={() => handlePatientAction(pIndex, 'desfazer')}
-                      className="cursor-pointer bg-white text-slate-600 border border-slate-200 px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-100 flex items-center justify-center gap-2 shadow-sm transition-all active:scale-95"
-                    >
-                      <FiCheck size={14} /> Desfazer Envio para Depois
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => handlePatientAction(pIndex, 'parcial_total')}
-                      className="cursor-pointer bg-amber-100 text-amber-700 border border-amber-200 px-4 py-2 rounded-xl text-xs font-bold hover:bg-amber-200 flex items-center justify-center gap-2 shadow-sm transition-all active:scale-95"
-                    >
-                      <FiClock size={14} /> Deixar pedido parcial
-                    </button>
-                  )}
-                </div>
+                              return (
+                                <tr
+                                  key={`desktop-${mIndex}`}
+                                  className={`transition-colors ${med.status === 'falta' ? 'bg-red-50/50' : 'hover:bg-slate-50/50'}`}
+                                >
+                                  <td className="p-5 align-top">
+                                    <div
+                                      className={`font-bold text-sm ${med.status === 'falta' ? 'text-red-700 line-through' : 'text-slate-800'}`}
+                                    >
+                                      {med.name || med.medicationId?.name}
+                                    </div>
+                                    {med.observation && (
+                                      <div className="mt-2 inline-flex items-start gap-1.5 text-[11px] text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-1.5 rounded-lg max-w-full font-medium">
+                                        <FiFileText
+                                          className="mt-0.5 shrink-0"
+                                          size={12}
+                                        />{' '}
+                                        Obs: {med.observation}
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="p-5 text-center align-top">
+                                    {med.status === 'falta' ||
+                                    (med.status === 'parcial' &&
+                                      med.quantity === 0) ? (
+                                      <span className="text-slate-300 font-mono font-bold">
+                                        -
+                                      </span>
+                                    ) : (
+                                      <div className="flex flex-col items-center">
+                                        <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden h-9 w-28 shadow-sm">
+                                          <button
+                                            onClick={() =>
+                                              handleItemChange(
+                                                pIndex,
+                                                mIndex,
+                                                'quantity',
+                                                med.quantity - 1
+                                              )
+                                            }
+                                            className="px-3 hover:bg-slate-100 text-slate-500 cursor-pointer h-full border-r border-slate-100"
+                                          >
+                                            <FiMinus size={12} />
+                                          </button>
+                                          <span className="flex-1 text-center text-sm font-black text-slate-800 leading-9">
+                                            {med.quantity}
+                                          </span>
+                                          <button
+                                            onClick={() =>
+                                              handleItemChange(
+                                                pIndex,
+                                                mIndex,
+                                                'quantity',
+                                                med.quantity + 1
+                                              )
+                                            }
+                                            className="px-3 hover:bg-slate-100 text-indigo-600 cursor-pointer h-full border-l border-slate-100"
+                                          >
+                                            <FiPlus size={12} />
+                                          </button>
+                                        </div>
+                                        <span className="text-[10px] text-slate-400 mt-1.5 font-bold uppercase tracking-wider">
+                                          {getSmartUnit(med.quantity, med.unit)}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="p-5 align-top print:hidden text-right">
+                                    <div className="relative inline-block w-full max-w-[120px]">
+                                      <span
+                                        className={`absolute left-3 top-3.5 text-sm font-bold pointer-events-none z-10 ${med.hasMemoryPrice && med.status !== 'falta' ? 'text-emerald-700' : 'text-slate-400'}`}
+                                      >
+                                        R$
+                                      </span>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        className={`w-full pl-8 pr-3 py-3 border-2 rounded-xl outline-none text-right font-mono font-black transition-all duration-500 relative
+                                          ${med.status === 'falta' || (med.status === 'parcial' && med.quantity === 0) ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed' : med.hasMemoryPrice ? 'bg-emerald-50 border-emerald-400 text-emerald-900 shadow-[0_0_15px_rgba(52,211,153,0.4)] ring-2 ring-emerald-400/50' : 'bg-slate-50 border-slate-200 text-slate-800 focus:bg-white focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500'}`}
+                                        placeholder="0.00"
+                                        value={med.unitPrice || ''}
+                                        onChange={(e) =>
+                                          handleItemChange(
+                                            pIndex,
+                                            mIndex,
+                                            'unitPrice',
+                                            e.target.value
+                                          )
+                                        }
+                                        disabled={
+                                          med.status === 'falta' ||
+                                          (med.status === 'parcial' &&
+                                            med.quantity === 0)
+                                        }
+                                      />
+                                    </div>
+                                    {med.hasMemoryPrice &&
+                                      med.status !== 'falta' && (
+                                        <div className="text-[10px] text-emerald-600 font-black uppercase mt-2 tracking-widest flex items-center justify-end gap-1">
+                                          Preço Automático
+                                        </div>
+                                      )}
+                                  </td>
+                                  <td className="p-5 align-top text-right font-mono font-black text-slate-800 pt-8">
+                                    {med.status === 'falta' ? (
+                                      <span className="text-slate-300">
+                                        ---
+                                      </span>
+                                    ) : (
+                                      (med.totalPrice || 0).toLocaleString(
+                                        'pt-BR',
+                                        { style: 'currency', currency: 'BRL' }
+                                      )
+                                    )}
+                                  </td>
+                                  <td className="p-5 align-top text-center print:hidden">
+                                    <button
+                                      onClick={() =>
+                                        handleItemChange(
+                                          pIndex,
+                                          mIndex,
+                                          'status',
+                                          med.status !== 'falta'
+                                        )
+                                      }
+                                      className={`w-full py-2 px-2 mt-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95 ${med.status === 'falta' ? 'bg-red-50 text-red-600 border-red-200 shadow-inner' : 'bg-white text-slate-400 border-slate-200 hover:border-red-300 hover:text-red-500 hover:bg-red-50/30 shadow-sm'}`}
+                                    >
+                                      {med.status === 'falta' ? (
+                                        <>
+                                          Gerar
+                                          <br />
+                                          Saldo
+                                        </>
+                                      ) : (
+                                        <>
+                                          Marcar
+                                          <br />
+                                          Falta
+                                        </>
+                                      )}
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
 
-                <div className="w-full">
-                  {/* VERSÃO DESKTOP */}
-                  <div className="hidden md:block overflow-x-auto">
-                    <table className="w-full text-left min-w-[700px]">
-                      <thead className="bg-white text-slate-400 text-[10px] uppercase font-black tracking-widest border-b border-slate-100">
-                        <tr>
-                          <th className="p-5 w-1/3">Medicamento</th>
-                          <th className="p-5 text-center w-32">
-                            Qtd Solicitada
-                          </th>
-                          <th className="p-5 w-40 print:hidden text-right">
-                            Valor Unit. (R$)
-                          </th>
-                          <th className="p-5 text-right w-32">Subtotal</th>
-                          <th className="p-5 text-center w-32 print:hidden">
-                            Ação / Estoque
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-50">
+                      {/* MOBILE VIEW */}
+                      <div className="md:hidden divide-y divide-slate-100">
                         {patientItem.medications.map((med, mIndex) => {
-                          const isFirstItem = pIndex === 0 && mIndex === 0;
+                          if (med.alreadySubmitted) return null; // Pula os submetidos no mobile para simplificar
+
                           return (
-                            <tr
-                              key={`desktop-${mIndex}`}
-                              className={`transition-colors group ${med.status === 'falta' ? 'bg-red-50/50' : 'hover:bg-slate-50/50'}`}
+                            <div
+                              key={`mobile-${mIndex}`}
+                              className={`p-4 transition-colors ${med.status === 'falta' ? 'bg-red-50/30' : 'bg-white'}`}
                             >
-                              <td className="p-5 align-top">
+                              <div className="mb-3">
                                 <div
-                                  className={`font-bold text-sm ${med.status === 'falta' ? 'text-red-700 line-through' : 'text-slate-800'}`}
+                                  className={`font-black text-sm mb-1 ${med.status === 'falta' ? 'text-red-700 line-through' : 'text-slate-800'}`}
                                 >
                                   {med.name || med.medicationId?.name}
                                 </div>
                                 {med.observation && (
-                                  <div className="mt-2 inline-flex items-start gap-1.5 text-[11px] text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-1.5 rounded-lg max-w-full font-medium">
+                                  <div className="inline-flex items-start gap-1.5 text-[11px] text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-1 rounded-lg w-full font-medium">
                                     <FiFileText
                                       className="mt-0.5 shrink-0"
                                       size={12}
                                     />{' '}
-                                    Obs: {med.observation}
+                                    <span className="leading-tight truncate">
+                                      {med.observation}
+                                    </span>
                                   </div>
                                 )}
-                                {(med.status === 'falta' ||
-                                  (med.requestedQuantity > med.quantity &&
-                                    med.status !== 'falta')) && (
-                                  <div className="mt-2 inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-amber-700 bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-200">
-                                    <FiAlertTriangle size={12} />{' '}
-                                    {med.status === 'falta'
-                                      ? 'Pedido Parcial: Consulte novo link.'
-                                      : `Pedido será enviado como parcial, será necessário pedir um novo link!`}
-                                  </div>
-                                )}
-                                {/* AVISO DE SACOLA PARA DEPOIS */}
-                                {med.status === 'parcial' && med.quantity === 0 && (
-                                  <div className="mt-2 inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-amber-700 bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-200">
-                                    <FiClock size={12} /> Campo preço vazio não gera saldo.
-                                  </div>
-                                )}
-                              </td>
-
-                              <td className="p-5 text-center align-top">
-                                {med.status === 'falta' || (med.status === 'parcial' && med.quantity === 0) ? (
-                                  <span className="text-slate-300 font-mono font-bold">
-                                    -
+                              </div>
+                              <div className="flex items-start gap-3">
+                                <div className="flex flex-col gap-1">
+                                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                    Qtd.
                                   </span>
-                                ) : (
-                                  <div
-                                    className="flex flex-col items-center"
-                                    ref={isFirstItem ? qtyRef : null}
-                                    style={
-                                      showTour && isFirstItem && tourStep === 2
-                                        ? highlightStyle
-                                        : {}
-                                    }
-                                  >
-                                    <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden h-9 w-28 shadow-sm">
+                                  {med.status === 'falta' ||
+                                  (med.status === 'parcial' &&
+                                    med.quantity === 0) ? (
+                                    <div className="h-10 w-[100px] flex items-center justify-center bg-slate-100 rounded-xl border border-slate-200 text-slate-400 font-black">
+                                      -
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden h-10 w-[100px] shadow-sm">
                                       <button
                                         onClick={() =>
                                           handleItemChange(
@@ -668,11 +974,11 @@ export default function PublicShipmentView() {
                                             med.quantity - 1
                                           )
                                         }
-                                        className="px-3 hover:bg-slate-100 text-slate-500 cursor-pointer h-full border-r border-slate-100"
+                                        className="w-8 flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-slate-500 h-full border-r border-slate-200"
                                       >
-                                        <FiMinus size={12} />
+                                        <FiMinus size={14} />
                                       </button>
-                                      <span className="flex-1 text-center text-sm font-black text-slate-800 leading-9">
+                                      <span className="flex-1 text-center text-sm font-black text-slate-800">
                                         {med.quantity}
                                       </span>
                                       <button
@@ -684,355 +990,180 @@ export default function PublicShipmentView() {
                                             med.quantity + 1
                                           )
                                         }
-                                        className="px-3 hover:bg-slate-100 text-indigo-600 cursor-pointer h-full border-l border-slate-100"
+                                        className="w-8 flex items-center justify-center bg-indigo-50 hover:bg-indigo-100 text-indigo-600 h-full border-l border-slate-200"
                                       >
-                                        <FiPlus size={12} />
+                                        <FiPlus size={14} />
                                       </button>
                                     </div>
-                                    <span className="text-[10px] text-slate-400 mt-1.5 font-bold uppercase tracking-wider">
-                                      {getSmartUnit(med.quantity, med.unit)}
-                                    </span>
-                                  </div>
-                                )}
-                              </td>
-
-                              <td className="p-5 align-top print:hidden text-right">
-                                <div
-                                  className="relative inline-block w-full max-w-[120px]"
-                                  ref={isFirstItem ? priceRef : null}
-                                  style={
-                                    showTour && isFirstItem && tourStep === 3
-                                      ? highlightStyle
-                                      : {}
-                                  }
-                                >
-                                  <span
-                                    className={`absolute left-3 top-3.5 text-sm font-bold pointer-events-none z-10 ${med.hasMemoryPrice && med.status !== 'falta' ? 'text-emerald-700' : 'text-slate-400'}`}
-                                  >
-                                    R$
-                                  </span>
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    className={`w-full pl-8 pr-3 py-3 border-2 rounded-xl outline-none text-right font-mono font-black transition-all duration-500 relative
-                                      ${med.status === 'falta' || (med.status === 'parcial' && med.quantity === 0) ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed' : med.hasMemoryPrice ? 'bg-emerald-50 border-emerald-400 text-emerald-900 shadow-[0_0_15px_rgba(52,211,153,0.4)] ring-2 ring-emerald-400/50' : 'bg-slate-50 border-slate-200 text-slate-800 focus:bg-white focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-inner'}`}
-                                    placeholder="0.00"
-                                    value={med.unitPrice || ''}
-                                    onChange={(e) =>
-                                      handleItemChange(
-                                        pIndex,
-                                        mIndex,
-                                        'unitPrice',
-                                        e.target.value
-                                      )
-                                    }
-                                    disabled={med.status === 'falta' || (med.status === 'parcial' && med.quantity === 0)}
-                                  />
-                                </div>
-                                {med.hasMemoryPrice &&
-                                  med.status !== 'falta' && (
-                                    <div className="text-[10px] text-emerald-600 font-black uppercase mt-2 tracking-widest flex items-center justify-end gap-1">
-                                      <span className="relative flex h-2 w-2 mr-1">
-                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                                      </span>{' '}
-                                      Preço Automático
-                                    </div>
                                   )}
-                              </td>
-
-                              <td className="p-5 align-top text-right font-mono font-black text-slate-800 pt-8">
-                                {med.status === 'falta' ? (
-                                  <span className="text-slate-300">---</span>
-                                ) : (
-                                  (med.totalPrice || 0).toLocaleString(
-                                    'pt-BR',
-                                    { style: 'currency', currency: 'BRL' }
-                                  )
-                                )}
-                              </td>
-
-                              <td className="p-5 align-top text-center print:hidden">
-                                <div
-                                  ref={isFirstItem ? missingRef : null}
-                                  style={
-                                    showTour && isFirstItem && tourStep === 4
-                                      ? highlightStyle
-                                      : {}
-                                  }
-                                >
-                                  <button
-                                    onClick={() =>
-                                      handleItemChange(
-                                        pIndex,
-                                        mIndex,
-                                        'status',
-                                        med.status !== 'falta'
-                                      )
-                                    }
-                                    className={`w-full py-2 px-2 mt-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95 ${med.status === 'falta' ? 'bg-red-50 text-red-600 border-red-200 shadow-inner' : 'bg-white text-slate-400 border-slate-200 hover:border-red-300 hover:text-red-500 hover:bg-red-50/30 shadow-sm'}`}
-                                  >
-                                    {med.status === 'falta' ? (
-                                      <>
-                                        Gerar
-                                        <br />
-                                        Saldo
-                                      </>
-                                    ) : (
-                                      <>
-                                        Marcar
-                                        <br />
-                                        Falta
-                                      </>
-                                    )}
-                                  </button>
                                 </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* VERSÃO MOBILE (CARDS) */}
-                  <div className="md:hidden divide-y divide-slate-100">
-                    {patientItem.medications.map((med, mIndex) => {
-                      const isFirstItem = pIndex === 0 && mIndex === 0;
-                      return (
-                        <div
-                          key={`mobile-${mIndex}`}
-                          className={`p-4 transition-colors ${med.status === 'falta' ? 'bg-red-50/30' : 'bg-white'}`}
-                        >
-                          <div className="mb-3">
-                            <div
-                              className={`font-black text-sm mb-1 ${med.status === 'falta' ? 'text-red-700 line-through' : 'text-slate-800'}`}
-                            >
-                              {med.name || med.medicationId?.name}
-                            </div>
-                            {med.observation && (
-                              <div className="inline-flex items-start gap-1.5 text-[11px] text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-1 rounded-lg w-full font-medium">
-                                <FiFileText
-                                  className="mt-0.5 shrink-0"
-                                  size={12}
-                                />
-                                <span className="leading-tight truncate">
-                                  {med.observation}
-                                </span>
-                              </div>
-                            )}
-                            {(med.status === 'falta' ||
-                              (med.requestedQuantity > med.quantity &&
-                                med.status !== 'falta')) && (
-                              <div className="mt-2 text-[10px] font-black uppercase tracking-widest text-amber-700 bg-amber-50 px-2 py-1.5 rounded-lg border border-amber-200 inline-flex items-center gap-1.5">
-                                <FiAlertTriangle size={12} />{' '}
-                                {med.status === 'falta'
-                                  ? 'Pedido Parcial (Saldo)'
-                                  : `Saldo pendente: ${med.requestedQuantity - med.quantity} cxs`}
-                              </div>
-                            )}
-                            {/* AVISO DE SACOLA PARA DEPOIS MOBILE */}
-                            {med.status === 'parcial' && med.quantity === 0 && (
-                              <div className="mt-2 text-[10px] font-black uppercase tracking-widest text-amber-700 bg-amber-50 px-2 py-1.5 rounded-lg border border-amber-200 inline-flex items-center gap-1.5">
-                                <FiClock size={12} /> Sacola para Depois
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="flex items-start gap-3">
-                            <div
-                              className="flex flex-col gap-1"
-                              ref={isFirstItem ? qtyRef : null}
-                              style={
-                                showTour && isFirstItem && tourStep === 2
-                                  ? highlightStyle
-                                  : {}
-                              }
-                            >
-                              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                Qtd.
-                              </span>
-                              {med.status === 'falta' || (med.status === 'parcial' && med.quantity === 0) ? (
-                                <div className="h-10 w-[100px] flex items-center justify-center bg-slate-100 rounded-xl border border-slate-200 text-slate-400 font-black">
-                                  -
-                                </div>
-                              ) : (
-                                <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden h-10 w-[100px] shadow-sm">
-                                  <button
-                                    onClick={() =>
-                                      handleItemChange(
-                                        pIndex,
-                                        mIndex,
-                                        'quantity',
-                                        med.quantity - 1
-                                      )
-                                    }
-                                    className="w-8 flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-slate-500 h-full border-r border-slate-200"
-                                  >
-                                    <FiMinus size={14} />
-                                  </button>
-                                  <span className="flex-1 text-center text-sm font-black text-slate-800">
-                                    {med.quantity}
+                                <div className="flex-1 flex flex-col gap-1 relative">
+                                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                    Valor Unit.
                                   </span>
-                                  <button
-                                    onClick={() =>
-                                      handleItemChange(
-                                        pIndex,
-                                        mIndex,
-                                        'quantity',
-                                        med.quantity + 1
-                                      )
-                                    }
-                                    className="w-8 flex items-center justify-center bg-indigo-50 hover:bg-indigo-100 text-indigo-600 h-full border-l border-slate-200"
-                                  >
-                                    <FiPlus size={14} />
-                                  </button>
+                                  <div className="relative w-full">
+                                    <span
+                                      className={`absolute left-3 top-2.5 text-xs font-bold pointer-events-none z-10 ${med.hasMemoryPrice && med.status !== 'falta' ? 'text-emerald-700' : 'text-slate-400'}`}
+                                    >
+                                      R$
+                                    </span>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      className={`w-full pl-8 pr-3 py-2.5 border-2 rounded-xl outline-none text-right font-mono font-black text-sm transition-all duration-500 relative
+                                        ${med.status === 'falta' || (med.status === 'parcial' && med.quantity === 0) ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed' : med.hasMemoryPrice ? 'bg-emerald-50 border-emerald-400 text-emerald-900 shadow-[0_0_10px_rgba(52,211,153,0.3)] ring-1 ring-emerald-400/50' : 'bg-white border-slate-200 text-slate-800 focus:border-indigo-500 shadow-sm'}`}
+                                      placeholder="0.00"
+                                      value={med.unitPrice || ''}
+                                      onChange={(e) =>
+                                        handleItemChange(
+                                          pIndex,
+                                          mIndex,
+                                          'unitPrice',
+                                          e.target.value
+                                        )
+                                      }
+                                      disabled={
+                                        med.status === 'falta' ||
+                                        (med.status === 'parcial' &&
+                                          med.quantity === 0)
+                                      }
+                                    />
+                                  </div>
                                 </div>
-                              )}
-                            </div>
-
-                            <div
-                              className="flex-1 flex flex-col gap-1 relative"
-                              ref={isFirstItem ? priceRef : null}
-                              style={
-                                showTour && isFirstItem && tourStep === 3
-                                  ? highlightStyle
-                                  : {}
-                              }
-                            >
-                              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                Valor Unit.
-                              </span>
-                              <div className="relative w-full">
-                                <span
-                                  className={`absolute left-3 top-2.5 text-xs font-bold pointer-events-none z-10 ${med.hasMemoryPrice && med.status !== 'falta' ? 'text-emerald-700' : 'text-slate-400'}`}
-                                >
-                                  R$
-                                </span>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  className={`w-full pl-8 pr-3 py-2.5 border-2 rounded-xl outline-none text-right font-mono font-black text-sm transition-all duration-500 relative
-                                    ${med.status === 'falta' || (med.status === 'parcial' && med.quantity === 0) ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed' : med.hasMemoryPrice ? 'bg-emerald-50 border-emerald-400 text-emerald-900 shadow-[0_0_10px_rgba(52,211,153,0.3)] ring-1 ring-emerald-400/50' : 'bg-white border-slate-200 text-slate-800 focus:border-indigo-500 shadow-sm'}`}
-                                  placeholder="0.00"
-                                  value={med.unitPrice || ''}
-                                  onChange={(e) =>
+                              </div>
+                              <div className="mt-4 flex items-center justify-between pt-3 border-t border-slate-100 border-dashed">
+                                <div className="flex flex-col">
+                                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                    Subtotal
+                                  </span>
+                                  <span
+                                    className={`font-mono font-black text-base ${med.status === 'falta' ? 'text-slate-300' : 'text-slate-800'}`}
+                                  >
+                                    {med.status === 'falta'
+                                      ? '---'
+                                      : (med.totalPrice || 0).toLocaleString(
+                                          'pt-BR',
+                                          { style: 'currency', currency: 'BRL' }
+                                        )}
+                                  </span>
+                                </div>
+                                <button
+                                  onClick={() =>
                                     handleItemChange(
                                       pIndex,
                                       mIndex,
-                                      'unitPrice',
-                                      e.target.value
+                                      'status',
+                                      med.status !== 'falta'
                                     )
                                   }
-                                  disabled={med.status === 'falta' || (med.status === 'parcial' && med.quantity === 0)}
-                                />
+                                  className={`py-1.5 px-4 rounded-lg text-xs font-black uppercase tracking-widest transition-all border flex items-center gap-1.5 active:scale-95 ${med.status === 'falta' ? 'bg-emerald-50 text-emerald-600 border-emerald-200 shadow-inner' : 'bg-white text-red-500 border-red-200 hover:bg-red-50 shadow-sm'}`}
+                                >
+                                  {med.status === 'falta' ? (
+                                    <>
+                                      <FiCheck size={14} /> Desfazer Falta
+                                    </>
+                                  ) : (
+                                    <>
+                                      <FiX size={14} /> Marcar Falta
+                                    </>
+                                  )}
+                                </button>
                               </div>
-                              {med.hasMemoryPrice && med.status !== 'falta' && (
-                                <div className="absolute -bottom-4 right-0 text-[8px] text-emerald-600 font-black uppercase tracking-widest flex items-center justify-end gap-1">
-                                  <span className="relative flex h-1.5 w-1.5 mr-0.5">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
-                                  </span>{' '}
-                                  Automático
-                                </div>
-                              )}
                             </div>
-                          </div>
+                          );
+                        })}
+                      </div>
+                    </div>
 
-                          <div className="mt-4 flex items-center justify-between pt-3 border-t border-slate-100 border-dashed">
-                            <div className="flex flex-col">
-                              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                Subtotal
-                              </span>
-                              <span
-                                className={`font-mono font-black text-base ${med.status === 'falta' ? 'text-slate-300' : 'text-slate-800'}`}
-                              >
-                                {med.status === 'falta'
-                                  ? '---'
-                                  : (med.totalPrice || 0).toLocaleString(
-                                      'pt-BR',
-                                      { style: 'currency', currency: 'BRL' }
-                                    )}
-                              </span>
-                            </div>
-
-                            <div
-                              ref={isFirstItem ? missingRef : null}
-                              style={
-                                showTour && isFirstItem && tourStep === 4
-                                  ? highlightStyle
-                                  : {}
-                              }
-                            >
-                              <button
-                                onClick={() =>
-                                  handleItemChange(
-                                    pIndex,
-                                    mIndex,
-                                    'status',
-                                    med.status !== 'falta'
-                                  )
-                                }
-                                className={`py-1.5 px-4 rounded-lg text-xs font-black uppercase tracking-widest transition-all border flex items-center gap-1.5 active:scale-95 ${med.status === 'falta' ? 'bg-emerald-50 text-emerald-600 border-emerald-200 shadow-inner' : 'bg-white text-red-500 border-red-200 hover:bg-red-50 shadow-sm'}`}
-                              >
-                                {med.status === 'falta' ? (
-                                  <>
-                                    {' '}
-                                    <FiCheck size={14} /> Desfazer Falta
-                                  </>
-                                ) : (
-                                  <>
-                                    {' '}
-                                    <FiX size={14} /> Marcar Falta
-                                  </>
-                                )}
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
+                    <div className="bg-slate-50/80 border-t border-slate-100 p-4 sm:p-5 flex justify-end">
+                      <button
+                        onClick={() => toggleBagReady(pId)}
+                        className="w-full sm:w-auto px-6 py-3.5 rounded-xl font-black text-sm transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2 shadow-sm bg-slate-800 text-white hover:bg-slate-900 border border-slate-700"
+                      >
+                        <FiCheck size={18} /> Lacrar Sacola e Ocultar
+                      </button>
+                    </div>
                   </div>
-                </div>
-
-                <div className="bg-slate-50/80 border-t border-slate-100 p-4 sm:p-5 flex justify-end">
-                  <button
-                    onClick={() => toggleBagReady(pId)}
-                    className={`w-full sm:w-auto px-6 py-3.5 rounded-xl font-black text-sm transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2 shadow-sm ${
-                      isPatientResolved
-                        ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border border-emerald-200'
-                        : 'bg-amber-100 text-amber-700 hover:bg-amber-200 border border-amber-200'
-                    }`}
-                  >
-                    {isPatientResolved ? (
-                      <FiCheck size={18} />
-                    ) : (
-                      <FiAlertTriangle size={18} />
-                    )}
-                    {isPatientResolved
-                      ? 'Lacrar Sacola Pronta'
-                      : 'Fechar Sacola (Com Pendências)'}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-
-          {filteredItems.length === 0 && (
-            <div className="bg-white p-12 rounded-3xl border-2 border-dashed border-slate-200 text-center">
-              <FiSearch className="mx-auto text-slate-300 mb-4" size={48} />
-              <h3 className="text-xl font-black text-slate-700">
-                Nenhum item encontrado
-              </h3>
-              <p className="text-slate-500 mt-2 font-medium">
-                Não achamos nada com o termo "{searchTerm}".
-              </p>
+                );
+              })}
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
+        {/* ================= SESSÃO 2: JÁ ENVIADOS (SOMENTE CONSULTA) ================= */}
+        {completedPatients.length > 0 && (
+          <div className="mt-12 pt-8 border-t-2 border-slate-200 border-dashed print:hidden">
+            <h2 className="text-lg font-black text-emerald-700 mb-4 flex items-center gap-2">
+              <FiCheckCircle className="text-emerald-500" /> Pacientes Já
+              Enviados (Consulta)
+            </h2>
+            <p className="text-xs text-slate-500 mb-6 font-medium">
+              Os itens abaixo já foram enviados em acessos anteriores e estão em
+              conferência na secretaria. Não é possível alterá-los.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {completedPatients.map((patientItem) => {
+                const pId = patientItem._id || patientItem.filteredIndex;
+
+                return (
+                  <div
+                    key={pId}
+                    className="bg-emerald-50/50 rounded-2xl shadow-sm border border-emerald-100 p-4 opacity-90"
+                  >
+                    <div className="flex items-center gap-3 mb-3 pb-3 border-b border-emerald-100/50">
+                      <div className="w-8 h-8 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center text-lg shrink-0">
+                        <FiCheck />
+                      </div>
+                      <div className="overflow-hidden">
+                        <h3 className="font-black text-slate-700 text-sm truncate">
+                          {patientItem.patientName}
+                        </h3>
+                      </div>
+                    </div>
+
+                    <ul className="space-y-2">
+                      {patientItem.medications.map((med, idx) => (
+                        <li
+                          key={idx}
+                          className="flex justify-between items-center text-[11px]"
+                        >
+                          <span
+                            className={`truncate pr-2 font-bold ${med.status === 'falta' ? 'text-red-500 line-through' : 'text-slate-600'}`}
+                          >
+                            {med.quantity}{' '}
+                            {getSmartUnit(med.quantity, med.unit)} -{' '}
+                            {med.name || med.medicationId?.name}
+                          </span>
+                          <span className="font-mono text-emerald-700 font-black shrink-0">
+                            {med.status === 'falta'
+                              ? 'FALTA'
+                              : `R$ ${med.unitPrice}`}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {filteredItems.length === 0 && (
+          <div className="bg-white p-12 rounded-3xl border-2 border-dashed border-slate-200 text-center mt-6">
+            <FiSearch className="mx-auto text-slate-300 mb-4" size={48} />
+            <h3 className="text-xl font-black text-slate-700">
+              Nenhum item encontrado
+            </h3>
+            <p className="text-slate-500 mt-2 font-medium">
+              Não achamos nada com o termo "{searchTerm}".
+            </p>
+          </div>
+        )}
+
+        {/* FOOTER DOS DADOS - BLOQUEIO DE NOME AQUI */}
         <div className="mt-6 bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-200">
           <h3 className="font-black text-slate-800 mb-5 flex items-center gap-2 text-sm uppercase tracking-widest">
             <FiMessageSquare className="text-indigo-500" /> Finalização do
@@ -1047,13 +1178,30 @@ export default function PublicShipmentView() {
               </label>
               <input
                 type="text"
-                className="w-full border-2 border-slate-200 bg-slate-50 rounded-2xl p-4 focus:bg-white focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-sm font-bold text-slate-700 transition-all shadow-sm"
+                disabled={isSenderLocked}
+                className={`w-full border-2 border-slate-200 rounded-2xl p-4 outline-none text-sm font-bold transition-all shadow-sm
+                  ${
+                    isSenderLocked
+                      ? 'bg-slate-100 text-slate-500 cursor-not-allowed border-slate-300'
+                      : 'bg-slate-50 text-slate-700 focus:bg-white focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500'
+                  }`}
                 placeholder="Ex: João Silva"
                 value={senderName}
                 onChange={(e) => setSenderName(e.target.value)}
               />
+              {isSenderLocked && (
+                <div className="mt-2 flex flex-col gap-1">
+                  <span className="text-[10px] text-emerald-600 font-bold inline-flex items-center gap-1">
+                    <FiCheckCircle /> Identidade confirmada
+                  </span>
+                  {lastUpdateDate && (
+                    <span className="text-[10px] text-slate-500 font-bold inline-flex items-center gap-1">
+                      <FiClock /> Último salvamento: {lastUpdateDate}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
-
             <div className="w-full md:w-2/3">
               <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-1.5 mb-2">
                 <FiFileText size={14} className="text-indigo-500" /> Observações
@@ -1069,6 +1217,7 @@ export default function PublicShipmentView() {
           </div>
         </div>
 
+        {/* BOTTOM BAR DE SUBMISSÃO */}
         <div
           className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-xl border-t border-slate-200 p-4 md:p-6 shadow-[0_-10px_40px_rgba(0,0,0,0.08)] z-50 print:hidden"
           ref={btnRef}
@@ -1127,21 +1276,17 @@ export default function PublicShipmentView() {
                 <button
                   onClick={handleConfirmOrderClick}
                   className={`px-8 py-3.5 rounded-xl font-black flex items-center justify-center gap-2 transition-all text-sm
-                    ${
-                      isFullyResolved
-                        ? 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-xl shadow-emerald-200 active:scale-95 cursor-pointer'
-                        : 'bg-amber-500 text-white hover:bg-amber-600 shadow-xl shadow-amber-200 active:scale-95 cursor-pointer'
-                    }
+                    ${isFullyResolved ? 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-xl shadow-emerald-200 active:scale-95 cursor-pointer' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-xl shadow-indigo-200 active:scale-95 cursor-pointer'}
                   `}
                 >
                   {isFullyResolved ? (
                     <FiTruck size={18} />
                   ) : (
-                    <FiAlertTriangle size={18} />
+                    <FiPackage size={18} />
                   )}
                   {isFullyResolved
-                    ? 'ENVIAR PEDIDO AGORA'
-                    : 'ENVIAR INCOMPLETO'}
+                    ? 'FINALIZAR COTAÇÃO COMPLETA'
+                    : 'SALVAR E ENVIAR PARCIAL'}
                 </button>
               </div>
             </div>

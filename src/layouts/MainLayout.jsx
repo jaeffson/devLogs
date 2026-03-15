@@ -124,10 +124,7 @@ export default function MainLayout({
           new Map(combined.map((s) => [s._id, s])).values()
         );
 
-        console.log(
-          '🔔 [Sino] Dados frescos recebidos! Total:',
-          uniqueShipments.length
-        );
+        
         setLiveShipments([...uniqueShipments]);
       } catch (error) {
         console.error('❌ ERRO NO MOTOR DO SINO:', error.message);
@@ -487,7 +484,7 @@ export default function MainLayout({
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 custom-scrollbar bg-slate-50/50 dark:bg-slate-950 relative">
+        <main className="flex-1 overflow-y-auto p-4 md:p-3 lg:p-4 custom-scrollbar bg-slate-50/50 dark:bg-slate-950 relative">
           <div className="w-full h-full">
             <Outlet
               context={{

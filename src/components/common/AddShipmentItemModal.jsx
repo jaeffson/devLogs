@@ -42,8 +42,9 @@ export default function AddShipmentItemModal({
   const [showPatientSuggestions, setShowPatientSuggestions] = useState(false);
 
   // --- ESTADOS DO FORMULÁRIO (ITENS) ---
+  // Modificado: unit inicia vazio em vez de 'CX'
   const [items, setItems] = useState([
-    { name: '', quantity: 1, unit: 'CX', medicationId: null, observation: '' },
+    { name: '', quantity: 1, unit: '', medicationId: null, observation: '' },
   ]);
 
   const [activeSearchIndex, setActiveSearchIndex] = useState(null);
@@ -122,7 +123,7 @@ export default function AddShipmentItemModal({
         const formattedItems = initialData.medications.map((m) => ({
           name: m.name,
           quantity: m.quantity,
-          unit: m.unit || 'CX',
+          unit: m.unit || '', // Modificado aqui também para aceitar vazio se não houver
           medicationId: m.medicationId?._id || m.medicationId,
           observation: m.observation || '',
         }));
@@ -229,6 +230,7 @@ export default function AddShipmentItemModal({
   };
 
   const getSmartUnitDisplay = (qty, unit) => {
+    if (!unit) return '';
     const u = (unit || '').toUpperCase();
     const q = Number(qty) || 1;
     if (u === 'CX' || u === 'CAIXA') return q > 1 ? 'CAIXAS' : 'CAIXA';
@@ -247,20 +249,20 @@ export default function AddShipmentItemModal({
   const handlePatientSearch = (e) => {
     const value = e.target.value;
     setPatientSearchTerm(value);
-    setSelectedPatientId(''); 
+    setSelectedPatientId('');
 
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
 
     searchTimeout.current = setTimeout(() => {
       if (value.trim().length > 0) {
         const lower = value.toLowerCase();
-        
-        // MÁGICA AQUI: Agora ele filtra por Nome, CPF ou Cartão SUS
+
         const results = patients
-          .filter((p) => 
-            p.name.toLowerCase().includes(lower) || 
-            (p.cpf && p.cpf.includes(lower)) ||
-            (p.susCard && p.susCard.includes(lower))
+          .filter(
+            (p) =>
+              p.name.toLowerCase().includes(lower) ||
+              (p.cpf && p.cpf.includes(lower)) ||
+              (p.susCard && p.susCard.includes(lower))
           )
           .slice(0, 30);
 
@@ -270,7 +272,7 @@ export default function AddShipmentItemModal({
         setFilteredPatientSuggestions([]);
         setShowPatientSuggestions(false);
       }
-    }, 250); 
+    }, 250);
   };
 
   const selectPatientSuggestion = (patient) => {
@@ -283,6 +285,8 @@ export default function AddShipmentItemModal({
   const handleNameChange = (index, value) => {
     const newItems = [...items];
     newItems[index].name = value;
+    // O pulo do gato: se o usuário digitar qualquer coisa, anula o ID,
+    // obrigando ele a selecionar da lista novamente.
     newItems[index].medicationId = null;
     setItems(newItems);
 
@@ -332,6 +336,20 @@ export default function AddShipmentItemModal({
     if (items.some((i) => i.quantity <= 0))
       return toast.error('Quantidade deve ser maior que zero.');
 
+    // BLOQUEIO: Não deixa salvar se houver medicamento não selecionado da lista
+    if (items.some((i) => !i.medicationId)) {
+      return toast.error(
+        'Selecione os medicamentos usando a lista suspensa. Digitação livre não é permitida.'
+      );
+    }
+
+    // BLOQUEIO: Não deixa salvar se a unidade não for escolhida
+    if (items.some((i) => !i.unit)) {
+      return toast.error(
+        'Por favor, selecione o tipo de unidade (Caixa, Frasco, etc.) para todos os medicamentos.'
+      );
+    }
+
     setLoading(true);
     try {
       const patientObj = patients.find((p) => p._id === selectedPatientId);
@@ -351,7 +369,7 @@ export default function AddShipmentItemModal({
           {
             name: '',
             quantity: 1,
-            unit: 'CX',
+            unit: '', // Retorna pra vazio
             medicationId: null,
             observation: '',
           },
@@ -393,84 +411,45 @@ export default function AddShipmentItemModal({
             </button>
           </div>
 
-        {/* SUBSTITUA O PATIENT FORM POR ESTE */}
           <PatientForm
             onClose={() => setShowPatientForm(false)}
+            addToast={(msg, type) =>
+              type === 'error' ? toast.error(msg) : toast.success(msg)
+            }
             onSave={async (dataToSave) => {
               try {
-                // Tenta salvar o paciente
                 const res = await api.post('/patients', dataToSave);
-                
-                // Se deu certo de primeira, recarrega e auto-seleciona
                 await loadInitialData();
                 const novoPaciente = res.data;
                 setSelectedPatientId(novoPaciente._id);
-                setPatientSearchTerm(`${novoPaciente.name} ${novoPaciente.cpf ? `(${novoPaciente.cpf})` : ''}`);
-                
+                setPatientSearchTerm(
+                  `${novoPaciente.name} ${novoPaciente.cpf ? `(${novoPaciente.cpf})` : ''}`
+                );
                 toast.success('Paciente cadastrado e selecionado!');
               } catch (error) {
-                // SE DEU ERRO 409 (Clique Duplo Fantasma ou Duplicidade Real)
                 if (error.response?.status === 409) {
-                  // Entra no banco silenciosamente e pesca o paciente!
                   const getRes = await api.get('/patients');
-                  const pacienteExistente = getRes.data.find(p => 
-                    (dataToSave.susCard && p.susCard === dataToSave.susCard) || 
-                    (dataToSave.cpf && p.cpf === dataToSave.cpf) ||
-                    (p.name.toLowerCase() === dataToSave.name.toLowerCase())
+                  const pacienteExistente = getRes.data.find(
+                    (p) =>
+                      (dataToSave.susCard &&
+                        p.susCard === dataToSave.susCard) ||
+                      (dataToSave.cpf && p.cpf === dataToSave.cpf) ||
+                      p.name.toLowerCase() === dataToSave.name.toLowerCase()
                   );
 
                   if (pacienteExistente) {
                     await loadInitialData();
                     setSelectedPatientId(pacienteExistente._id);
-                    setPatientSearchTerm(`${pacienteExistente.name} ${pacienteExistente.cpf ? `(${pacienteExistente.cpf})` : ''}`);
+                    setPatientSearchTerm(
+                      `${pacienteExistente.name} ${pacienteExistente.cpf ? `(${pacienteExistente.cpf})` : ''}`
+                    );
                     toast.success('Paciente auto-selecionado com sucesso!');
                   } else {
-                    throw error; // Se não achar de jeito nenhum, repassa o erro pro form
+                    throw error;
                   }
                 } else {
-                  throw error; // Repassa erros 500, etc.
+                  throw error;
                 }
-              }
-            }}
-          />
-        </div>
-      </div>
-    );
-  }
-
-  // ==================================================================================
-  // INTEGRAÇÃO PERFEITA COM OS FORMULÁRIOS (IDÊNTICO À PÁGINA DO PROFISSIONAL)
-  // ==================================================================================
-  
-  if (showPatientForm) {
-    return (
-      <div className="fixed inset-0 bg-slate-900/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
-        <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-300">
-          <div className="bg-slate-50 px-6 py-5 border-b border-slate-100 flex justify-between items-center">
-            <h3 className="font-black text-slate-800 flex items-center gap-2 text-lg">
-              <div className="bg-indigo-100 text-indigo-600 p-2 rounded-xl"><FiUserPlus /></div>
-              Novo Paciente
-            </h3>
-            <button onClick={() => setShowPatientForm(false)} className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition cursor-pointer">
-              <FiX size={20} />
-            </button>
-          </div>
-          
-          <PatientForm
-            onClose={() => setShowPatientForm(false)}
-            addToast={(msg, type) => type === 'error' ? toast.error(msg) : toast.success(msg)}
-            onSave={async (dataToSave) => {
-              // Aqui NÃO TEM try/catch. Deixamos o seu PatientForm cuidar do erro naturalmente!
-              const res = await api.post('/patients', dataToSave);
-              
-              // Se o código chegou aqui, o banco retornou 201 (Salvo no banco de verdade!)
-              await loadInitialData();
-              
-              const novoPaciente = res.data;
-              if (novoPaciente) {
-                setSelectedPatientId(novoPaciente._id);
-                setPatientSearchTerm(`${novoPaciente.name} ${novoPaciente.cpf ? `(${novoPaciente.cpf})` : ''}`);
-                toast.success('Paciente salvo no banco e selecionado com sucesso!');
               }
             }}
           />
@@ -485,16 +464,23 @@ export default function AddShipmentItemModal({
         <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-300">
           <div className="bg-slate-50 px-6 py-5 border-b border-slate-100 flex justify-between items-center">
             <h3 className="font-black text-slate-800 flex items-center gap-2 text-lg">
-              <div className="bg-indigo-100 text-indigo-600 p-2 rounded-xl"><FiActivity /></div>
+              <div className="bg-indigo-100 text-indigo-600 p-2 rounded-xl">
+                <FiActivity />
+              </div>
               Nova Medicação
             </h3>
-            <button onClick={() => setShowMedForm(false)} className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition cursor-pointer">
+            <button
+              onClick={() => setShowMedForm(false)}
+              className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition cursor-pointer"
+            >
               <FiX size={20} />
             </button>
           </div>
           <MedicationForm
             onClose={() => setShowMedForm(false)}
-            addToast={(msg, type) => type === 'error' ? toast.error(msg) : toast.success(msg)}
+            addToast={(msg, type) =>
+              type === 'error' ? toast.error(msg) : toast.success(msg)
+            }
             onSave={async (dataToSave) => {
               await api.post('/medications', dataToSave);
               await loadInitialData();
@@ -509,7 +495,6 @@ export default function AddShipmentItemModal({
   return (
     <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center backdrop-blur-sm p-4 animate-in fade-in duration-300">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl p-0 relative animate-in slide-in-from-bottom-4 flex flex-col max-h-[90vh] border border-slate-100">
-        {/* Header Premium */}
         <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-white rounded-t-3xl relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-bl-full pointer-events-none"></div>
           <div className="relative z-10">
@@ -545,7 +530,6 @@ export default function AddShipmentItemModal({
         </div>
 
         <div className="p-6 overflow-y-auto custom-scrollbar bg-slate-50/50">
-          {/* AVISO DE DUPLICIDADE INTELIGENTE (BLOQUEIA O SALVAMENTO) */}
           {duplicityWarning && (
             <div
               className={`mb-6 p-5 rounded-2xl flex items-start gap-4 shadow-sm border ${duplicityWarning.level === 'red' ? 'bg-red-50 border-red-200 animate-pulse' : 'bg-amber-50 border-amber-200'}`}
@@ -577,7 +561,6 @@ export default function AddShipmentItemModal({
           )}
 
           <form onSubmit={handleSubmit} id="shipment-form">
-            {/* CARD DO PACIENTE */}
             <div
               className="mb-6 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative"
               ref={patientWrapperRef}
@@ -602,13 +585,18 @@ export default function AddShipmentItemModal({
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
                   <FiSearch size={18} />
                 </div>
-               <input
+                <input
                   id="patient-search-input"
                   className="w-full pl-12 pr-4 py-3.5 border-2 border-slate-100 rounded-xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none bg-slate-50 focus:bg-white font-bold text-slate-700 transition-all text-sm"
                   placeholder="Digite o nome, CPF ou Cartão SUS..."
                   value={patientSearchTerm}
                   onChange={handlePatientSearch}
-                  onFocus={() => { if (patientSearchTerm && !selectedPatientId) handlePatientSearch({ target: { value: patientSearchTerm } }); }}
+                  onFocus={() => {
+                    if (patientSearchTerm && !selectedPatientId)
+                      handlePatientSearch({
+                        target: { value: patientSearchTerm },
+                      });
+                  }}
                   required
                   disabled={!!initialData}
                   autoComplete="off"
@@ -644,7 +632,6 @@ export default function AddShipmentItemModal({
               )}
             </div>
 
-            {/* CARD DOS MEDICAMENTOS */}
             <div
               className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm"
               ref={wrapperRef}
@@ -672,12 +659,23 @@ export default function AddShipmentItemModal({
                     {/* NOME + OBS */}
                     <div className="flex flex-col gap-2 relative">
                       <div className="relative">
-                        <span className="absolute left-3 top-3.5 text-slate-400">
-                          <FiSearch size={16} />
+                        {/* FEEDBACK VISUAL SE O MEDICAMENTO FOI SELECIONADO DA LISTA */}
+                        <span
+                          className={`absolute left-3 top-3.5 transition-colors ${item.medicationId ? 'text-emerald-500' : 'text-slate-400'}`}
+                        >
+                          {item.medicationId ? (
+                            <FiCheck size={16} />
+                          ) : (
+                            <FiSearch size={16} />
+                          )}
                         </span>
                         <input
                           placeholder="BUSCAR MEDICAMENTO..."
-                          className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none uppercase font-black text-slate-800 placeholder-slate-400 bg-white shadow-sm transition-all"
+                          className={`w-full pl-10 pr-4 py-3 border rounded-xl text-sm focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none uppercase font-black text-slate-800 placeholder-slate-400 shadow-sm transition-all ${
+                            item.medicationId
+                              ? 'border-emerald-200 bg-emerald-50/30'
+                              : 'border-slate-200 bg-white'
+                          }`}
                           value={item.name}
                           onChange={(e) =>
                             handleNameChange(index, e.target.value)
@@ -752,18 +750,31 @@ export default function AddShipmentItemModal({
                       </div>
                     </div>
 
-                    {/* UNIDADE INTELIGENTE */}
+                    {/* UNIDADE INTELIGENTE (AGORA SELECT VAZIO OBRIGATÓRIO) */}
                     <div className="flex flex-col">
                       <div className="relative h-[46px]">
-                        <input
-                          list="units-options"
-                          className="w-full h-full pl-4 pr-8 border border-slate-200 rounded-xl text-sm focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none uppercase font-black text-slate-700 bg-white shadow-sm transition-all text-center"
-                          placeholder="UN"
+                        <select
+                          className="w-full h-full pl-3 pr-8 border border-slate-200 rounded-xl text-sm focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none uppercase font-black text-slate-700 bg-white shadow-sm transition-all appearance-none cursor-pointer text-center"
                           value={item.unit}
                           onChange={(e) =>
                             updateItem(index, 'unit', e.target.value)
                           }
-                        />
+                          required
+                        >
+                          <option value="" disabled>
+                            UNID...
+                          </option>
+                          <option value="CX">Caixa</option>
+                          <option value="FR">Frasco</option>
+                          <option value="TB">Tubo</option>
+                          <option value="UN">Unidade</option>
+                          <option value="CART">Cartela</option>
+                          <option value="BIS">Bisnaga</option>
+                          <option value="PCT">Pacote</option>
+                          <option value="LATA">Lata</option>
+                          <option value="AMP">Ampola</option>
+                          <option value="COMP">Comprim</option>
+                        </select>
                         <FiChevronDown
                           className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
                           size={16}
@@ -805,7 +816,13 @@ export default function AddShipmentItemModal({
                 onClick={() =>
                   setItems([
                     ...items,
-                    { name: '', quantity: 1, unit: 'CX', observation: '' },
+                    {
+                      name: '',
+                      quantity: 1,
+                      unit: '',
+                      medicationId: null,
+                      observation: '',
+                    },
                   ])
                 }
                 className="mt-5 w-full bg-slate-50 border-2 border-dashed border-slate-200 text-indigo-600 font-bold text-sm flex items-center justify-center gap-2 hover:bg-indigo-50 hover:border-indigo-200 py-3.5 rounded-xl transition-all cursor-pointer active:scale-95"
@@ -816,7 +833,6 @@ export default function AddShipmentItemModal({
           </form>
         </div>
 
-        {/* Footer Buttons (BOTÃO SALVAR DESATIVA E FICA VERMELHO SE HOUVER DUPLICIDADE) */}
         <div className="px-6 py-5 border-t border-slate-100 bg-white rounded-b-3xl flex justify-end gap-3 shrink-0">
           <button
             type="button"
@@ -853,19 +869,6 @@ export default function AddShipmentItemModal({
             )}
           </button>
         </div>
-
-        <datalist id="units-options">
-          <option value="CX">Caixa</option>
-          <option value="FR">Frasco</option>
-          <option value="TB">Tubo</option>
-          <option value="UN">Unidade</option>
-          <option value="CART">Cartela</option>
-          <option value="BIS">Bisnaga</option>
-          <option value="PCT">Pacote</option>
-          <option value="LATA">Lata</option>
-          <option value="AMP">Ampola</option>
-          <option value="COMP">Comprimido</option>
-        </datalist>
       </div>
     </div>
   );

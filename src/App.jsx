@@ -41,7 +41,7 @@ export default function App() {
   const [records, setRecords] = useState([]);
   const [medications, setMedications] = useState([]);
   const [users, setUsers] = useState([]);
-  const [shipments, setShipments] = useState([]); 
+  const [shipments, setShipments] = useState([]);
   const [annualBudget, setAnnualBudget] = useState(5000.0);
   const [activityLog, setActivityLog] = useState([]);
   const [filterYear, setFilterYear] = useState(new Date().getFullYear());
@@ -111,25 +111,26 @@ export default function App() {
     }
   }, [normalizeData]);
 
- 
   const refetchShipments = useCallback(async () => {
     try {
       // Tenta buscar nas rotas (trata plural e singular automaticamente)
       const [historyRes, openRes] = await Promise.allSettled([
         api.get('/shipments/history').catch(() => api.get('/shipment/history')),
-        api.get('/shipments/open').catch(() => api.get('/shipment/open'))
+        api.get('/shipments/open').catch(() => api.get('/shipment/open')),
       ]);
 
       let combined = [];
-      
+
       if (historyRes.status === 'fulfilled' && historyRes.value?.data) {
         combined = [...combined, ...historyRes.value.data];
       }
       if (openRes.status === 'fulfilled' && openRes.value?.data) {
         combined = [...combined, ...openRes.value.data];
       }
-      const uniqueShipments = Array.from(new Map(combined.map(item => [item._id || item.id, item])).values());
-      
+      const uniqueShipments = Array.from(
+        new Map(combined.map((item) => [item._id || item.id, item])).values()
+      );
+
       setShipments(normalizeData(uniqueShipments));
     } catch (error) {
       console.error('Falha ao recarregar remessas:', error);
@@ -262,8 +263,8 @@ export default function App() {
     setPatients: refetchPatients,
     records,
     setRecords: refetchRecords,
-    shipments, // <--- ADICIONADO AQUI: Passa as remessas para o Layout e para as páginas
-    setShipments: refetchShipments, // <--- ADICIONADO AQUI
+    shipments,
+    setShipments: refetchShipments,
     medications,
     setMedications: refetchMedications,
     users,
@@ -280,7 +281,9 @@ export default function App() {
 
   return (
     <>
-    {showWelcomeModal && <WelcomeModal onClose={handleCloseWelcomeModal} user={user} />}
+      {showWelcomeModal && (
+        <WelcomeModal onClose={handleCloseWelcomeModal} user={user} />
+      )}
       <Routes>
         <Route path="/pedidos/ver/:token" element={<PublicShipmentView />} />
 
@@ -366,7 +369,17 @@ export default function App() {
                 path="medications"
                 element={<MedicationsPage {...commonPageProps} />}
               />
-              <Route path="/conferencia" element={<ShipmentConferencePage />} />
+
+              {/* === SOLUÇÃO APLICADA AQUI === */}
+              <Route
+                path="/conferencia"
+                element={
+                  <ShipmentConferencePage
+                    onGlobalUpdate={fetchInitialData}
+                    {...commonPageProps}
+                  />
+                }
+              />
             </>
           )}
 

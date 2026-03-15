@@ -9,42 +9,60 @@ export const generateShipmentPDF = async (shipment, type = 'conference') => {
     // 1. CONFIGURAÇÃO DO MODO (Retrato ou Paisagem em MILÍMETROS)
     const orientation = type === 'conference' ? 'l' : 'p';
     const doc = new jsPDF(orientation, 'mm', 'a4');
-    
+
     const pageWidth = doc.internal.pageSize.getWidth();
     const isLandscape = type === 'conference';
 
     // 2. PREPARAR DADOS
     const linkUrl = `${window.location.origin}/pedidos/ver/${shipment.accessToken}`;
-    const dataFechamento = new Date(shipment.closedAt || new Date()).toLocaleDateString('pt-BR');
-    
+    // A Data do pedido já usa a data de fechamento/envio da remessa
+    const dataFechamento = new Date(
+      shipment.closedAt || shipment.createdAt || new Date()
+    ).toLocaleDateString('pt-BR');
+
     let qrCodeDataUrl = null;
     try {
       qrCodeDataUrl = await QRCode.toDataURL(linkUrl);
-    } catch (err) { console.warn(err); }
+    } catch (err) {
+      console.warn(err);
+    }
 
     // 3. CABEÇALHO
-    doc.setFillColor(245, 245, 245); 
-    doc.rect(0, 0, pageWidth, 40, 'F'); 
+    doc.setFillColor(245, 245, 245);
+    doc.rect(0, 0, pageWidth, 40, 'F');
 
     doc.setTextColor(0, 51, 102);
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
-    doc.text("SECRETARIA DE SAÚDE DE PARARI", pageWidth / 2, 15, { align: 'center' });
-    
+    doc.text('SECRETARIA DE SAÚDE DE PARARI', pageWidth / 2, 15, {
+      align: 'center',
+    });
+
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(60, 60, 60);
-    doc.text("CONTROLE DE ENTREGA E CONFERÊNCIA DE MEDICAMENTOS", pageWidth / 2, 22, { align: 'center' });
-    
+    doc.text(
+      'CONTROLE DE ENTREGA E CONFERÊNCIA DE MEDICAMENTOS',
+      pageWidth / 2,
+      22,
+      { align: 'center' }
+    );
+
     doc.setFontSize(12);
-    doc.setTextColor(200, 0, 0); 
-    const subTitulo = type === 'vendor' ? "PEDIDO DE COMPRA (FORNECEDOR)" : "LISTA DE CONFERÊNCIA E RECEBIMENTO";
+    doc.setTextColor(200, 0, 0);
+    const subTitulo =
+      type === 'vendor'
+        ? 'PEDIDO DE COMPRA (FORNECEDOR)'
+        : 'LISTA DE CONFERÊNCIA E RECEBIMENTO';
     doc.text(subTitulo, pageWidth / 2, 32, { align: 'center' });
 
-    // 4. BOX DE INFORMAÇÕES
+   // 4. BOX DE INFORMAÇÕES
     doc.setDrawColor(200);
     doc.setFillColor(255, 255, 255);
-    doc.roundedRect(14, 45, isLandscape ? 200 : 130, 25, 2, 2, 'FD');
+    
+    // Aumentamos a largura da caixa para 148 (Retrato) e pageWidth - 28 (Paisagem)
+    const boxWidth = isLandscape ? (pageWidth - 28) : 148;
+    doc.roundedRect(14, 45, boxWidth, 25, 2, 2, 'FD');
 
     doc.setFontSize(9);
     
@@ -53,11 +71,13 @@ export const generateShipmentPDF = async (shipment, type = 'conference') => {
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(0);
     let supplierName = (shipment.supplier || "").toUpperCase();
-    const maxSuppLen = isLandscape ? 70 : 35;
+    const maxSuppLen = isLandscape ? 80 : 40; // Como a caixa cresceu, cabem mais letras
     if (supplierName.length > maxSuppLen) supplierName = supplierName.substring(0, maxSuppLen) + "...";
     doc.text(supplierName, 18, 57);
 
-    const dateX = isLandscape ? 175 : 100;
+    // Puxamos as colunas da Data e do "Enviado Por" um pouco para a esquerda (de 100 para 90)
+    const dateX = isLandscape ? 175 : 90;
+    
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100);
     doc.text("DATA DO PEDIDO:", dateX, 52);
@@ -75,170 +95,217 @@ export const generateShipmentPDF = async (shipment, type = 'conference') => {
     if (printCode.length > maxCodeLen) printCode = printCode.substring(0, maxCodeLen) + "...";
     doc.text(printCode, 35, 64);
 
-    if (qrCodeDataUrl) {
+    // ADICIONADO: NOME DE QUEM ENVIOU
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100);
+    doc.text("ENVIADO POR:", dateX, 64);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0);
+    
+    // Tenta obter o nome por várias variáveis para não ficar em branco
+    const senderNameRaw = shipment.closedByName || shipment.closedBy?.name || shipment.createdByName || "Profissional Local";
+    let senderName = senderNameRaw.toUpperCase();
+    const maxSenderLen = isLandscape ? 50 : 25;
+    if (senderName.length > maxSenderLen) senderName = senderName.substring(0, maxSenderLen) + "...";
+    doc.text(senderName, dateX + 26, 64); // O nome fica exatos 26mm à frente do título
+
+    // REGRA DO QR CODE: Só imprime se o tipo NÃO for "conference"
+    if (qrCodeDataUrl && type !== 'conference') {
       const qrX = pageWidth - 45; 
       doc.addImage(qrCodeDataUrl, 'PNG', qrX, 42, 30, 30);
     }
 
-    let tableStartY = 80; 
+    // REGRA DO QR CODE: Só imprime se o tipo NÃO for "conference"
+    if (qrCodeDataUrl && type !== 'conference') {
+      const qrX = pageWidth - 45;
+      doc.addImage(qrCodeDataUrl, 'PNG', qrX, 42, 30, 30);
+    }
+
+    let tableStartY = 80;
 
     if (shipment.observations) {
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(9);
-        doc.setTextColor(0, 102, 204); 
-        doc.text("RESPONSÁVEL / OBSERVAÇÕES:", 14, 76);
-        
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(60, 60, 60);
-        const splitObs = doc.splitTextToSize(shipment.observations, isLandscape ? 260 : 180);
-        doc.text(splitObs, 14, 81);
-        
-        tableStartY = 82 + (splitObs.length * 4) + 2;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(0, 102, 204);
+      doc.text('RESPONSÁVEL / OBSERVAÇÕES:', 14, 76);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(60, 60, 60);
+      const splitObs = doc.splitTextToSize(
+        shipment.observations,
+        isLandscape ? 260 : 180
+      );
+      doc.text(splitObs, 14, 81);
+
+      tableStartY = 82 + splitObs.length * 4 + 2;
     }
 
     // 5. PREPARAR LINHAS DA TABELA
-    const sortedItems = [...shipment.items].sort((a, b) => 
-        a.patientName.localeCompare(b.patientName)
+    const sortedItems = [...shipment.items].sort((a, b) =>
+      a.patientName.localeCompare(b.patientName)
     );
 
-    const tableRowsMeta = []; 
+    const tableRowsMeta = [];
     let isAlternate = false;
 
     sortedItems.forEach((item) => {
-        isAlternate = !isAlternate; 
-        const medsCount = item.medications.length; 
-        
-        item.medications.forEach((m, idx) => {
-            const isFirst = idx === 0;
-            const isLast = idx === medsCount - 1;
+      isAlternate = !isAlternate;
+      const medsCount = item.medications.length;
 
-            let medText = `• ${m.name} (${m.quantity} ${m.unit})`;
-            if (type === 'conference' && m.status === 'falta') {
-                medText = `(EM FALTA) ${m.name} - NÃO VEIO`; 
-            }
+      item.medications.forEach((m, idx) => {
+        const isFirst = idx === 0;
+        const isLast = idx === medsCount - 1;
 
-            let rowData = [];
-            if (type === 'vendor') {
-                rowData = [isFirst ? item.patientName.toUpperCase() : '', medText];
-            } else {
-                rowData = [isFirst ? item.patientName.toUpperCase() : '', medText, '', ''];
-            }
+        let medText = `• ${m.name} (${m.quantity} ${m.unit})`;
+        if (type === 'conference' && m.status === 'falta') {
+          medText = `(EM FALTA) ${m.name} - NÃO VEIO`;
+        }
 
-            tableRowsMeta.push({
-                data: rowData,
-                isAlternate: isAlternate,
-                isFirst: isFirst,
-                isLast: isLast,
-                isFalta: (type === 'conference' && m.status === 'falta'),
-                medsCount: medsCount
-            });
+        let rowData = [];
+        if (type === 'vendor') {
+          rowData = [isFirst ? item.patientName.toUpperCase() : '', medText];
+        } else {
+          rowData = [
+            isFirst ? item.patientName.toUpperCase() : '',
+            medText,
+            '',
+            '',
+          ];
+        }
+
+        tableRowsMeta.push({
+          data: rowData,
+          isAlternate: isAlternate,
+          isFirst: isFirst,
+          isLast: isLast,
+          isFalta: type === 'conference' && m.status === 'falta',
+          medsCount: medsCount,
         });
+      });
     });
 
     let columns = [];
     let colStyles = {};
 
     if (type === 'vendor') {
-        columns = [['PACIENTE', 'MEDICAMENTOS SOLICITADOS']];
-        colStyles = {
-            0: { cellWidth: 55, fontStyle: 'bold' },
-            1: { cellWidth: 'auto' }
-        };
+      columns = [['PACIENTE', 'MEDICAMENTOS SOLICITADOS']];
+      colStyles = {
+        0: { cellWidth: 55, fontStyle: 'bold' },
+        1: { cellWidth: 'auto' },
+      };
     } else {
-        columns = [['NOME DO PACIENTE', 'MEDICAÇÃO / STATUS', 'DATA REC.', 'ASSINATURA DO RECEBEDOR']];
-        colStyles = {
-            0: { cellWidth: 55, fontStyle: 'bold' },
-            1: { cellWidth: 115 }, 
-            2: { cellWidth: 25 },
-            3: { cellWidth: 'auto' }
-        };
+      columns = [
+        [
+          'NOME DO PACIENTE',
+          'MEDICAÇÃO / STATUS',
+          'DATA REC.',
+          'ASSINATURA DO RECEBEDOR',
+        ],
+      ];
+      colStyles = {
+        0: { cellWidth: 55, fontStyle: 'bold' },
+        1: { cellWidth: 115 },
+        2: { cellWidth: 25 },
+        3: { cellWidth: 'auto' },
+      };
     }
 
-    const bodyData = tableRowsMeta.map(r => r.data);
+    const bodyData = tableRowsMeta.map((r) => r.data);
 
     // 7. GERAR TABELA
     autoTable(doc, {
-        startY: tableStartY, 
-        head: columns,
-        body: bodyData,
-        theme: 'grid',
-        styles: { 
-            fontSize: 8, 
-            cellPadding: 2, 
-            valign: 'middle', 
-            lineColor: [200, 200, 200]
-        },
-        headStyles: { 
-            fillColor: [0, 51, 102], 
-            textColor: 255, 
-            fontStyle: 'bold', 
-            halign: 'center',
-            fontSize: 9,
-            cellPadding: 3,
-            lineWidth: 0.1 
-        },
-        columnStyles: colStyles,
-        
-        didParseCell: function (data) {
-            if (data.section === 'body') {
-                const meta = tableRowsMeta[data.row.index];
-                
-                // FUNDO ZEBRA AGRUPADO
-                data.cell.styles.fillColor = meta.isAlternate ? [248, 250, 252] : [255, 255, 255];
+      startY: tableStartY,
+      head: columns,
+      body: bodyData,
+      theme: 'grid',
+      styles: {
+        fontSize: 8,
+        cellPadding: 2,
+        valign: 'middle',
+        lineColor: [200, 200, 200],
+      },
+      headStyles: {
+        fillColor: [0, 51, 102],
+        textColor: 255,
+        fontStyle: 'bold',
+        halign: 'center',
+        fontSize: 9,
+        cellPadding: 3,
+        lineWidth: 0.1,
+      },
+      columnStyles: colStyles,
 
-                if (meta.isFalta && data.column.index === 1) {
-                    data.cell.styles.textColor = [220, 53, 69]; 
-                    data.cell.styles.fontStyle = 'bold';
-                }
+      didParseCell: function (data) {
+        if (data.section === 'body') {
+          const meta = tableRowsMeta[data.row.index];
 
-                // AJUSTE DE ESPAÇO CIRÚRGICO E COMPACTO
-                let customBottomPadding = 2; 
-                if (type === 'conference' && meta.isLast) {
-                    if (meta.medsCount === 1) customBottomPadding = 8; 
-                    else if (meta.medsCount === 2) customBottomPadding = 4;
-                }
-                
-                data.cell.styles.cellPadding = { top: 2, bottom: customBottomPadding, left: 2, right: 2 };
+          // FUNDO ZEBRA AGRUPADO
+          data.cell.styles.fillColor = meta.isAlternate
+            ? [248, 250, 252]
+            : [255, 255, 255];
 
-                            let topBorder = meta.isFirst ? 0.1 : 0; 
-                let bottomBorder = meta.isLast ? 0.1 : 0; 
-                
-                data.cell.styles.lineWidth = { 
-                    top: topBorder, 
-                    bottom: bottomBorder, 
-                    left: 0.1, 
-                    right: 0.1 
-                };
-            }
-        },
-        
-        didDrawCell: (data) => {
-            if (data.section === 'body') {
-                const meta = tableRowsMeta[data.row.index];
-                
-                if (type === 'conference' && data.column.index === 3 && meta.isLast) {
-                             const y = data.cell.y + data.cell.height - 3; 
-                    doc.setDrawColor(150);
-                    doc.line(data.cell.x + 5, y, data.cell.x + data.cell.width - 5, y);
-                }
-            }
+          if (meta.isFalta && data.column.index === 1) {
+            data.cell.styles.textColor = [220, 53, 69];
+            data.cell.styles.fontStyle = 'bold';
+          }
+
+          // AJUSTE DE ESPAÇO CIRÚRGICO E COMPACTO
+          let customBottomPadding = 2;
+          if (type === 'conference' && meta.isLast) {
+            if (meta.medsCount === 1) customBottomPadding = 8;
+            else if (meta.medsCount === 2) customBottomPadding = 4;
+          }
+
+          data.cell.styles.cellPadding = {
+            top: 2,
+            bottom: customBottomPadding,
+            left: 2,
+            right: 2,
+          };
+
+          let topBorder = meta.isFirst ? 0.1 : 0;
+          let bottomBorder = meta.isLast ? 0.1 : 0;
+
+          data.cell.styles.lineWidth = {
+            top: topBorder,
+            bottom: bottomBorder,
+            left: 0.1,
+            right: 0.1,
+          };
         }
+      },
+
+      didDrawCell: (data) => {
+        if (data.section === 'body') {
+          const meta = tableRowsMeta[data.row.index];
+
+          if (type === 'conference' && data.column.index === 3 && meta.isLast) {
+            const y = data.cell.y + data.cell.height - 3;
+            doc.setDrawColor(150);
+            doc.line(data.cell.x + 5, y, data.cell.x + data.cell.width - 5, y);
+          }
+        }
+      },
     });
 
     // 8. RODAPÉ
     const pageCount = doc.internal.getNumberOfPages();
-    for(let i = 1; i <= pageCount; i++) {
-        doc.setPage(i);
-        doc.setFontSize(8);
-        doc.setTextColor(150);
-        doc.text(`Prefeitura de Parari - Página ${i} de ${pageCount}`, pageWidth / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' });
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(150);
+      doc.text(
+        `Prefeitura de Parari - Página ${i} de ${pageCount}`,
+        pageWidth / 2,
+        doc.internal.pageSize.getHeight() - 10,
+        { align: 'center' }
+      );
     }
 
     const suffix = type === 'vendor' ? 'PEDIDO' : 'CONFERENCIA';
     doc.save(`${suffix}_${shipment.code}.pdf`);
-
   } catch (error) {
-    console.error("ERRO PDF:", error);
-    alert("Erro ao gerar PDF: " + error.message);
+    console.error('ERRO PDF:', error);
+    alert('Erro ao gerar PDF: ' + error.message);
   }
 };

@@ -13,7 +13,10 @@ import MedicationsPage from './MedicationsPage';
 import { icons } from '../utils/icons';
 import { getMedicationName } from '../utils/helpers';
 import { useDebounce } from '../hooks/useDebounce';
-import { FiArrowRight } from 'react-icons/fi';
+import { FiSearch  } from 'react-icons/fi';
+import { FiPlus  } from 'react-icons/fi';
+import { FiClock  } from 'react-icons/fi';
+
 
 // ============================================================================
 // ÁREA DE HELPERS (Funções auxiliares - FORA DO COMPONENTE)
@@ -77,6 +80,30 @@ const SearchPatientModal = ({
   }, [patients, term]);
 
   if (!isOpen) return null;
+  const [isBackgroundSyncing, setIsBackgroundSyncing] = useState(false);
+
+useEffect(() => {
+  // Função que busca os dados lá na sua API
+  const fetchDadosSilencioso = async () => {
+    try {
+      setIsBackgroundSyncing(true);
+      const resposta = await api.get('/sua-rota-de-historico'); // Ajuste para a sua rota
+      setRecords(resposta.data); // Atualiza os dados da tabela
+    } catch (error) {
+      console.error("Erro na sincronização oculta", error);
+    } finally {
+      setIsBackgroundSyncing(false);
+    }
+  };
+
+  // Chama a cada 15 segundos
+  const interval = setInterval(() => {
+    fetchDadosSilencioso();
+  }, 15000); 
+
+  // Limpa o intervalo se o usuário sair da tela
+  return () => clearInterval(interval);
+}, []); // As dependências vão depender do seu contexto
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
@@ -178,6 +205,7 @@ export default function ProfessionalDashboardPage({
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
   const [detalhesMovimentacao, setDetalhesMovimentacao] = useState(null);
+  const [isBackgroundSyncing, setIsBackgroundSyncing] = useState(false);
 
   // NOVO: Estado para Modal de Nova Remessa
   const [isAddShipmentModalOpen, setIsAddShipmentModalOpen] = useState(false);
@@ -1521,147 +1549,149 @@ return records.map((r) => {
           </div>
         );
 
-      case 'historico':
+     case 'historico':
         return (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 animate-fade-in flex flex-col h-[calc(100vh-8rem)] max-w-7xl mx-auto p-4 md:p-6">
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6 pb-6 border-b border-gray-100">
+          <div className="flex flex-col h-full w-full min-h-0 animate-in fade-in duration-300">
+            {/* CABEÇALHO E FILTROS */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-6 border-b border-slate-200 shrink-0">
               <div>
-                <h2 className="text-2xl font-bold text-gray-800">
-                  Histórico Completo
+                <h2 className="text-2xl font-black text-slate-800 flex items-center gap-3">
+                  Histórico de Entradas
+                  {/* Indicador de Sincronização em Tempo Real (Requer variável isBackgroundSyncing no seu state) */}
+                  {isBackgroundSyncing && (
+                    <span className="flex items-center gap-1 text-[10px] font-bold tracking-widest uppercase bg-indigo-50 text-indigo-500 px-2 py-1 rounded-md animate-pulse border border-indigo-100">
+                      <FiRefreshCw className="animate-spin" size={10} /> Sincronizando
+                    </span>
+                  )}
                 </h2>
-                <p className="text-gray-500 text-sm mt-1">
-                  Visualize e gerencie todas as entradas.
+                <p className="text-slate-500 text-sm mt-1 font-medium">
+                  Acompanhe e gerencie todos os registros em tempo real.
                 </p>
               </div>
-              <div className="flex flex-wrap gap-4 items-center">
+
+              <div className="flex flex-col sm:flex-row flex-wrap gap-4 items-center w-full md:w-auto">
                 <div className="relative w-full sm:w-auto">
+                  <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="text"
-                    placeholder="Buscar paciente no relatório..."
+                    placeholder="Buscar por paciente ou CPF..."
                     value={historySearchTerm}
                     onChange={(e) => setHistorySearchTerm(e.target.value)}
-                    className="pl-8 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 w-full sm:w-64"
+                    className="pl-11 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 w-full sm:w-72 transition-all shadow-sm"
                   />
-                  <div className="absolute left-2.5 top-2.5 text-gray-400 text-xs">
-                    {icons.search}
-                  </div>
                 </div>
+
+                <div className="flex bg-slate-100 p-1 rounded-xl w-full sm:w-auto shadow-inner border border-slate-200/50 overflow-x-auto custom-scrollbar">
+                  {['Todos', 'Pendente', 'Atendido', 'Cancelado'].map((status) => (
+                    <button
+                      key={status}
+                      onClick={() => setStatusFilter(status)}
+                      className={`flex-1 sm:flex-none px-5 py-2 text-xs font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                        statusFilter === status 
+                          ? 'bg-white text-indigo-700 shadow-sm border border-slate-200' 
+                          : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
+                      }`}
+                    >
+                      {status}
+                    </button>
+                  ))}
+                </div>
+
                 <button
                   onClick={openSearchModal}
-                  className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                  className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-xl text-sm font-black flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg shadow-indigo-200 active:scale-95"
                 >
-                  {icons.plus} Novo Registro
+                  <FiPlus size={18} /> Novo Registro
                 </button>
-                <div className="flex bg-gray-100 p-1 rounded-lg w-full sm:w-auto">
-                  {['Todos', 'Pendente', 'Atendido', 'Cancelado'].map(
-                    (status) => (
-                      <button
-                        key={status}
-                        onClick={() => setStatusFilter(status)}
-                        className={`flex-1 sm:flex-none px-4 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer ${statusFilter === status ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                      >
-                        {status}
-                      </button>
-                    )
-                  )}
-                </div>
               </div>
             </div>
-            <div className="flex-grow overflow-hidden bg-white border border-gray-200 rounded-xl shadow-sm flex flex-col">
-              <div className="overflow-x-auto overflow-y-auto custom-scrollbar flex-grow">
-                <table className="min-w-full text-sm text-left">
-                  <thead className="bg-gray-50 text-gray-500 font-medium uppercase tracking-wider text-xs sticky top-0 z-10 border-b border-gray-100">
+
+            {/* CONTAINER DA TABELA (Ocupa 100% do espaço restante) */}
+            <div className="flex-1 min-h-0 relative bg-white border border-slate-200 rounded-3xl shadow-sm flex flex-col overflow-hidden">
+              <div className="absolute inset-0 overflow-y-auto custom-scrollbar">
+                <table className="min-w-full text-sm text-left border-collapse">
+                  <thead className="bg-slate-50 text-slate-500 font-black uppercase tracking-widest text-[10px] sticky top-0 z-10 border-b border-slate-200 shadow-sm backdrop-blur-md">
                     <tr>
-                      <th className="py-3 px-4 pl-6">Paciente</th>
-                      <th className="py-3 px-4">Entrada</th>
-                      <th className="py-3 px-4">Medicações</th>
-                      <th className="py-3 px-4">Status</th>
-                      <th className="py-3 px-4 text-right pr-6">Ações</th>
+                      <th className="py-4 px-6">Paciente</th>
+                      <th className="py-4 px-4">Entrada</th>
+                      <th className="py-4 px-4">Medicações (Qtd/Unid)</th>
+                      <th className="py-4 px-4">Status</th>
+                      <th className="py-4 px-6 text-right">Ações</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-50">
+                  <tbody className="divide-y divide-slate-100">
                     {currentRecords.map((record) => (
                       <tr
                         key={record._id || record.id}
-                        className="hover:bg-blue-50/30 transition-colors group cursor-pointer border-b border-gray-100 shadow-sm hover:shadow-md"
-                        tabIndex={0}
+                        className="hover:bg-indigo-50/50 transition-colors group cursor-pointer border-b border-slate-50"
                       >
-                        <td className="py-3 px-4 pl-6 font-medium text-gray-800">
-                          {record.patientName}
+                        <td className="py-4 px-6">
+                          <div className="font-black text-slate-800 text-base">
+                            {record.patientName}
+                          </div>
                         </td>
-                        <td className="py-3 px-4 text-gray-600">
-                          {new Date(record.entryDate).toLocaleDateString(
-                            'pt-BR'
-                          )}{' '}
-                          <span className="text-gray-400 text-xs">
-                            {new Date(record.entryDate).toLocaleTimeString(
-                              'pt-BR',
-                              { hour: '2-digit', minute: '2-digit' }
-                            )}
-                          </span>
-                        </td>
-
-                        {/* --- Correção na exibição de medicações --- */}
-                        <td className="py-3 px-4">
-                          <div className="flex flex-wrap gap-1">
-                            {Array.isArray(record.medications)
-                              ? record.medications.map((m, i) => (
-                                  <span
-                                    key={i}
-                                    className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded border border-gray-200"
-                                  >
-                                    {m.name ||
-                                      getMedicationName(
-                                        m.medicationId,
-                                        medications
-                                      )}
-                                    <span className="text-gray-400 border-l border-gray-300 pl-1 ml-1 font-bold">
-                                      {m.dosage ||
-                                        `${m.quantity} ${m.unit || ''}`}
-                                    </span>
-                                  </span>
-                                ))
-                              : '-'}
+                        
+                        <td className="py-4 px-4">
+                          <div className="font-bold text-slate-700">
+                            {new Date(record.entryDate).toLocaleDateString('pt-BR')}
+                          </div>
+                          <div className="text-xs text-slate-400 font-medium mt-0.5 flex items-center gap-1">
+                            <FiClock size={10} />
+                            {new Date(record.entryDate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                           </div>
                         </td>
 
-                        <td className="py-3 px-4">
+                        <td className="py-4 px-4">
+                          <div className="flex flex-wrap gap-2">
+                            {Array.isArray(record.medications) && record.medications.length > 0 ? (
+                              record.medications.map((m, i) => (
+                                <span
+                                  key={i}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-slate-200 text-slate-700 text-[11px] font-bold rounded-lg shadow-sm"
+                                >
+                                  {m.name || getMedicationName(m.medicationId, medications)}
+                                  <span className="text-indigo-600 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded font-black tracking-widest uppercase text-[9px]">
+                                    {m.dosage || `${m.quantity} ${m.unit || 'UN'}`}
+                                  </span>
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-slate-400 italic text-xs font-medium">Nenhuma informada</span>
+                            )}
+                          </div>
+                        </td>
+
+                        <td className="py-4 px-4">
                           <StatusBadge status={record.status} />
                         </td>
-                        <td className="py-3 px-4 text-right pr-6">
-                          <div className="flex items-center justify-end gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
+
+                        <td className="py-4 px-6 text-right">
+                          <div className="flex items-center justify-end gap-2 opacity-100 sm:opacity-50 sm:group-hover:opacity-100 transition-opacity">
+                            
                             {record.status === 'Pendente' && (
                               <>
                                 <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setAttendingRecord(record);
-                                  }}
-                                  className="text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm px-3 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer"
+                                  onClick={(e) => { e.stopPropagation(); setAttendingRecord(record); }}
+                                  className="text-white bg-emerald-500 hover:bg-emerald-600 shadow-sm shadow-emerald-200 px-4 py-2 rounded-xl text-xs font-black tracking-wide transition-all cursor-pointer active:scale-95 flex items-center gap-1"
                                 >
                                   ATENDER
                                 </button>
                                 <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setCancelingRecord(record);
-                                  }}
-                                  className="text-red-600 hover:bg-red-50 p-1.5 rounded-md transition-colors cursor-pointer"
+                                  onClick={(e) => { e.stopPropagation(); setCancelingRecord(record); }}
+                                  className="text-red-500 hover:bg-red-50 hover:text-red-600 p-2 rounded-xl transition-all cursor-pointer border border-transparent hover:border-red-100"
                                   title="Cancelar"
                                 >
-                                  {icons.close}
+                                  {icons.close || <FiX />}
                                 </button>
                               </>
                             )}
 
                             <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleEditRecordClick(record);
-                              }}
-                              className="text-gray-500 hover:text-blue-600 p-1.5 rounded-md hover:bg-gray-100 transition-colors cursor-pointer"
+                              onClick={(e) => { e.stopPropagation(); handleEditRecordClick(record); }}
+                              className="text-slate-400 hover:text-indigo-600 p-2 rounded-xl hover:bg-indigo-50 transition-all cursor-pointer"
+                              title="Editar"
                             >
-                              {icons.edit}
+                              {icons.edit || <FiEdit3 />}
                             </button>
 
                             {user?.role !== 'profissional' && (
@@ -1671,21 +1701,19 @@ return records.map((r) => {
                                   setConfirmation({
                                     isOpen: true,
                                     title: 'Excluir Registro',
-                                    message: `Tem certeza que deseja excluir o registro de ${record.patientName} (Entrada: ${new Date(record.entryDate).toLocaleDateString('pt-BR')})? Esta ação é irreversível.`,
+                                    message: `Deseja realmente excluir o registro de ${record.patientName}? Ação irreversível.`,
                                     onConfirm: () => {
                                       closeConfirmation();
-                                      handleDeleteRecord(
-                                        record._id || record.id
-                                      );
+                                      handleDeleteRecord(record._id || record.id);
                                     },
                                     isDestructive: true,
-                                    confirmText: 'Excluir',
+                                    confirmText: 'Excluir Definitivamente',
                                   });
                                 }}
-                                className="text-red-600 hover:bg-red-50 p-1.5 rounded-md transition-colors cursor-pointer"
+                                className="text-slate-400 hover:text-red-600 p-2 rounded-xl hover:bg-red-50 transition-all cursor-pointer"
                                 title="Excluir Registro"
                               >
-                                {icons.trash}
+                                {icons.trash || <FiTrash2 />}
                               </button>
                             )}
                           </div>
@@ -1694,32 +1722,45 @@ return records.map((r) => {
                     ))}
                   </tbody>
                 </table>
+
                 {filteredRecords.length === 0 && (
-                  <div className="p-10 text-center text-gray-400">
-                    Nenhum registro encontrado.
+                  <div className="flex flex-col items-center justify-center p-20 text-center text-slate-400">
+                    <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-4 border border-slate-100">
+                      <FiSearch size={32} className="text-slate-300" />
+                    </div>
+                    <p className="text-xl font-black text-slate-700 tracking-tight">Nenhum registro encontrado</p>
+                    <p className="text-sm font-medium mt-1 text-slate-500">
+                      A sua busca ou filtro não retornou nenhum paciente para esta lista.
+                    </p>
                   </div>
                 )}
               </div>
             </div>
-            <div className="flex justify-between items-center mt-4 pt-2 border-t border-gray-100">
-              <button
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage((p) => p - 1)}
-                className="px-3 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-50 cursor-pointer"
-              >
-                Anterior
-              </button>
-              <span className="text-sm text-gray-500">
-                Pág {currentPage} de {totalPages}
-              </span>
-              <button
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage((p) => p + 1)}
-                className="px-3 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-50 cursor-pointer"
-              >
-                Próxima
-              </button>
-            </div>
+
+            {/* PAGINAÇÃO STICKY NO RODAPÉ */}
+            {filteredRecords.length > 0 && (
+              <div className="flex justify-between items-center mt-4 pt-3 border-t border-slate-200 shrink-0">
+                <p className="text-sm font-bold text-slate-500">
+                  Mostrando página <span className="text-slate-800 font-black">{currentPage}</span> de <span className="text-slate-800 font-black">{totalPages}</span>
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage((p) => p - 1)}
+                    className="px-4 py-2 text-sm font-bold bg-white border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors shadow-sm"
+                  >
+                    Anterior
+                  </button>
+                  <button
+                    disabled={currentPage === totalPages || totalPages === 0}
+                    onClick={() => setCurrentPage((p) => p + 1)}
+                    className="px-4 py-2 text-sm font-bold bg-white border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors shadow-sm"
+                  >
+                    Próxima
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         );
 

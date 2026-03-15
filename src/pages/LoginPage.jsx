@@ -375,7 +375,7 @@ export default function LoginPage({ onLogin }) {
             <div className="inline-flex items-center gap-2 bg-white/10 border border-white/10 rounded-full px-4 py-1.5 mb-8 backdrop-blur-md shadow-lg">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
               <span className="text-xs font-black tracking-widest uppercase text-blue-100">
-                Sistema Operacional v4.5
+                Sistema Operacional v5.5
               </span>
             </div>
 
