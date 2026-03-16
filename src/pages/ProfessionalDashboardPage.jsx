@@ -13,26 +13,12 @@ import MedicationsPage from './MedicationsPage';
 import { icons } from '../utils/icons';
 import { getMedicationName } from '../utils/helpers';
 import { useDebounce } from '../hooks/useDebounce';
-import {
-  FiArrowRight,
-  FiSearch,
-  FiRefreshCw,
-  FiX,
-  FiTruck,
-  FiClock,
-  FiUsers,
-  FiActivity,
-  FiPlus,
-  FiAlertCircle,
-  FiBox,
-  FiDollarSign,
-  FiCalendar,
-  FiCheck,
-  FiAlertTriangle,
-} from 'react-icons/fi';
+import { FiSearch  } from 'react-icons/fi';
+import { FiPlus  } from 'react-icons/fi';
+import { FiClock  } from 'react-icons/fi';
 
-// =====================
-// =======================================================
+
+// ============================================================================
 // ÁREA DE HELPERS (Funções auxiliares - FORA DO COMPONENTE)
 const fixDate = (dateString) => {
   if (!dateString) return '-';
@@ -96,28 +82,28 @@ const SearchPatientModal = ({
   if (!isOpen) return null;
   const [isBackgroundSyncing, setIsBackgroundSyncing] = useState(false);
 
-  useEffect(() => {
-    // Função que busca os dados lá na sua API
-    const fetchDadosSilencioso = async () => {
-      try {
-        setIsBackgroundSyncing(true);
-        const resposta = await api.get('/sua-rota-de-historico'); // Ajuste para a sua rota
-        setRecords(resposta.data); // Atualiza os dados da tabela
-      } catch (error) {
-        console.error('Erro na sincronização oculta', error);
-      } finally {
-        setIsBackgroundSyncing(false);
-      }
-    };
+useEffect(() => {
+  // Função que busca os dados lá na sua API
+  const fetchDadosSilencioso = async () => {
+    try {
+      setIsBackgroundSyncing(true);
+      const resposta = await api.get('/sua-rota-de-historico'); // Ajuste para a sua rota
+      setRecords(resposta.data); // Atualiza os dados da tabela
+    } catch (error) {
+      console.error("Erro na sincronização oculta", error);
+    } finally {
+      setIsBackgroundSyncing(false);
+    }
+  };
 
-    // Chama a cada 15 segundos
-    const interval = setInterval(() => {
-      fetchDadosSilencioso();
-    }, 15000);
+  // Chama a cada 15 segundos
+  const interval = setInterval(() => {
+    fetchDadosSilencioso();
+  }, 15000); 
 
-    // Limpa o intervalo se o usuário sair da tela
-    return () => clearInterval(interval);
-  }, []); // As dependências vão depender do seu contexto
+  // Limpa o intervalo se o usuário sair da tela
+  return () => clearInterval(interval);
+}, []); // As dependências vão depender do seu contexto
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
@@ -214,7 +200,6 @@ export default function ProfessionalDashboardPage({
   const [searchTerm, setSearchTerm] = useState('');
   const [historySearchTerm, setHistorySearchTerm] = useState('');
   const [selectedPatient, setSelectedPatient] = useState(null);
-  const [historyStatusFilter, setHistoryStatusFilter] = useState('pendente');
 
   // Modais
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
@@ -571,35 +556,32 @@ export default function ProfessionalDashboardPage({
       return acc;
     }, {});
 
-    return records.map((r) => {
-      let pId = r.patientId;
-
-      if (pId && typeof pId === 'object') {
-        pId = pId._id;
+return records.map((r) => {
+    let pId = r.patientId;
+    
+   
+    if (pId && typeof pId === 'object') {
+      pId = pId._id;
+    }
+    
+    let pName = patientMap[pId];
+    
+    if (!pName) {
+      if (r.patientName) {
+        pName = r.patientName;
+      } else if (r.patientId && typeof r.patientId === 'object' && r.patientId.name) {
+           pName = r.patientId.name;
+      } else {
+        pName = 'Desconhecido';
       }
-
-      let pName = patientMap[pId];
-
-      if (!pName) {
-        if (r.patientName) {
-          pName = r.patientName;
-        } else if (
-          r.patientId &&
-          typeof r.patientId === 'object' &&
-          r.patientId.name
-        ) {
-          pName = r.patientId.name;
-        } else {
-          pName = 'Desconhecido';
-        }
-      }
-
-      return {
-        ...r,
-        patientName: pName,
-      };
-    });
-  }, [records, patients]);
+    }
+    
+    return {
+      ...r,
+      patientName: pName,
+    };
+  });
+}, [records, patients]);
 
   const filteredRecords = useMemo(() => {
     let result = recordsWithPatientNames.sort(
@@ -657,73 +639,6 @@ export default function ProfessionalDashboardPage({
     );
     return found ? found.name : 'Desconhecido';
   };
-  // =========================================================================
-  // 📈 INTELIGÊNCIA DE NEGÓCIO (MÉTRICAS REAIS)
-  // Coloque isto antes do seu switch(currentView)
-  // =========================================================================
-  const dashboardMetrics = useMemo(() => {
-    const totalP = patients?.length || 0;
-    const totalM = medications?.length || 0;
-
-    const hoje = new Date().toDateString();
-    let pendentesHoje = 0;
-    let atendidosHoje = 0;
-    let consumoFinanceiroTotal = 0;
-    const rankingMedicamentos = {};
-
-    records?.forEach((r) => {
-      const isToday =
-        new Date(r.createdAt || r.entryDate).toDateString() === hoje;
-
-      if (r.status === 'Aguardando' || r.status === 'Pendente') {
-        pendentesHoje++;
-      } else if (r.status === 'Atendido' || r.status === 'Entregue') {
-        if (isToday) atendidosHoje++;
-
-        // Calcula Gasto Financeiro e Uso de Medicamentos
-        r.medications?.forEach((med) => {
-          const qtd = Number(med.quantity) || 0;
-          const preco = Number(med.unitPrice) || 0;
-          consumoFinanceiroTotal += qtd * preco;
-
-          const nomeMed =
-            med.name ||
-            getMedicationName(med.medicationId, medications) ||
-            'Desconhecido';
-          rankingMedicamentos[nomeMed] =
-            (rankingMedicamentos[nomeMed] || 0) + qtd;
-        });
-      }
-    });
-
-    const risco =
-      patients?.filter((p) => {
-        if (p.status === 'Pendente' && calculateDaysLate(p.createdAt) > 30)
-          return true;
-        if (p.lastVisit && calculateDaysLate(p.lastVisit) > 35) return true;
-        return false;
-      }) || [];
-
-    const topMedicamentos = Object.entries(rankingMedicamentos)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([nome, qtd]) => ({ nome, qtd }));
-
-    return {
-      totalP,
-      totalM,
-      pendentesHoje,
-      atendidosHoje,
-      consumoFinanceiroTotal,
-      risco,
-      topMedicamentos,
-    };
-  }, [patients, records, medications]);
-
-  const maxMedQtd =
-    dashboardMetrics.topMedicamentos.length > 0
-      ? Math.max(...dashboardMetrics.topMedicamentos.map((m) => m.qtd))
-      : 1;
 
   const renderCurrentView = () => {
     switch (currentView) {
@@ -731,675 +646,7 @@ export default function ProfessionalDashboardPage({
       // DASHBOARD (DESIGN SENIOR CORRIGIDO)
       // ======================================================================
       case 'dashboard':
-        return (
-          <div className="flex flex-col h-full min-h-0 animate-in fade-in duration-500 overflow-y-auto custom-scrollbar pb-8 pr-2 gap-6 relative">
-            {/* 1. BANNER DE BOAS-VINDAS */}
-            <div className="bg-white rounded-[2rem] border border-slate-200/60 shadow-sm p-8 md:p-10 relative overflow-hidden flex-shrink-0 group">
-              <div className="absolute top-0 right-0 w-[40rem] h-[40rem] bg-gradient-to-bl from-indigo-50 via-transparent to-transparent rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 opacity-70"></div>
-
-              <div className="relative z-10 flex flex-col xl:flex-row justify-between xl:items-center gap-8">
-                <div>
-                  <div className="flex items-center gap-3 mb-4">
-                    <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase border border-slate-200">
-                      Visão Geral
-                    </span>
-                    <span className="text-slate-400 text-sm font-semibold flex items-center gap-1.5">
-                      <FiClock size={14} className="text-indigo-400" />
-                      {new Date().toLocaleDateString('pt-BR', {
-                        weekday: 'long',
-                        day: 'numeric',
-                        month: 'long',
-                      })}
-                    </span>
-                  </div>
-
-                  <h1 className="text-3xl md:text-4xl font-black text-slate-800 tracking-tight">
-                    {getGreeting()},{' '}
-                    <span className="text-indigo-600">
-                      {user?.name?.split(' ')[0] || 'Profissional'}
-                    </span>
-                  </h1>
-                  <p className="text-slate-500 mt-2 font-medium max-w-xl">
-                    Aqui está o resumo operacional de hoje. Acompanhe os fluxos
-                    de atendimento, consumos e alertas em tempo real.
-                  </p>
-
-                  {dashboardMetrics.risco.length > 0 && (
-                    <div
-                      onClick={() => setCurrentView('patients')}
-                      className="mt-6 flex items-center gap-3 bg-red-50 border border-red-100 px-4 py-3 rounded-2xl w-fit cursor-pointer hover:bg-red-100/80 transition-all shadow-sm hover:shadow group/alert"
-                    >
-                      <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0 group-hover/alert:scale-110 transition-transform">
-                        <FiAlertTriangle size={18} />
-                      </div>
-                      <div>
-                        <p className="text-red-900 text-sm font-bold">
-                          Atenção Necessária
-                        </p>
-                        <p className="text-red-700 text-xs font-medium">
-                          {dashboardMetrics.risco.length} paciente(s) com atraso
-                          ou pendência crítica.
-                        </p>
-                      </div>
-                      <FiArrowRight className="text-red-400 ml-2 group-hover/alert:translate-x-1 transition-transform" />
-                    </div>
-                  )}
-                </div>
-
-                {/* CAIXA FINANCEIRA (Apenas Admin ou Gestor) */}
-                {(user?.role === 'admin' || user?.role === 'gestor') && (
-                  <div className="bg-slate-900 rounded-[2rem] p-6 text-white shadow-xl shadow-slate-900/10 min-w-[280px] relative overflow-hidden transform transition-all hover:-translate-y-1">
-                    <div className="absolute -right-4 -bottom-4 text-white/5">
-                      <FiDollarSign size={120} />
-                    </div>
-                    <div className="relative z-10">
-                      <p className="text-[10px] font-black tracking-widest uppercase text-emerald-400 mb-2 flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                        Consumo Estimado (Hoje)
-                      </p>
-                      <p className="text-4xl font-black tracking-tight mb-1">
-                        {dashboardMetrics.consumoFinanceiroTotal.toLocaleString(
-                          'pt-BR',
-                          { style: 'currency', currency: 'BRL' }
-                        )}
-                      </p>
-                      <p className="text-xs text-slate-400 font-medium">
-                        Baseado nas saídas registradas hoje.
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* 2. GRID DE INDICADORES (BENTO BOX) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 shrink-0">
-            <MetricCard 
-                title="Aguardando na Fila" 
-                value={dashboardMetrics.pendentesHoje} 
-                subtitle="Pacientes hoje"
-                icon={<FiUsers size={22} />} 
-                color="indigo" 
-                onClick={() => {
-                  setStatusFilter('Pendente'); 
-                  setCurrentView('historico');
-                }}
-              />
-              <MetricCard
-                title="Atendimentos Hoje"
-                value={dashboardMetrics.atendidosHoje}
-                subtitle="Concluídos"
-                icon={<FiCheck size={22} />}
-                color="emerald"
-                onClick={() => setCurrentView('deliveries')}
-              />
-              <MetricCard
-                title="Pacientes Cadastrados"
-                value={dashboardMetrics.totalP}
-                subtitle="Cadastros ativos no sistema"
-                icon={<FiActivity size={22} />}
-                color="blue"
-                onClick={() => setCurrentView('patients')}
-              />
-              <MetricCard
-                title="Itens em Estoque"
-                value={dashboardMetrics.totalM}
-                subtitle="Medicamentos base"
-                icon={<FiBox size={22} />}
-                color="slate"
-                onClick={() => setCurrentView('medications')}
-              />
-            </div>
-
-            {/* 3. ÁREA DE LISTAS: OPERACIONAL VS ANALÍTICO */}
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-              {/* ESQUERDA: Fluxo de Atendimentos */}
-              <div className="xl:col-span-2 bg-white rounded-[2rem] border border-slate-200/60 shadow-sm flex flex-col h-[420px] overflow-hidden">
-                <div className="p-6 md:px-8 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
-                  <div>
-                    <h3 className="font-black text-slate-800 text-lg flex items-center gap-2">
-                      Fluxo de Atendimentos
-                    </h3>
-                    <p className="text-xs text-slate-500 font-medium mt-1">
-                      Últimas movimentações registradas
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setCurrentView('historico')}
-                    className="text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-4 py-2 rounded-xl transition-colors cursor-pointer active:scale-95 hidden sm:block"
-                  >
-                    Ver Histórico Completo
-                  </button>
-                </div>
-
-                <div className="overflow-y-auto custom-scrollbar flex-1 p-4 md:p-6">
-                  {records.length > 0 ? (
-                    <div className="space-y-4">
-                      {records.slice(0, 6).map((r, i) => (
-                        <div
-                          key={r._id || i}
-                          onClick={() => setDetalhesMovimentacao(r)}
-                          className="flex items-center justify-between group p-3 hover:bg-slate-50 rounded-2xl transition-all border border-transparent hover:border-slate-200 hover:shadow-sm cursor-pointer"
-                        >
-                          <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center font-black text-sm border border-slate-200 group-hover:bg-white group-hover:border-indigo-200 group-hover:text-indigo-600 transition-colors shadow-sm">
-                              {(r.patient?.name || r.patientName || 'P').charAt(
-                                0
-                              )}
-                            </div>
-                            <div>
-                              <p className="font-bold text-slate-800 text-sm group-hover:text-indigo-700 transition-colors">
-                                {r.patient?.name ||
-                                  r.patientName ||
-                                  'Paciente Não Informado'}
-                              </p>
-                              <p className="text-xs font-medium text-slate-400 mt-0.5 flex items-center gap-1">
-                                <FiClock size={10} />{' '}
-                                {fixDate(r.createdAt || r.entryDate)}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-4">
-                            <StatusBadge status={r.status} />
-                            <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm text-indigo-600 hidden sm:flex">
-                              <FiArrowRight size={14} />
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                      <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4 border border-slate-100">
-                        <FiActivity size={24} className="text-slate-300" />
-                      </div>
-                      <p className="font-bold text-slate-600">
-                        Nenhum atendimento
-                      </p>
-                      <p className="text-sm font-medium text-slate-400 mt-1">
-                        A fila está vazia no momento.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* DIREITA: Top Consumo */}
-              <div className="bg-white rounded-[2rem] border border-slate-200/60 shadow-sm flex flex-col h-[420px] overflow-hidden">
-                <div className="p-6 border-b border-slate-100 bg-white shrink-0">
-                  <h3 className="font-black text-slate-800 text-lg flex items-center gap-2">
-                    Top Consumo
-                  </h3>
-                  <p className="text-xs text-slate-500 font-medium mt-1">
-                    Medicamentos mais dispensados (Hoje)
-                  </p>
-                </div>
-
-                <div className="overflow-y-auto custom-scrollbar flex-1 p-6">
-                  {dashboardMetrics.topMedicamentos.length > 0 ? (
-                    <div className="space-y-6">
-                      {dashboardMetrics.topMedicamentos.map((med, idx) => {
-                        const percent = Math.round((med.qtd / maxMedQtd) * 100);
-                        return (
-                          <div key={idx} className="relative group">
-                            <div className="flex justify-between items-end mb-2">
-                              <span className="font-bold text-slate-700 text-sm line-clamp-1 pr-4 group-hover:text-indigo-600 transition-colors">
-                                <span className="text-slate-300 font-black mr-2">
-                                  #{idx + 1}
-                                </span>
-                                {med.nome}
-                              </span>
-                              <span className="font-black text-slate-800 text-sm">
-                                {med.qtd}{' '}
-                                <span className="text-[10px] text-slate-400 font-bold uppercase">
-                                  un
-                                </span>
-                              </span>
-                            </div>
-                            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                              <div
-                                className={`h-full rounded-full transition-all duration-1000 ease-out ${idx === 0 ? 'bg-indigo-500' : idx === 1 ? 'bg-indigo-400' : 'bg-slate-300'}`}
-                                style={{ width: `${percent}%` }}
-                              ></div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                      <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4 border border-slate-100">
-                        <FiBox size={24} className="text-slate-300" />
-                      </div>
-                      <p className="font-bold text-slate-600">
-                        Sem dados de consumo
-                      </p>
-                      <p className="text-sm font-medium text-slate-400 mt-1 text-center">
-                        Nenhum medicamento
-                        <br />
-                        dispensado hoje ainda.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* MODAL DE DETALHES DO ATENDIMENTO (DENTRO DO DASHBOARD) */}
-            {detalhesMovimentacao && (
-              <div
-                className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in"
-                onClick={() => setDetalhesMovimentacao(null)}
-              >
-                <div
-                  className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col animate-in zoom-in-95"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {/* Cabeçalho do Modal */}
-                  <div className="bg-slate-50 p-6 border-b border-slate-100 flex justify-between items-center">
-                    <h3 className="font-black text-slate-800 text-lg flex items-center gap-2">
-                      <span className="text-indigo-600">
-                        <FiActivity size={20} />
-                      </span>
-                      Detalhes do Atendimento
-                    </h3>
-                    <button
-                      onClick={() => setDetalhesMovimentacao(null)}
-                      className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition-colors cursor-pointer"
-                    >
-                      <FiX size={20} />
-                    </button>
-                  </div>
-
-                  {/* Corpo do Modal */}
-                  <div className="p-6 space-y-6">
-                    <div className="grid grid-cols-2 gap-4">
-                      {/* Paciente */}
-                      <div className="col-span-2 bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100">
-                        <span className="text-[10px] uppercase font-bold text-indigo-500 tracking-wider block mb-1">
-                          Paciente
-                        </span>
-                        <span className="font-black text-slate-800 text-lg">
-                          {/* Verifica se tem a função getPatientNameById, senão cai pro fallback direto no registro */}
-                          {typeof getPatientNameById === 'function'
-                            ? getPatientNameById(detalhesMovimentacao.patientId)
-                            : detalhesMovimentacao.patient?.name ||
-                              detalhesMovimentacao.patientName ||
-                              'Paciente Não Informado'}
-                        </span>
-                      </div>
-
-                      {/* Status */}
-                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                        <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block mb-2">
-                          Status
-                        </span>
-                        <StatusBadge status={detalhesMovimentacao.status} />
-                      </div>
-
-                      {/* Data e Hora */}
-                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                        <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block mb-1">
-                          Data / Hora
-                        </span>
-                        <span className="font-bold text-slate-700 text-sm">
-                          {new Date(
-                            detalhesMovimentacao.deliveryDate ||
-                              detalhesMovimentacao.createdAt
-                          ).toLocaleString('pt-BR', {
-                            dateStyle: 'short',
-                            timeStyle: 'short',
-                          })}
-                        </span>
-                      </div>
-
-                      {/* Fornecedor */}
-                      <div className="col-span-2 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                        <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block mb-1">
-                          Fornecedor (Origem)
-                        </span>
-                        <span className="font-bold text-slate-700 text-sm flex items-center gap-2">
-                          <FiTruck className="text-slate-400" />
-                          {detalhesMovimentacao.fornecedor ||
-                            detalhesMovimentacao.supplier ||
-                            'Não informado / Estoque Próprio'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Lista de Medicamentos */}
-                    <div>
-                      <span className="text-xs uppercase font-bold text-slate-400 tracking-wider block mb-3 border-b border-slate-100 pb-2">
-                        Medicamentos Dispensados
-                      </span>
-                      <ul className="space-y-2 max-h-[150px] overflow-y-auto custom-scrollbar pr-2">
-                        {detalhesMovimentacao.medicamentos?.length > 0 ||
-                        detalhesMovimentacao.medications?.length > 0 ? (
-                          (
-                            detalhesMovimentacao.medicamentos ||
-                            detalhesMovimentacao.medications
-                          ).map((med, idx) => (
-                            <li
-                              key={idx}
-                              className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-100 shadow-sm"
-                            >
-                              <span className="font-bold text-slate-700 text-sm">
-                                {med.nome || med.name}
-                              </span>
-                              <span className="font-black text-indigo-700 bg-indigo-50 px-3 py-1 rounded-lg text-xs border border-indigo-100">
-                                {med.quantidade || med.quantity}{' '}
-                                {med.unit || 'un.'}
-                              </span>
-                            </li>
-                          ))
-                        ) : (
-                          <li className="text-center text-slate-400 text-sm font-medium py-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                            Nenhum medicamento listado.
-                          </li>
-                        )}
-                      </ul>
-                    </div>
-                  </div>
-
-                  {/* Rodapé do Modal */}
-                  <div className="p-4 bg-slate-50 border-t border-slate-100">
-                    <button
-                      onClick={() => setDetalhesMovimentacao(null)}
-                      className="w-full bg-slate-800 hover:bg-slate-900 text-white font-black py-3 rounded-xl transition-colors shadow-sm cursor-pointer"
-                    >
-                      Fechar Resumo
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        );
-        return (
-          <div className="flex flex-col h-full min-h-0 animate-in fade-in duration-500 overflow-y-auto custom-scrollbar pb-8 pr-2 gap-6">
-            {/* 1. BANNER DE BOAS-VINDAS (CLEAN & MINIMALISTA) */}
-            <div className="bg-white rounded-[2rem] border border-slate-200/60 shadow-sm p-8 md:p-10 relative overflow-hidden flex-shrink-0 group">
-              <div className="absolute top-0 right-0 w-[40rem] h-[40rem] bg-gradient-to-bl from-indigo-50 via-transparent to-transparent rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 opacity-70"></div>
-
-              <div className="relative z-10 flex flex-col xl:flex-row justify-between xl:items-center gap-8">
-                <div>
-                  <div className="flex items-center gap-3 mb-4">
-                    <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase border border-slate-200">
-                      Visão Geral
-                    </span>
-                    <span className="text-slate-400 text-sm font-semibold flex items-center gap-1.5">
-                      <FiClock size={14} className="text-indigo-400" />
-                      {new Date().toLocaleDateString('pt-BR', {
-                        weekday: 'long',
-                        day: 'numeric',
-                        month: 'long',
-                      })}
-                    </span>
-                  </div>
-
-                  <h1 className="text-3xl md:text-4xl font-black text-slate-800 tracking-tight">
-                    {getGreeting()},{' '}
-                    <span className="text-indigo-600">
-                      {user?.name?.split(' ')[0] || 'Profissional'}
-                    </span>
-                  </h1>
-                  <p className="text-slate-500 mt-2 font-medium max-w-xl">
-                    Aqui está o resumo operacional de hoje. Acompanhe os fluxos
-                    de atendimento, consumos e alertas em tempo real.
-                  </p>
-
-                  {dashboardMetrics.risco.length > 0 && (
-                    <div
-                      onClick={() => setCurrentView('patients')}
-                      className="mt-6 flex items-center gap-3 bg-red-50 border border-red-100 px-4 py-3 rounded-2xl w-fit cursor-pointer hover:bg-red-100/80 transition-all shadow-sm hover:shadow group/alert"
-                    >
-                      <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0 group-hover/alert:scale-110 transition-transform">
-                        <FiAlertTriangle size={18} />
-                      </div>
-                      <div>
-                        <p className="text-red-900 text-sm font-bold">
-                          Atenção Necessária
-                        </p>
-                        <p className="text-red-700 text-xs font-medium">
-                          {dashboardMetrics.risco.length} doente(s) com atraso
-                          ou pendência crítica.
-                        </p>
-                      </div>
-                      <FiArrowRight className="text-red-400 ml-2 group-hover/alert:translate-x-1 transition-transform" />
-                    </div>
-                  )}
-                </div>
-
-                {/* CAIXA FINANCEIRA (Apenas Admin ou Gestor) */}
-                {(user?.role === 'admin' || user?.role === 'gestor') && (
-                  <div className="bg-slate-900 rounded-[2rem] p-6 text-white shadow-xl shadow-slate-900/10 min-w-[280px] relative overflow-hidden transform transition-all hover:-translate-y-1">
-                    <div className="absolute -right-4 -bottom-4 text-white/5">
-                      {icons.medication}
-                    </div>
-                    <div className="relative z-10">
-                      <p className="text-[10px] font-black tracking-widest uppercase text-emerald-400 mb-2 flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                        Consumo Estimado (Hoje)
-                      </p>
-                      <p className="text-4xl font-black tracking-tight mb-1">
-                        {dashboardMetrics.consumoFinanceiroTotal.toLocaleString(
-                          'pt-BR',
-                          { style: 'currency', currency: 'BRL' }
-                        )}
-                      </p>
-                      <p className="text-xs text-slate-400 font-medium">
-                        Baseado nas saídas registadas hoje.
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* 2. GRID DE INDICADORES (BENTO BOX) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 shrink-0">
-              <MetricCard
-                title="A aguardar na Fila"
-                value={dashboardMetrics.pendentesHoje}
-                subtitle="Doentes hoje"
-                icon={<FiUsers size={22} />}
-                color="indigo"
-                onClick={() => setCurrentView('queue')}
-              />
-              <MetricCard
-                title="Atendimentos Hoje"
-                value={dashboardMetrics.atendidosHoje}
-                subtitle="Concluídos"
-                icon={<FiCheck size={22} />}
-                color="emerald"
-                onClick={() => setCurrentView('queue')}
-              />
-              <MetricCard
-                title="Total de Doentes"
-                value={dashboardMetrics.totalP}
-                subtitle="Registos ativos"
-                icon={<FiActivity size={22} />}
-                color="blue"
-                onClick={() => setCurrentView('patients')}
-              />
-              <MetricCard
-                title="Itens em Stock"
-                value={dashboardMetrics.totalM}
-                subtitle="Medicamentos base"
-                icon={<FiBox size={22} />}
-                color="slate"
-                onClick={() => setCurrentView('stock')}
-              />
-            </div>
-
-            {/* 3. ÁREA DE LISTAS: OPERACIONAL VS ANALÍTICO */}
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-              {/* ESQUERDA: Fluxo de Atendimentos */}
-              <div className="xl:col-span-2 bg-white rounded-[2rem] border border-slate-200/60 shadow-sm flex flex-col h-[420px] overflow-hidden">
-                <div className="p-6 md:px-8 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
-                  <div>
-                    <h3 className="font-black text-slate-800 text-lg flex items-center gap-2">
-                      Fluxo de Atendimentos
-                    </h3>
-                    <p className="text-xs text-slate-500 font-medium mt-1">
-                      Últimas movimentações registadas
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setCurrentView('historico')}
-                    className="text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-4 py-2 rounded-xl transition-colors cursor-pointer active:scale-95 hidden sm:block"
-                  >
-                    Ver Histórico Completo
-                  </button>
-                </div>
-
-                <div className="overflow-y-auto custom-scrollbar flex-1 p-4 md:p-6">
-                  {records.length > 0 ? (
-                    <div className="space-y-4">
-                      {records.slice(0, 6).map((r, i) => (
-                        <div
-                          key={r._id || i}
-                          className="flex items-center justify-between group p-3 hover:bg-slate-50 rounded-2xl transition-colors border border-transparent hover:border-slate-100"
-                        >
-                          <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center font-black text-sm border border-slate-200 group-hover:bg-white group-hover:border-indigo-200 group-hover:text-indigo-600 transition-colors shadow-sm">
-                              {(r.patient?.name || r.patientName || 'D').charAt(
-                                0
-                              )}
-                            </div>
-                            <div>
-                              <p className="font-bold text-slate-800 text-sm group-hover:text-indigo-700 transition-colors">
-                                {r.patient?.name ||
-                                  r.patientName ||
-                                  'Doente Não Informado'}
-                              </p>
-                              <p className="text-xs font-medium text-slate-400 mt-0.5 flex items-center gap-1">
-                                <FiClock size={10} />{' '}
-                                {fixDate(r.createdAt || r.entryDate)}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-4">
-                            <StatusBadge status={r.status} />
-                            <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer shadow-sm hover:text-indigo-600 hidden sm:flex">
-                              <FiArrowRight size={14} />
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                      <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4 border border-slate-100">
-                        <FiActivity size={24} className="text-slate-300" />
-                      </div>
-                      <p className="font-bold text-slate-600">
-                        Nenhum atendimento
-                      </p>
-                      <p className="text-sm font-medium text-slate-400 mt-1">
-                        A fila está vazia no momento.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* DIREITA: Top Consumo com Barras Visuais */}
-              <div className="bg-white rounded-[2rem] border border-slate-200/60 shadow-sm flex flex-col h-[420px] overflow-hidden">
-                <div className="p-6 border-b border-slate-100 bg-white shrink-0">
-                  <h3 className="font-black text-slate-800 text-lg flex items-center gap-2">
-                    Top Consumo
-                  </h3>
-                  <p className="text-xs text-slate-500 font-medium mt-1">
-                    Medicamentos mais dispensados (Hoje)
-                  </p>
-                </div>
-
-                <div className="overflow-y-auto custom-scrollbar flex-1 p-6">
-                  {dashboardMetrics.topMedicamentos.length > 0 ? (
-                    <div className="space-y-6">
-                      {dashboardMetrics.topMedicamentos.map((med, idx) => {
-                        const percent = Math.round((med.qtd / maxMedQtd) * 100);
-                        return (
-                          <div key={idx} className="relative group">
-                            <div className="flex justify-between items-end mb-2">
-                              <span className="font-bold text-slate-700 text-sm line-clamp-1 pr-4 group-hover:text-indigo-600 transition-colors">
-                                <span className="text-slate-300 font-black mr-2">
-                                  #{idx + 1}
-                                </span>
-                                {med.nome}
-                              </span>
-                              <span className="font-black text-slate-800 text-sm">
-                                {med.qtd}{' '}
-                                <span className="text-[10px] text-slate-400 font-bold uppercase">
-                                  un
-                                </span>
-                              </span>
-                            </div>
-                            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                              <div
-                                className={`h-full rounded-full transition-all duration-1000 ease-out ${idx === 0 ? 'bg-indigo-500' : idx === 1 ? 'bg-indigo-400' : 'bg-slate-300'}`}
-                                style={{ width: `${percent}%` }}
-                              ></div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                      <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4 border border-slate-100">
-                        <FiBox size={24} className="text-slate-300" />
-                      </div>
-                      <p className="font-bold text-slate-600">
-                        Sem dados de consumo
-                      </p>
-                      <p className="text-sm font-medium text-slate-400 mt-1 text-center">
-                        Nenhum medicamento
-                        <br />
-                        dispensado hoje ainda.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-        // Coloque isto no final do ficheiro (fora do switch e fora do componente principal, ou no final dele)
-        function MetricCard({ title, value, subtitle, icon, color, onClick }) {
-          const colorStyles = {
-            indigo: 'text-indigo-600 bg-indigo-50 border-indigo-100',
-            emerald: 'text-emerald-600 bg-emerald-50 border-emerald-100',
-            blue: 'text-blue-600 bg-blue-50 border-blue-100',
-            slate: 'text-slate-600 bg-slate-100 border-slate-200',
-            red: 'text-red-600 bg-red-50 border-red-100',
-          };
-
-          return (
-            <div
-              onClick={onClick}
-              className="bg-white p-6 rounded-[2rem] border border-slate-200/60 shadow-sm transition-all duration-300 cursor-pointer hover:-translate-y-1 hover:shadow-lg group flex flex-col justify-between"
-            >
-              <div className="flex justify-between items-start mb-4">
-                <div
-                  className={`p-3 rounded-2xl border transition-transform duration-300 group-hover:scale-110 ${colorStyles[color]}`}
-                >
-                  {icon}
-                </div>
-              </div>
-              <div>
-                <h3 className="text-4xl font-black text-slate-800 tracking-tight">
-                  {value}
-                </h3>
-                <p className="text-sm font-bold text-slate-800 mt-1">{title}</p>
-                <p className="text-xs font-medium text-slate-400 mt-0.5">
-                  {subtitle}
-                </p>
-              </div>
-            </div>
-          );
-        } // --- 1. MÉTRICAS E CÁLCULOS ---
+        // --- 1. MÉTRICAS E CÁLCULOS ---
         const totalPacientes = patients?.length || 0;
         const totalMedicamentos = medications?.length || 0;
         const entregasRecentes = recentDeliveries?.length || 0;
@@ -2302,7 +1549,7 @@ export default function ProfessionalDashboardPage({
           </div>
         );
 
-  case 'historico':
+     case 'historico':
         return (
           <div className="flex flex-col h-full w-full min-h-0 animate-in fade-in duration-300">
             {/* CABEÇALHO E FILTROS */}
@@ -2310,11 +1557,10 @@ export default function ProfessionalDashboardPage({
               <div>
                 <h2 className="text-2xl font-black text-slate-800 flex items-center gap-3">
                   Histórico de Entradas
-                  {/* Indicador de Sincronização em Tempo Real */}
+                  {/* Indicador de Sincronização em Tempo Real (Requer variável isBackgroundSyncing no seu state) */}
                   {isBackgroundSyncing && (
                     <span className="flex items-center gap-1 text-[10px] font-bold tracking-widest uppercase bg-indigo-50 text-indigo-500 px-2 py-1 rounded-md animate-pulse border border-indigo-100">
-                      <FiRefreshCw className="animate-spin" size={10} />{' '}
-                      Sincronizando
+                      <FiRefreshCw className="animate-spin" size={10} /> Sincronizando
                     </span>
                   )}
                 </h2>
@@ -2335,23 +1581,20 @@ export default function ProfessionalDashboardPage({
                   />
                 </div>
 
-                {/* BOTÕES DE FILTRO QUE RESPONDEM AO CLIQUE DO DASHBOARD */}
                 <div className="flex bg-slate-100 p-1 rounded-xl w-full sm:w-auto shadow-inner border border-slate-200/50 overflow-x-auto custom-scrollbar">
-                  {['Todos', 'Pendente', 'Atendido', 'Cancelado'].map(
-                    (status) => (
-                      <button
-                        key={status}
-                        onClick={() => setStatusFilter(status)}
-                        className={`flex-1 sm:flex-none px-5 py-2 text-xs font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer whitespace-nowrap ${
-                          statusFilter === status
-                            ? 'bg-white text-indigo-700 shadow-sm border border-slate-200'
-                            : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
-                        }`}
-                      >
-                        {status}
-                      </button>
-                    )
-                  )}
+                  {['Todos', 'Pendente', 'Atendido', 'Cancelado'].map((status) => (
+                    <button
+                      key={status}
+                      onClick={() => setStatusFilter(status)}
+                      className={`flex-1 sm:flex-none px-5 py-2 text-xs font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                        statusFilter === status 
+                          ? 'bg-white text-indigo-700 shadow-sm border border-slate-200' 
+                          : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
+                      }`}
+                    >
+                      {status}
+                    </button>
+                  ))}
                 </div>
 
                 <button
@@ -2363,7 +1606,7 @@ export default function ProfessionalDashboardPage({
               </div>
             </div>
 
-            {/* CONTAINER DA TABELA */}
+            {/* CONTAINER DA TABELA (Ocupa 100% do espaço restante) */}
             <div className="flex-1 min-h-0 relative bg-white border border-slate-200 rounded-3xl shadow-sm flex flex-col overflow-hidden">
               <div className="absolute inset-0 overflow-y-auto custom-scrollbar">
                 <table className="min-w-full text-sm text-left border-collapse">
@@ -2387,46 +1630,33 @@ export default function ProfessionalDashboardPage({
                             {record.patientName}
                           </div>
                         </td>
-
+                        
                         <td className="py-4 px-4">
                           <div className="font-bold text-slate-700">
-                            {new Date(record.entryDate).toLocaleDateString(
-                              'pt-BR'
-                            )}
+                            {new Date(record.entryDate).toLocaleDateString('pt-BR')}
                           </div>
                           <div className="text-xs text-slate-400 font-medium mt-0.5 flex items-center gap-1">
                             <FiClock size={10} />
-                            {new Date(record.entryDate).toLocaleTimeString(
-                              'pt-BR',
-                              { hour: '2-digit', minute: '2-digit' }
-                            )}
+                            {new Date(record.entryDate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                           </div>
                         </td>
 
                         <td className="py-4 px-4">
                           <div className="flex flex-wrap gap-2">
-                            {Array.isArray(record.medications) &&
-                            record.medications.length > 0 ? (
+                            {Array.isArray(record.medications) && record.medications.length > 0 ? (
                               record.medications.map((m, i) => (
                                 <span
                                   key={i}
                                   className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-slate-200 text-slate-700 text-[11px] font-bold rounded-lg shadow-sm"
                                 >
-                                  {m.name ||
-                                    getMedicationName(
-                                      m.medicationId,
-                                      medications
-                                    )}
+                                  {m.name || getMedicationName(m.medicationId, medications)}
                                   <span className="text-indigo-600 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded font-black tracking-widest uppercase text-[9px]">
-                                    {m.dosage ||
-                                      `${m.quantity} ${m.unit || 'UN'}`}
+                                    {m.dosage || `${m.quantity} ${m.unit || 'UN'}`}
                                   </span>
                                 </span>
                               ))
                             ) : (
-                              <span className="text-slate-400 italic text-xs font-medium">
-                                Nenhuma informada
-                              </span>
+                              <span className="text-slate-400 italic text-xs font-medium">Nenhuma informada</span>
                             )}
                           </div>
                         </td>
@@ -2437,22 +1667,17 @@ export default function ProfessionalDashboardPage({
 
                         <td className="py-4 px-6 text-right">
                           <div className="flex items-center justify-end gap-2 opacity-100 sm:opacity-50 sm:group-hover:opacity-100 transition-opacity">
+                            
                             {record.status === 'Pendente' && (
                               <>
                                 <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setAttendingRecord(record);
-                                  }}
+                                  onClick={(e) => { e.stopPropagation(); setAttendingRecord(record); }}
                                   className="text-white bg-emerald-500 hover:bg-emerald-600 shadow-sm shadow-emerald-200 px-4 py-2 rounded-xl text-xs font-black tracking-wide transition-all cursor-pointer active:scale-95 flex items-center gap-1"
                                 >
                                   ATENDER
                                 </button>
                                 <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setCancelingRecord(record);
-                                  }}
+                                  onClick={(e) => { e.stopPropagation(); setCancelingRecord(record); }}
                                   className="text-red-500 hover:bg-red-50 hover:text-red-600 p-2 rounded-xl transition-all cursor-pointer border border-transparent hover:border-red-100"
                                   title="Cancelar"
                                 >
@@ -2462,10 +1687,7 @@ export default function ProfessionalDashboardPage({
                             )}
 
                             <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleEditRecordClick(record);
-                              }}
+                              onClick={(e) => { e.stopPropagation(); handleEditRecordClick(record); }}
                               className="text-slate-400 hover:text-indigo-600 p-2 rounded-xl hover:bg-indigo-50 transition-all cursor-pointer"
                               title="Editar"
                             >
@@ -2482,9 +1704,7 @@ export default function ProfessionalDashboardPage({
                                     message: `Deseja realmente excluir o registro de ${record.patientName}? Ação irreversível.`,
                                     onConfirm: () => {
                                       closeConfirmation();
-                                      handleDeleteRecord(
-                                        record._id || record.id
-                                      );
+                                      handleDeleteRecord(record._id || record.id);
                                     },
                                     isDestructive: true,
                                     confirmText: 'Excluir Definitivamente',
@@ -2508,19 +1728,42 @@ export default function ProfessionalDashboardPage({
                     <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-4 border border-slate-100">
                       <FiSearch size={32} className="text-slate-300" />
                     </div>
-                    <p className="text-xl font-black text-slate-700 tracking-tight">
-                      Nenhum registro encontrado
-                    </p>
+                    <p className="text-xl font-black text-slate-700 tracking-tight">Nenhum registro encontrado</p>
                     <p className="text-sm font-medium mt-1 text-slate-500">
-                      A sua busca ou filtro não retornou nenhum paciente para
-                      esta lista.
+                      A sua busca ou filtro não retornou nenhum paciente para esta lista.
                     </p>
                   </div>
                 )}
               </div>
             </div>
+
+            {/* PAGINAÇÃO STICKY NO RODAPÉ */}
+            {filteredRecords.length > 0 && (
+              <div className="flex justify-between items-center mt-4 pt-3 border-t border-slate-200 shrink-0">
+                <p className="text-sm font-bold text-slate-500">
+                  Mostrando página <span className="text-slate-800 font-black">{currentPage}</span> de <span className="text-slate-800 font-black">{totalPages}</span>
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage((p) => p - 1)}
+                    className="px-4 py-2 text-sm font-bold bg-white border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors shadow-sm"
+                  >
+                    Anterior
+                  </button>
+                  <button
+                    disabled={currentPage === totalPages || totalPages === 0}
+                    onClick={() => setCurrentPage((p) => p + 1)}
+                    className="px-4 py-2 text-sm font-bold bg-white border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors shadow-sm"
+                  >
+                    Próxima
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         );
+
       // ======================================================================
       // ABA ENTREGAS (CORRIGIDA COM DATA BLINDADA)
       // ======================================================================
