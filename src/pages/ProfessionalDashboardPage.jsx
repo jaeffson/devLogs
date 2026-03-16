@@ -283,19 +283,22 @@ export default function ProfessionalDashboardPage({
       isDestructive: false,
     });
 
-  const getPatientNameById = (patientId) => {
-    const inList = Array.isArray(patients)
-      ? patients.find((p) => (p._id || p.id) === patientId)?.name
-      : null;
+const getPatientNameById = (patientId) => {
 
-    if (!inList) {
-      if (typeof patientId === 'object' && patientId?.name)
-        return patientId.name;
-      return 'Desconhecido';
-    }
-    return inList;
-  };
+  if (!patientId) return "Desconhecido";
 
+  // quando vem populate do backend
+  if (typeof patientId === "object") {
+    return patientId.name || "Desconhecido";
+  }
+
+  // quando vem só o ID
+  const patient = patients.find(
+    (p) => String(p._id) === String(patientId) || String(p.id) === String(patientId)
+  );
+
+  return patient?.name || "Desconhecido";
+};
   const findRecentRecord = (patientId, recordToExcludeId = null) => {
     if (!patientId || !Array.isArray(records)) return null;
     const now = new Date().getTime();
@@ -549,40 +552,56 @@ export default function ProfessionalDashboardPage({
       .sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate));
   }, [records, selectedPatient]);
 
-  // OTIMIZAÇÃO: Pré-calcula o nome do paciente
-  const recordsWithPatientNames = useMemo(() => {
-    const patientMap = patients.reduce((acc, p) => {
-      acc[p._id || p.id] = p.name;
-      return acc;
-    }, {});
+const recordsWithPatientNames = useMemo(() => {
 
-return records.map((r) => {
-    let pId = r.patientId;
-    
-   
-    if (pId && typeof pId === 'object') {
-      pId = pId._id;
-    }
-    
-    let pName = patientMap[pId];
-    
-    if (!pName) {
-      if (r.patientName) {
-        pName = r.patientName;
-      } else if (r.patientId && typeof r.patientId === 'object' && r.patientId.name) {
-           pName = r.patientId.name;
-      } else {
-        pName = 'Desconhecido';
+  if (!records) return [];
+
+  const patientMap = new Map();
+
+  if (Array.isArray(patients)) {
+    patients.forEach((p) => {
+      const id = String(p?._id || p?.id);
+      if (id) {
+        patientMap.set(id, p?.name || "Desconhecido");
       }
+    });
+  }
+
+  return records.map((r) => {
+
+    let patientName = "Desconhecido";
+    let patientId = null;
+
+    // caso patientId exista
+    if (r?.patientId) {
+
+      if (typeof r.patientId === "object") {
+        patientId = r.patientId?._id || r.patientId?.id;
+        patientName = r.patientId?.name || "Desconhecido";
+      } else {
+        patientId = r.patientId;
+      }
+
     }
-    
+
+    // busca no mapa
+    if (patientId && patientMap.has(String(patientId))) {
+      patientName = patientMap.get(String(patientId));
+    }
+
+    // fallback
+    if (r?.patientName) {
+      patientName = r.patientName;
+    }
+
     return {
       ...r,
-      patientName: pName,
+      patientName
     };
-  });
-}, [records, patients]);
 
+  });
+
+}, [records, patients]);
   const filteredRecords = useMemo(() => {
     let result = recordsWithPatientNames.sort(
       (a, b) => new Date(b.entryDate) - new Date(a.entryDate)
@@ -626,20 +645,23 @@ return records.map((r) => {
       .sort((a, b) => new Date(b.deliveryDate) - new Date(a.deliveryDate));
   }, [records]);
 
-  const getSafeMedicationName = (medicationId, meds = []) => {
-    if (!medicationId) return '-';
-    const targetId =
-      typeof medicationId === 'object'
-        ? medicationId._id || medicationId.id
-        : medicationId;
-    if (!targetId) return 'Desconhecido';
-    const targetIdStr = String(targetId);
-    const found = meds.find(
-      (m) => String(m._id) === targetIdStr || String(m.id) === targetIdStr
-    );
-    return found ? found.name : 'Desconhecido';
-  };
+const getMedicationName = (medicationId, meds = []) => {
 
+  if (!medicationId) return "-";
+
+  const id =
+    typeof medicationId === "object"
+      ? medicationId._id || medicationId.id
+      : medicationId;
+
+  const med = meds.find(
+    (m) =>
+      String(m._id) === String(id) ||
+      String(m.id) === String(id)
+  );
+
+  return med?.name || "Desconhecido";
+};
   const renderCurrentView = () => {
     switch (currentView) {
       // ======================================================================
