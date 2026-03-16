@@ -1,23 +1,72 @@
 // src/pages/AdminReportsPage.jsx
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import api from '../services/api';
 
 // --- Imports de Componentes ---
 import { BarChart } from '../components/common/BarChart';
-import { AnnualBudgetChart } from '../components/common/AnnualBudgetChart';
-
-// --- Imports de Utils ---
-import { getMedicationName } from '../utils/helpers';
-import { icons } from '../utils/icons';
-
-// --- Skeletons ---
-import { SkeletonCard } from '../components/common/SkeletonCard';
 import { SkeletonBlock } from '../components/common/SkeletonBlock';
 
-// --- HELPER: Identificação Robusta de Farmácia (Mantido) ---
+// --- Imports de Utils e Ícones ---
+import { getMedicationName } from '../utils/helpers';
+import {
+  FiDownload,
+  FiTrendingUp,
+  FiDollarSign,
+  FiBox,
+  FiActivity,
+  FiClock,
+  FiPieChart,
+  FiAward,
+  FiAlertTriangle,
+} from 'react-icons/fi';
+
+// ============================================================================
+// HELPERS (Totalmente alinhados com a sua base de dados)
+// ============================================================================
+
+// 1. Extrai o mês e ano da data de entrada ou criação (entryDate / createdAt)
+const getYearAndMonth = (dateStr) => {
+  if (!dateStr)
+    return { year: new Date().getFullYear(), month: new Date().getMonth() };
+  const str = String(dateStr).split('T')[0];
+  if (str.includes('/')) {
+    const parts = str.split('/');
+    if (parts.length === 3)
+      return { year: Number(parts[2]), month: Number(parts[1]) - 1 };
+  } else if (str.includes('-')) {
+    const parts = str.split('-');
+    if (parts.length === 3)
+      return { year: Number(parts[0]), month: Number(parts[1]) - 1 };
+  }
+  const d = new Date(dateStr);
+  return { year: d.getFullYear(), month: d.getMonth() };
+};
+
+// 2. Calcula o custo multiplicando quantity * unitPrice
+const getRecordCost = (record) => {
+  let sum = 0;
+  if (Array.isArray(record.medications)) {
+    record.medications.forEach((m) => {
+      // Extrai o número da quantidade (ex: "2cxs" vira 2)
+      const match = String(m.quantity).match(/^(\d+)/);
+      const qtd = match ? parseFloat(match[0]) : Number(m.quantity) || 1;
+
+      // Limpa o preço unitário (ex: "R$ 50,00" vira 50.00)
+      const rawPrice = m.unitPrice || m.price || 0;
+      const cleanPrice = String(rawPrice)
+        .replace(/[^\d.,]/g, '')
+        .replace(',', '.');
+      const preco = Number(cleanPrice) || 0;
+
+      sum += qtd * preco;
+    });
+  }
+  return sum || Number(record.totalValue) || 0;
+};
+
+// 3. Lê o nome da farmácia
 const getFarmaciaName = (record) => {
   const loc = String(
     record?.location ||
@@ -28,89 +77,106 @@ const getFarmaciaName = (record) => {
   )
     .toLowerCase()
     .trim();
-
-  if (
-    loc.includes('campina grande') ||
-    loc.includes('campina') ||
-    loc.includes('grande') ||
-    loc.includes('farmacia a') ||
-    loc === 'a' ||
-    loc === 'cg'
-  )
+  if (loc.includes('campina grande') || loc.includes('cg') || loc === 'a')
     return 'Campina Grande';
-  if (
-    loc.includes('joao paulo') ||
-    loc.includes('joão paulo') ||
-    loc.includes('joao') ||
-    loc.includes('joão') ||
-    loc.includes('paulo') ||
-    loc.includes('farmacia b') ||
-    loc === 'b' ||
-    loc === 'jp'
-  )
+  if (loc.includes('joao paulo') || loc.includes('jp') || loc === 'b')
     return 'João Paulo';
   if (loc.length > 0) return loc.toUpperCase();
-  return 'Não Identificada';
+  return 'Unidade Padrão';
 };
 
-// --- Componente da Página ---
+// ============================================================================
+// COMPONENTE AUXILIAR: REPORT METRIC CARD
+// ============================================================================
+function ReportMetricCard({ title, value, subtitle, icon, color, onClick }) {
+  const colorStyles = {
+    emerald: 'text-emerald-600 bg-emerald-50 border-emerald-100',
+    indigo: 'text-indigo-600 bg-indigo-50 border-indigo-100',
+    blue: 'text-blue-600 bg-blue-50 border-blue-100',
+    amber: 'text-amber-600 bg-amber-50 border-amber-100',
+    rose: 'text-rose-600 bg-rose-50 border-rose-100',
+    slate: 'text-slate-600 bg-slate-100 border-slate-200',
+  };
+
+  return (
+    <div
+      onClick={onClick}
+      className={`bg-white p-6 rounded-[2rem] border border-slate-200/60 shadow-sm transition-all duration-300 group flex flex-col justify-between relative overflow-hidden ${onClick ? 'cursor-pointer hover:-translate-y-1 hover:shadow-xl' : ''}`}
+    >
+      <div
+        className={`absolute -right-10 -top-10 w-32 h-32 rounded-full blur-3xl opacity-20 ${colorStyles[color].split(' ')[0].replace('text-', 'bg-')}`}
+      ></div>
+      <div className="flex justify-between items-start mb-4 relative z-10">
+        <div
+          className={`p-3.5 rounded-2xl border transition-transform duration-300 group-hover:scale-110 shadow-sm ${colorStyles[color]}`}
+        >
+          {icon}
+        </div>
+      </div>
+      <div className="relative z-10">
+        <h3
+          className="text-3xl font-black text-slate-800 tracking-tight leading-tight line-clamp-1"
+          title={value}
+        >
+          {value}
+        </h3>
+        <p className="text-sm font-bold text-slate-800 mt-2">{title}</p>
+        <p className="text-xs font-medium text-slate-400 mt-0.5 line-clamp-1">
+          {subtitle}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// COMPONENTE PRINCIPAL: PÁGINA DE RELATÓRIOS (ADMIN)
+// ============================================================================
 export default function AdminReportsPage({
   user,
   patients = [],
   records = [],
   medications = [],
-  users = [],
-  annualBudget,
   filterYear,
 }) {
   const reportRef = useRef(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [distributors, setDistributors] = useState([]);
+  const [isExporting, setIsExporting] = useState(false);
 
-  // --- 1. Carregamento de Dados ---
-  useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-      try {
-        const response = await api.get('/distributors');
-        setDistributors(response.data || []);
-      } catch (error) {
-        console.error('Erro ao carregar farmácias', error);
-      } finally {
-        setTimeout(() => setIsLoading(false), 800);
-      }
-    };
-    fetchData();
-  }, []);
+  // Força o ano para número
+  const anoAtual = Number(filterYear) || new Date().getFullYear();
 
-  // --- 2. Filtro de Registros do Ano ---
-  const recordsThisYear = useMemo(
-    () =>
-      records.filter((r) => new Date(r.entryDate).getFullYear() === filterYear),
-    [records, filterYear]
-  );
+  // --- 1. Filtro Geral pelo Ano Selecionado ---
+  const recordsThisYear = useMemo(() => {
+    return records.filter((r) => {
+      // Volta a usar os campos corretos da sua base de dados
+      const dataStr = r.entryDate || r.createdAt || r.date;
+      if (!dataStr) return false;
+      const { year } = getYearAndMonth(dataStr);
+      return year === anoAtual;
+    });
+  }, [records, anoAtual]);
 
-  // --- 3. Estatísticas Gerais ---
+  // --- 2. Estatísticas Gerais ---
   const generalStats = useMemo(() => {
     const totalRecords = recordsThisYear.length;
-    const attended = recordsThisYear.filter(
-      (r) => r.status === 'Atendido'
-    ).length;
-    const pending = recordsThisYear.filter(
-      (r) => r.status === 'Pendente'
-    ).length;
-    const canceled = recordsThisYear.filter(
-      (r) => r.status === 'Cancelado'
-    ).length;
-    const totalCost = recordsThisYear.reduce(
-      (sum, r) => sum + (Number(r.totalValue) || 0),
-      0
-    );
-    const uniquePatientsAttended = new Set(
-      recordsThisYear
-        .filter((r) => r.status === 'Atendido')
-        .map((r) => r.patientId)
-    ).size;
+    let attended = 0,
+      pending = 0,
+      canceled = 0,
+      totalCost = 0;
+    const uniquePatients = new Set();
+
+    recordsThisYear.forEach((r) => {
+      const status = r.status || '';
+      if (status === 'Atendido' || status === 'Entregue') {
+        attended++;
+        uniquePatients.add(r.patientId || r.patient?.name || r.patientName);
+      } else if (status === 'Cancelado') canceled++;
+      else pending++;
+
+      if (status !== 'Cancelado') {
+        totalCost += getRecordCost(r);
+      }
+    });
 
     return {
       totalPatients: patients.length,
@@ -119,95 +185,99 @@ export default function AdminReportsPage({
       pending,
       canceled,
       totalCost,
-      uniquePatientsAttended,
+      uniquePatientsAttended: uniquePatients.size,
     };
   }, [patients, recordsThisYear]);
 
-  // --- NOVO: KPIs Avançados (Ticket Médio e Pico) ---
+  // --- 3. KPIs Avançados (Top Paciente) ---
   const advancedStats = useMemo(() => {
-    const avgTicket =
-      generalStats.uniquePatientsAttended > 0
-        ? generalStats.totalCost / generalStats.uniquePatientsAttended
-        : 0;
+    const patientCounts = {};
+    recordsThisYear.forEach((r) => {
+      if (r.status === 'Atendido' || r.status === 'Entregue') {
+        const pName =
+          r.patient?.name ||
+          r.patientName ||
+          r.patientId ||
+          'Paciente Não Informado';
+        patientCounts[pName] = (patientCounts[pName] || 0) + 1;
+      }
+    });
 
-    const avgCostPerRecord =
-      generalStats.totalRecords > 0
-        ? generalStats.totalCost / generalStats.totalRecords
-        : 0;
+    let topPatient = { name: 'Sem dados', count: 0 };
+    const sortedPatients = Object.entries(patientCounts).sort(
+      (a, b) => b[1] - a[1]
+    );
 
-    return { avgTicket, avgCostPerRecord };
-  }, [generalStats]);
+    if (sortedPatients.length > 0) {
+      topPatient = { name: sortedPatients[0][0], count: sortedPatients[0][1] };
+    }
+    return { topPatient };
+  }, [recordsThisYear]);
 
-  // --- 4. Estatísticas por Farmácia ---
+  // --- 4. Uso de Medicamentos ---
+  const medicationUsage = useMemo(() => {
+    const usageCount = {};
+    recordsThisYear.forEach((record) => {
+      if (record.status === 'Atendido' || record.status === 'Entregue') {
+        record.medications?.forEach((medItem) => {
+          let medName = medItem.name;
+          if (!medName && medItem.medicationId) {
+            const foundName = getMedicationName(
+              medItem.medicationId,
+              medications
+            );
+            if (foundName && !foundName.toLowerCase().includes('inválido')) {
+              medName = foundName;
+            }
+          }
+          medName = medName || 'Medicamento Desconhecido';
+
+          const match = String(medItem.quantity).match(/^(\d+)/);
+          const realQuantity = match ? parseFloat(match[0]) : 1;
+
+          usageCount[medName] = (usageCount[medName] || 0) + realQuantity;
+        });
+      }
+    });
+
+    return Object.entries(usageCount)
+      .map(([name, count]) => ({ id: name, name: name, count: count }))
+      .sort((a, b) => b.count - a.count);
+  }, [recordsThisYear, medications]);
+
+  const topMedication =
+    medicationUsage.length > 0
+      ? medicationUsage[0]
+      : { name: 'Sem registos', count: 0 };
+  const maxMedCount = medicationUsage.length > 0 ? medicationUsage[0].count : 1;
+
+  // --- 5. Eficiência por Farmácia ---
   const pharmacyStats = useMemo(() => {
-    if (!distributors.length) return [];
-    return distributors
-      .map((dist) => {
-        const distSpent = recordsThisYear
-          .filter(
-            (r) =>
-              getFarmaciaName(r) === dist.name ||
-              getFarmaciaName(r).includes(dist.name.toLowerCase())
-          )
-          .reduce((acc, curr) => acc + (Number(curr.totalValue) || 0), 0);
-
-        const budget = Number(dist.budget) || 1;
-        return {
-          id: dist._id || dist.id,
-          name: dist.name,
-          spent: distSpent,
-          budget: budget,
-          percentage: (distSpent / budget) * 100,
+    const stats = {};
+    const defaultBudget = 50000;
+    recordsThisYear.forEach((r) => {
+      if (r.status === 'Cancelado') return;
+      const fName = getFarmaciaName(r);
+      if (!stats[fName]) {
+        stats[fName] = {
+          id: fName,
+          name: fName,
+          spent: 0,
+          budget: defaultBudget,
         };
-      })
+      }
+      stats[fName].spent += getRecordCost(r);
+    });
+
+    return Object.values(stats)
+      .map((dist) => ({
+        ...dist,
+        percentage: dist.spent > 0 ? (dist.spent / dist.budget) * 100 : 0,
+      }))
       .sort((a, b) => b.percentage - a.percentage);
-  }, [distributors, recordsThisYear]);
+  }, [recordsThisYear]);
 
-  // --- 5. Previsão IA ---
-  const forecast = useMemo(() => {
-    const now = new Date();
-    if (filterYear !== now.getFullYear()) return null;
-
-    const startOfYear = new Date(now.getFullYear(), 0, 0);
-    const diff = now - startOfYear;
-    const oneDay = 1000 * 60 * 60 * 24;
-    const daysPassed = Math.floor(diff / oneDay);
-    if (daysPassed === 0) return null;
-
-    const dailyAvg = generalStats.totalCost / daysPassed;
-    const projectedTotal = dailyAvg * 365;
-
-    const globalLimit =
-      distributors.length > 0
-        ? distributors.reduce((acc, d) => acc + (d.budget || 0), 0)
-        : annualBudget || 0;
-
-    const projectedPercentage =
-      globalLimit > 0 ? (projectedTotal / globalLimit) * 100 : 0;
-
-    return {
-      dailyAvg,
-      projectedTotal,
-      projectedPercentage,
-      status:
-        projectedPercentage > 100
-          ? 'danger'
-          : projectedPercentage > 85
-            ? 'warning'
-            : 'safe',
-    };
-  }, [generalStats.totalCost, filterYear, distributors, annualBudget]);
-
-  // --- Gráficos ---
-  const statusChartData = useMemo(
-    () => [
-      { label: 'Atendidos', value: generalStats.attended },
-      { label: 'Pendentes', value: generalStats.pending },
-      { label: 'Cancelados', value: generalStats.canceled },
-    ],
-    [generalStats]
-  );
-
+  // --- 6. Dados para Gráficos Mensais ---
   const monthlyCostData = useMemo(() => {
     const months = [
       'Jan',
@@ -224,359 +294,267 @@ export default function AdminReportsPage({
       'Dez',
     ];
     const costByMonth = Array(12).fill(0);
+    const countByMonth = Array(12).fill(0);
+
     recordsThisYear.forEach((record) => {
-      const monthIndex = new Date(record.entryDate).getMonth();
-      if (monthIndex >= 0 && monthIndex < 12)
-        costByMonth[monthIndex] += Number(record.totalValue) || 0;
+      if (record.status !== 'Cancelado') {
+        const dateStr = record.entryDate || record.createdAt || record.date;
+        if (dateStr) {
+          const { month } = getYearAndMonth(dateStr);
+          if (month >= 0 && month < 12) {
+            costByMonth[month] += getRecordCost(record);
+            countByMonth[month] += 1;
+          }
+        }
+      }
     });
+
     return months.map((monthLabel, index) => ({
       label: monthLabel,
       value: costByMonth[index],
+      atendimentos: countByMonth[index], // Guardamos a quantidade de atendimentos aqui
     }));
   }, [recordsThisYear]);
 
-  // --- NOVO: Identificar Mês de Pico ---
-  const peakMonth = useMemo(() => {
-    const sorted = [...monthlyCostData].sort((a, b) => b.value - a.value);
-    return sorted[0] || { label: '-', value: 0 };
-  }, [monthlyCostData]);
+  const statusPercentages = useMemo(() => {
+    if (generalStats.totalRecords === 0)
+      return { attended: 0, pending: 0, canceled: 0 };
+    return {
+      attended: Math.round(
+        (generalStats.attended / generalStats.totalRecords) * 100
+      ),
+      pending: Math.round(
+        (generalStats.pending / generalStats.totalRecords) * 100
+      ),
+      canceled: Math.round(
+        (generalStats.canceled / generalStats.totalRecords) * 100
+      ),
+    };
+  }, [generalStats]);
 
-  // --- Medicamentos Mais Usados ---
-  const medicationUsage = useMemo(() => {
-    const usageCount = {};
-    recordsThisYear.forEach((record) => {
-      record.medications?.forEach((medItem) => {
-        const medId = medItem.medicationId;
-        usageCount[medId] = (usageCount[medId] || 0) + 1;
-      });
-    });
-    return Object.entries(usageCount)
-      .map(([medId, count]) => ({
-        id: medId,
-        name: getMedicationName(medId, medications),
-        count: count,
-      }))
-      .sort((a, b) => b.count - a.count);
-  }, [recordsThisYear, medications, getMedicationName]);
-
-  // --- Exportação PDF ---
+  // --- 7. Exportação PDF Protegida ---
   const handleExportPdf = () => {
     if (!reportRef.current) return;
-    setIsLoading(true);
-    const scale = 2;
-    html2canvas(reportRef.current, {
-      scale: scale,
-      useCORS: true,
-      logging: false,
-      backgroundColor: '#f9fafb',
-    }).then((canvas) => {
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const imgHeight = (canvas.height * pdfWidth) / canvas.width;
-      let heightLeft = imgHeight;
-      let position = 0;
-      pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
-      heightLeft -= pdfHeight;
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
+    setIsExporting(true);
+
+    setTimeout(async () => {
+      try {
+        const canvas = await html2canvas(reportRef.current, {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#f8fafc',
+          allowTaint: true,
+        });
+
+        const imgData = canvas.toDataURL('image/png');
+        const PDFConstructor = jsPDF.jsPDF || jsPDF;
+        const pdf = new PDFConstructor('p', 'mm', 'a4');
+
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+        const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+
+        let heightLeft = imgHeight;
+        let position = 0;
+
         pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
         heightLeft -= pdfHeight;
+
+        while (heightLeft > 0) {
+          position = heightLeft - imgHeight;
+          pdf.addPage();
+          pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
+          heightLeft -= pdfHeight;
+        }
+
+        pdf.save(`Relatorio_Gerencial_${anoAtual}.pdf`);
+      } catch (error) {
+        console.error('Erro ao gerar o PDF:', error);
+        alert('Houve um erro ao gerar o PDF.');
+      } finally {
+        setIsExporting(false);
       }
-      pdf.save(`Relatorio_Admin_${filterYear}.pdf`);
-      setIsLoading(false);
-    });
+    }, 500);
   };
 
-  // --- NOVO COMPONENTE: Top 3 Podium ---
-  const TopMedicationPodium = ({ top3 }) => (
-    <div className="grid grid-cols-3 gap-2 md:gap-4 items-end mb-6 h-48">
-      {/* 2nd Place */}
-      {top3[1] && (
-        <div className="flex flex-col items-center justify-end h-32 animate-fade-in-up delay-100">
-          <div className="text-center mb-2">
-            <span className="text-xs font-bold text-gray-400 block">
-              2º LUGAR
-            </span>
-            <span className="text-sm font-semibold text-gray-700 leading-tight block line-clamp-2 w-24">
-              {top3[1].name}
-            </span>
-            <span className="text-xs font-bold text-gray-500">
-              {top3[1].count} saídas
-            </span>
-          </div>
-          <div className="w-full bg-slate-300 rounded-t-lg h-24 flex items-center justify-center shadow-sm">
-            <span className="text-2xl opacity-50">🥈</span>
-          </div>
-        </div>
-      )}
-
-      {/* 1st Place */}
-      {top3[0] && (
-        <div className="flex flex-col items-center justify-end h-48 animate-fade-in-up">
-          {/* Crown Icon or similar could go here */}
-          <div className="text-center mb-2">
-            <span className="text-xs font-bold text-amber-500 block">
-              1º LUGAR
-            </span>
-            <span className="text-sm font-bold text-gray-800 leading-tight block line-clamp-2 w-28">
-              {top3[0].name}
-            </span>
-            <span className="text-sm font-extrabold text-indigo-600">
-              {top3[0].count} saídas
-            </span>
-          </div>
-          <div className="w-full bg-amber-300 rounded-t-lg h-36 flex items-center justify-center shadow-md border-t-4 border-amber-400">
-            <span className="text-4xl">🏆</span>
-          </div>
-        </div>
-      )}
-
-      {/* 3rd Place */}
-      {top3[2] && (
-        <div className="flex flex-col items-center justify-end h-24 animate-fade-in-up delay-200">
-          <div className="text-center mb-2">
-            <span className="text-xs font-bold text-orange-400 block">
-              3º LUGAR
-            </span>
-            <span className="text-xs font-semibold text-gray-700 leading-tight block line-clamp-2 w-24">
-              {top3[2].name}
-            </span>
-            <span className="text-xs font-bold text-gray-500">
-              {top3[2].count} saídas
-            </span>
-          </div>
-          <div className="w-full bg-orange-200 rounded-t-lg h-16 flex items-center justify-center shadow-sm">
-            <span className="text-xl opacity-60">🥉</span>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-
   return (
-    <div className="space-y-6 animate-fade-in min-h-screen bg-gray-50 p-4 md:p-8">
-      {/* --- HEADER FIXO --- */}
-      <div className="flex flex-col md:flex-row justify-between items-center pb-4 border-b border-gray-200 gap-4">
+    <div className="flex flex-col h-full min-h-0 animate-in fade-in duration-500 overflow-y-auto custom-scrollbar pb-8 pr-2 gap-6 bg-slate-50">
+      {/* --- HEADER FIXO EXECUTIVE --- */}
+      <div className="bg-white rounded-[2rem] border border-slate-200/60 shadow-sm p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 flex-shrink-0">
         <div>
-          <h2 className="text-3xl font-extrabold text-gray-900 flex items-center gap-3">
-            {icons.chart} Dashboard Executivo
+          <h2 className="text-3xl font-black text-slate-800 flex items-center gap-3 tracking-tight">
+            <div className="p-2.5 bg-slate-900 rounded-xl text-white shadow-lg">
+              <FiPieChart size={24} />
+            </div>
+            Inteligência de Negócio
           </h2>
-          <p className="text-gray-500 text-sm mt-1">
-            Visão consolidada do exercício de{' '}
-            <span className="font-bold text-indigo-600 px-2 py-0.5 bg-indigo-50 rounded-md border border-indigo-100">
-              {filterYear}
+          <p className="text-slate-500 text-sm mt-2 font-medium">
+            Visão consolidada do exercício financeiro e operacional de{' '}
+            <span className="font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+              {anoAtual}
             </span>
           </p>
         </div>
+
         <button
           onClick={handleExportPdf}
-          disabled={isLoading}
-          className="bg-gray-900 hover:bg-black text-white px-5 py-2.5 rounded-lg shadow-lg hover:shadow-xl font-medium text-sm transition-all flex items-center gap-2 disabled:bg-gray-400 disabled:cursor-not-allowed transform hover:-translate-y-0.5 active:translate-y-0"
+          disabled={isExporting}
+          className="bg-slate-900 hover:bg-indigo-600 text-white px-6 py-3 rounded-xl shadow-lg hover:shadow-indigo-500/30 font-bold text-sm transition-all flex items-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isLoading ? (
-            <>{icons.loading || '...'} Gerando PDF...</>
+          {isExporting ? (
+            <FiClock className="animate-spin" size={18} />
           ) : (
-            <>{icons.download} Baixar Relatório</>
+            <FiDownload size={18} />
           )}
+          {isExporting
+            ? 'Processando Imagens...'
+            : 'Descarregar Relatório Oficial'}
         </button>
       </div>
 
-      {isLoading && !reportRef.current ? (
-        <div className="space-y-6">
-          <SkeletonBlock className="h-32" />
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-            <div className="col-span-8">
-              <SkeletonBlock className="h-96" />
-            </div>
-            <div className="col-span-4">
-              <SkeletonBlock className="h-96" />
-            </div>
-          </div>
+      {/* --- CONTEÚDO DO RELATÓRIO --- */}
+      <div ref={reportRef} className="space-y-6">
+        {/* 1. GRID DE KPIs SUPERIORES */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <ReportMetricCard
+            title="Investimento Estimado"
+            value={generalStats.totalCost.toLocaleString('pt-BR', {
+              style: 'currency',
+              currency: 'BRL',
+            })}
+            subtitle={`${generalStats.totalRecords} movimentações no ano`}
+            icon={<FiDollarSign size={24} />}
+            color="emerald"
+          />
+          <ReportMetricCard
+            title="Paciente Mais Frequente"
+            value={advancedStats.topPatient.name}
+            subtitle={`${advancedStats.topPatient.count} passagens no sistema`}
+            icon={<FiAward size={24} />}
+            color="indigo"
+          />
+          <ReportMetricCard
+            title="Medicamento Mais Consumido"
+            value={topMedication.name}
+            subtitle={`${topMedication.count} unidades dispensadas`}
+            icon={<FiBox size={24} />}
+            color="amber"
+          />
+          <ReportMetricCard
+            title="Fila Operacional"
+            value={generalStats.pending}
+            subtitle="Processos aguardando liberação"
+            icon={<FiClock size={24} />}
+            color={generalStats.pending > 0 ? 'rose' : 'slate'}
+          />
         </div>
-      ) : (
-        // --- ÁREA DE RELATÓRIO PDF ---
-        <div ref={reportRef} className="space-y-6 bg-gray-50 p-2">
-          {/* 1. KEY METRICS GRID (Novo Layout) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Total Gasto */}
-            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between relative overflow-hidden group">
-              <div className="absolute right-0 top-0 h-full w-1 bg-emerald-500"></div>
-              <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                  Investimento Total
-                </p>
-                <h3 className="text-2xl font-black text-gray-800 mt-1">
-                  R${' '}
-                  {generalStats.totalCost.toLocaleString('pt-BR', {
-                    minimumFractionDigits: 2,
-                  })}
-                </h3>
-                <p className="text-xs text-gray-500 mt-1">
-                  {generalStats.totalRecords} movimentações
-                </p>
-              </div>
-              <div className="bg-emerald-100 p-3 rounded-full text-emerald-600 group-hover:bg-emerald-200 transition-colors">
-                {icons.dollar}
-              </div>
-            </div>
 
-            {/* Ticket Médio (NOVO) */}
-            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between relative overflow-hidden group">
-              <div className="absolute right-0 top-0 h-full w-1 bg-blue-500"></div>
-              <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                  Ticket Médio / Paciente
-                </p>
-                <h3 className="text-2xl font-black text-gray-800 mt-1">
-                  R${' '}
-                  {advancedStats.avgTicket.toLocaleString('pt-BR', {
-                    minimumFractionDigits: 2,
-                  })}
-                </h3>
-                <p className="text-xs text-gray-500 mt-1">
-                  Base: {generalStats.uniquePatientsAttended} pacientes
-                </p>
-              </div>
-              <div className="bg-blue-100 p-3 rounded-full text-blue-600 group-hover:bg-blue-200 transition-colors">
-                {icons.users}
-              </div>
-            </div>
-
-            {/* Mês de Pico (NOVO) */}
-            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between relative overflow-hidden group">
-              <div className="absolute right-0 top-0 h-full w-1 bg-indigo-500"></div>
-              <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                  Maior Demanda
-                </p>
-                <h3 className="text-2xl font-black text-gray-800 mt-1">
-                  {peakMonth.label}
-                </h3>
-                <p className="text-xs text-gray-500 mt-1">
-                  R${' '}
-                  {peakMonth.value.toLocaleString('pt-BR', {
-                    maximumFractionDigits: 0,
-                  })}
-                </p>
-              </div>
-              <div className="bg-indigo-100 p-3 rounded-full text-indigo-600 group-hover:bg-indigo-200 transition-colors">
-                {icons.trendingUp || '📈'}
-              </div>
-            </div>
-
-            {/* Pendências */}
-            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between relative overflow-hidden group">
-              <div
-                className={`absolute right-0 top-0 h-full w-1 ${generalStats.pending > 0 ? 'bg-amber-500' : 'bg-gray-300'}`}
-              ></div>
-              <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                  Aguardando Ação
-                </p>
-                <h3 className="text-2xl font-black text-gray-800 mt-1">
-                  {generalStats.pending}
-                </h3>
-                <p className="text-xs text-gray-500 mt-1">
-                  Processos em aberto
-                </p>
-              </div>
-              <div className="bg-amber-100 p-3 rounded-full text-amber-600 group-hover:bg-amber-200 transition-colors">
-                {icons.clock}
-              </div>
-            </div>
-          </div>
-
-          {/* 2. MAIN CONTENT GRID */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* COLUNA ESQUERDA: Financeiro e Gráficos (8 cols) */}
-            <div className="lg:col-span-8 space-y-6">
-              {/* Card de Orçamento Anual */}
-              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                    {icons.chart} Execução Orçamentária
+        {/* 2. GRID PRINCIPAL */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <div className="xl:col-span-2 space-y-6">
+            {/* Card: Evolução Mensal */}
+            <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-200/60">
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                    <FiTrendingUp className="text-emerald-500" /> Evolução
+                    Financeira Mensal
                   </h3>
-                  {forecast && (
-                    <span
-                      className={`text-xs font-bold px-2 py-1 rounded border ${
-                        forecast.status === 'danger'
-                          ? 'bg-red-50 text-red-600 border-red-200'
-                          : forecast.status === 'warning'
-                            ? 'bg-amber-50 text-amber-600 border-amber-200'
-                            : 'bg-green-50 text-green-600 border-green-200'
-                      }`}
-                    >
-                      Previsão IA: R${' '}
-                      {forecast.projectedTotal.toLocaleString('pt-BR', {
-                        maximumFractionDigits: 0,
-                      })}
-                    </span>
-                  )}
+                  <p className="text-xs text-slate-500 font-medium mt-1">
+                    Soma dos custos de atendimentos ativos
+                  </p>
                 </div>
-                <AnnualBudgetChart
-                  totalSpent={generalStats.totalCost}
-                  budgetLimit={annualBudget}
-                />
+                <div className="bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-lg hidden sm:block">
+                  <span className="text-xs font-bold text-slate-600">
+                    Média:{' '}
+                    {(generalStats.totalCost / 12).toLocaleString('pt-BR', {
+                      style: 'currency',
+                      currency: 'BRL',
+                    })}
+                    /mês
+                  </span>
+                </div>
               </div>
-
-              {/* Gráfico Mensal */}
-              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                <h3 className="text-lg font-bold text-gray-800 mb-4">
-                  Evolução Mensal de Custos
-                </h3>
+              <div className="h-72">
                 <BarChart
                   data={monthlyCostData}
-                  title="Custo (R$)"
+                  title="Custo"
                   barColor="#10b981"
                 />
               </div>
 
-              {/* Performance por Farmácia (Cards Compactos) */}
-              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                  {icons.organization || '🏥'} Eficiência por Unidade
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Painel extra para compensar o BarChart que não mostra Atendimentos nativamente */}
+              <div className="mt-4 grid grid-cols-6 md:grid-cols-12 gap-2">
+                {monthlyCostData.map((m, i) => (
+                  <div
+                    key={i}
+                    className="text-center bg-slate-50 rounded-lg p-2 border border-slate-100"
+                  >
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">
+                      {m.label}
+                    </p>
+                    <p
+                      className="text-xs font-black text-slate-700"
+                      title="Atendimentos no mês"
+                    >
+                      {m.atendimentos}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Card: Eficiência por Farmácia */}
+            <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-200/60">
+              <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">
+                <FiActivity className="text-indigo-500" /> Eficiência e Consumo
+                por Unidade
+              </h3>
+
+              {pharmacyStats.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   {pharmacyStats.map((dist) => {
                     const isCritical = dist.percentage > 100;
                     const isWarning = dist.percentage > 85 && !isCritical;
+
                     return (
-                      <div
-                        key={dist.id}
-                        className="p-3 border rounded-lg hover:bg-gray-50 transition-colors"
-                      >
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="font-semibold text-gray-700 truncate">
+                      <div key={dist.id} className="relative group">
+                        <div className="flex justify-between items-end mb-2">
+                          <span className="font-bold text-slate-700 text-sm truncate pr-2">
                             {dist.name}
                           </span>
                           <span
-                            className={`text-xs font-bold px-2 py-0.5 rounded-full ${isCritical ? 'bg-red-100 text-red-700' : isWarning ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}
+                            className={`text-xs font-black px-2 py-1 rounded-md tracking-wide shrink-0 ${isCritical ? 'bg-rose-100 text-rose-700' : isWarning ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}
                           >
-                            {dist.percentage.toFixed(1)}%
+                            {dist.percentage.toFixed(1)}% do Teto
                           </span>
                         </div>
-                        <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2">
+
+                        <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden mb-2">
                           <div
-                            className={`h-1.5 rounded-full ${isCritical ? 'bg-red-500' : isWarning ? 'bg-amber-500' : 'bg-green-500'}`}
+                            className={`h-full rounded-full transition-all duration-1000 ease-out ${isCritical ? 'bg-rose-500' : isWarning ? 'bg-amber-500' : 'bg-emerald-500'}`}
                             style={{
                               width: `${Math.min(dist.percentage, 100)}%`,
                             }}
                           ></div>
                         </div>
-                        <div className="flex justify-between mt-2 text-xs text-gray-500">
+
+                        <div className="flex justify-between text-xs font-bold text-slate-500">
                           <span>
-                            R${' '}
-                            {dist.spent.toLocaleString('pt-BR', {
-                              maximumFractionDigits: 0,
-                            })}
+                            Consumido:{' '}
+                            <span className="text-slate-700">
+                              {dist.spent.toLocaleString('pt-BR', {
+                                style: 'currency',
+                                currency: 'BRL',
+                              })}
+                            </span>
                           </span>
                           <span>
-                            Meta: R${' '}
+                            Teto:{' '}
                             {dist.budget.toLocaleString('pt-BR', {
-                              maximumFractionDigits: 0,
+                              style: 'currency',
+                              currency: 'BRL',
                             })}
                           </span>
                         </div>
@@ -584,86 +562,137 @@ export default function AdminReportsPage({
                     );
                   })}
                 </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-32 text-slate-400">
+                  <p className="font-bold text-sm">
+                    Nenhuma unidade identificada nas movimentações.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="xl:col-span-1 space-y-6">
+            {/* Card: Status dos Pedidos */}
+            <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-200/60 flex flex-col justify-center">
+              <h3 className="text-lg font-black text-slate-800 mb-6">
+                Taxa de Conversão
+              </h3>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-sm"></div>
+                    <span className="font-bold text-emerald-900 text-sm">
+                      Sucesso / Atendidos
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-lg font-black text-emerald-700 leading-none">
+                      {statusPercentages.attended}%
+                    </p>
+                    <p className="text-[10px] font-bold text-emerald-600/60 uppercase tracking-widest mt-1">
+                      {generalStats.attended} regs
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full bg-amber-500 shadow-sm animate-pulse"></div>
+                    <span className="font-bold text-amber-900 text-sm">
+                      Em Aberto / Fila
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-lg font-black text-amber-700 leading-none">
+                      {statusPercentages.pending}%
+                    </p>
+                    <p className="text-[10px] font-bold text-amber-600/60 uppercase tracking-widest mt-1">
+                      {generalStats.pending} regs
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                  <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full bg-slate-400 shadow-sm"></div>
+                    <span className="font-bold text-slate-700 text-sm">
+                      Cancelados / Perdas
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-lg font-black text-slate-600 leading-none">
+                      {statusPercentages.canceled}%
+                    </p>
+                    <p className="text-[10px] font-bold text-slate-500/60 uppercase tracking-widest mt-1">
+                      {generalStats.canceled} regs
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* COLUNA DIREITA: Estatísticas Rápidas e Top Medicamentos (4 cols) */}
-            <div className="lg:col-span-4 space-y-6">
-              {/* Status Chart */}
-              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                <h3 className="text-lg font-bold text-gray-800 mb-4">
-                  Status dos Pedidos
+            {/* Card: Top Medicamentos */}
+            <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-200/60 h-[450px] flex flex-col">
+              <div className="flex justify-between items-center mb-6 shrink-0">
+                <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                  <FiBox className="text-blue-500" /> Ranking de Saídas
                 </h3>
-                <div className="h-48">
-                  <BarChart
-                    data={statusChartData}
-                    title="Qtd"
-                    barColor="#6366f1"
-                  />
-                </div>
               </div>
 
-              {/* --- SEÇÃO REFORMULADA: Top Medicamentos --- */}
-              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 h-full">
-                <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                    {icons.pill} Top Medicamentos
-                  </h3>
-                  <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">
-                    Mais Saídos
-                  </span>
-                </div>
-
-                {/* Componente Visual de Podium */}
+              <div className="overflow-y-auto custom-scrollbar flex-1 pr-2">
                 {medicationUsage.length > 0 ? (
-                  <>
-                    <TopMedicationPodium top3={medicationUsage.slice(0, 3)} />
-
-                    {/* Lista Complementar (do 4º em diante) */}
-                    <div className="mt-6 space-y-3">
-                      <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
-                        Ranking Geral
-                      </h4>
-                      <div className="divide-y divide-gray-100 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
-                        {medicationUsage.slice(3).map((med, idx) => (
-                          <div
-                            key={med.id}
-                            className="py-2 flex justify-between items-center group hover:bg-gray-50 px-2 rounded cursor-default"
-                          >
-                            <div className="flex items-center gap-3">
-                              <span className="text-xs font-bold text-gray-400 w-4">
-                                #{idx + 4}
+                  <div className="space-y-5">
+                    {medicationUsage.slice(0, 10).map((med, idx) => {
+                      const percent = Math.round(
+                        (med.count / maxMedCount) * 100
+                      );
+                      return (
+                        <div key={med.id} className="relative group">
+                          <div className="flex justify-between items-end mb-1.5">
+                            <span className="font-bold text-slate-700 text-sm line-clamp-1 pr-4 group-hover:text-indigo-600 transition-colors">
+                              <span
+                                className={`font-black mr-2 ${idx === 0 ? 'text-amber-500' : idx === 1 ? 'text-slate-400' : idx === 2 ? 'text-orange-400' : 'text-slate-300'}`}
+                              >
+                                #{idx + 1}
                               </span>
-                              <span className="text-sm text-gray-700 font-medium truncate max-w-[140px]">
-                                {med.name}
+                              {med.name}
+                            </span>
+                            <span className="font-black text-slate-800 text-sm">
+                              {med.count}{' '}
+                              <span className="text-[10px] text-slate-400 font-bold uppercase">
+                                un
                               </span>
-                            </div>
-                            <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">
-                              {med.count}
                             </span>
                           </div>
-                        ))}
-                        {medicationUsage.length <= 3 && (
-                          <p className="text-xs text-gray-400 text-center py-2">
-                            Fim da lista.
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </>
+                          <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-1000 ease-out ${idx === 0 ? 'bg-amber-400' : idx === 1 ? 'bg-slate-400' : idx === 2 ? 'bg-orange-400' : 'bg-blue-400'}`}
+                              style={{ width: `${percent}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 ) : (
-                  <div className="flex flex-col items-center justify-center h-64 text-gray-400">
-                    <span className="text-4xl mb-2 opacity-30">
-                      {icons.pill}
-                    </span>
-                    <p>Nenhum dado registrado.</p>
+                  <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                    <FiAlertTriangle
+                      size={32}
+                      className="mb-2 opacity-50 text-amber-500"
+                    />
+                    <p className="font-bold text-sm text-center">
+                      Nenhum medicamento
+                      <br />
+                      dispensado neste período.
+                    </p>
                   </div>
                 )}
               </div>
             </div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
