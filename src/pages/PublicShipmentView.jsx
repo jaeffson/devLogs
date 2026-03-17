@@ -18,6 +18,7 @@ import {
   FiUser,
   FiSearch,
   FiCheck,
+  FiWifiOff,
 } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import { ConfirmModal } from '../components/common/Modal';
@@ -28,6 +29,13 @@ export default function PublicShipmentView() {
   const [loading, setLoading] = useState(true);
   const [finished, setFinished] = useState(false);
   const [observations, setObservations] = useState('');
+
+  // =========================================================================
+  // NOVO: Controle de conexão e Cache
+  // =========================================================================
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const DRAFT_KEY = `medlogs_draft_${token}`; // Chave única por pedido
 
   // Controle do remetente
   const [senderName, setSenderName] = useState('');
@@ -42,14 +50,12 @@ export default function PublicShipmentView() {
   // Controla quais sacolas (pacientes) já foram lacradas pelo fornecedor
   const [readyBags, setReadyBags] = useState({});
 
-  // CORREÇÃO 1: Função para fechar a sacola instantaneamente no 1º clique
   const toggleBagReady = useCallback((pId) => {
     setReadyBags((prev) => {
       const isCurrentlyReady = prev[pId] === true;
-      return {
-        ...prev,
-        [pId]: !isCurrentlyReady,
-      };
+      const newBags = { ...prev, [pId]: !isCurrentlyReady };
+      setHasUnsavedChanges(true); // Marca alteração para o cache
+      return newBags;
     });
   }, []);
 
@@ -73,62 +79,90 @@ export default function PublicShipmentView() {
   const API_URL =
     import.meta.env.VITE_API_URL || 'https://api.parari.medlogs.com.br/api';
 
+  // =========================================================================
+  // NOVO: Monitor de Rede e Proteção de F5
+  // =========================================================================
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (hasUnsavedChanges && !finished) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges, finished]);
+
   // FUNÇÃO MÁGICA: Varre tudo e garante que a soma do Orçamento está 100% correta
   const recalculateShipmentTotal = (shipmentObj) => {
     let total = 0;
     shipmentObj.items.forEach((p) => {
       p.medications.forEach((m) => {
-        // Se é falta ou parcial, zera o subtotal desse remédio e não soma
         if (m.status === 'falta' || m.unitPrice === -1) {
           m.totalPrice = 0;
         } else if (m.status === 'parcial' || m.quantity === 0) {
           m.totalPrice = 0;
         } else {
-          // Se tem preço, multiplica pela quantidade e soma no Carrinho
           const price = parseFloat(m.unitPrice) || 0;
           m.totalPrice = price * (m.quantity || 1);
           total += m.totalPrice;
         }
       });
     });
-    shipmentObj.totalCost = total; // Atualiza o Total Geral lá do rodapé
+    shipmentObj.totalCost = total;
     return shipmentObj;
   };
 
   const loadData = useCallback(
     async (isFirstLoad = true) => {
+      // 1. TENTA RECUPERAR RASCUNHO LOCAL PRIMEIRO
+      let draftData = null;
+      try {
+        const savedDraftStr = localStorage.getItem(DRAFT_KEY);
+        if (savedDraftStr) {
+          draftData = JSON.parse(savedDraftStr);
+        }
+      } catch (e) {
+        console.error('Erro ao ler rascunho local', e);
+      }
+
       try {
         const res = await axios.get(`${API_URL}/shipments/public/${token}`);
         const shipmentData = res.data;
 
-        // CORREÇÃO 2: LÓGICA DE VALIDADE E STATUS FINALIZADO
         const isAlreadyFinished =
           shipmentData.status === 'conferido' ||
           shipmentData.status === 'finalizado';
 
         if (isAlreadyFinished) {
-          // Se já está finalizado, mostra sucesso e NUNCA expira
           setIsExpired(false);
           setDaysLeft(0);
           setFinished(true);
+          localStorage.removeItem(DRAFT_KEY); // Limpa cache se já finalizou
         } else {
-          // Se não estiver finalizado, calcula os dias normalmente
           const createdAt = new Date(shipmentData.createdAt || new Date());
           const now = new Date();
-          const diffTime = now.getTime() - createdAt.getTime();
-          const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-
+          const diffDays = Math.floor(
+            (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24)
+          );
           const expired = diffDays >= 7;
-          const remainingDays = expired ? 0 : 7 - diffDays;
-
           setIsExpired(expired);
-          setDaysLeft(remainingDays);
-          setFinished(expired); // Se expirou, vai para a tela de finalizado/expirado
+          setDaysLeft(expired ? 0 : 7 - diffDays);
+          setFinished(expired);
         }
 
-        // 2. LÓGICA DO NOME BLOQUEADO E DATA DE ATUALIZAÇÃO
         if (isFirstLoad && shipmentData.observations) {
-          // Procura a tag oculta de Responsável
           const nameMatch = shipmentData.observations.match(
             /\[Responsável:\s*(.*?)\]/
           );
@@ -136,41 +170,58 @@ export default function PublicShipmentView() {
             setSenderName(nameMatch[1].trim());
             setIsSenderLocked(true);
           }
-
-          // Procura a tag oculta de Data
           const dateMatch = shipmentData.observations.match(
             /\[Atualizado em:\s*(.*?)\]/
           );
-          if (dateMatch) {
-            setLastUpdateDate(dateMatch[1]);
-          }
+          if (dateMatch) setLastUpdateDate(dateMatch[1]);
 
-          // Limpa as tags do texto para o fornecedor ver só a observação dele (Evita a duplicação!)
           const cleanObs = shipmentData.observations
             .replace(/\[Responsável:.*?\]\n?/g, '')
             .replace(/\[Atualizado em:.*?\]\n?/g, '')
             .trim();
-
           setObservations(cleanObs);
         }
-        // 3. IDENTIFICA O QUE JÁ FOI ENVIADO E RESTAURA FALTAS
+
         const dataWithMemory = shipmentData;
         dataWithMemory.items.forEach((p) =>
           p.medications.forEach((m) => {
             m.requestedQuantity = m.quantity;
-
             if (m.unitPrice === -1) m.status = 'falta';
             else if (m.quantity === 0) m.status = 'parcial';
-
             m.alreadySubmitted =
               (parseFloat(m.unitPrice) > 0 && !m.hasMemoryPrice) ||
               m.status === 'falta';
+
+            // MESCLA COM O RASCUNHO: Recupera o que ele estava a digitar antes de fechar/cair a net
+            if (draftData && draftData.shipment) {
+              const draftPatient = draftData.shipment.items.find(
+                (dp) => dp._id === p._id
+              );
+              if (draftPatient) {
+                const draftMed = draftPatient.medications.find(
+                  (dm) => dm._id === m._id
+                );
+                if (draftMed && !m.alreadySubmitted) {
+                  m.quantity = draftMed.quantity;
+                  m.unitPrice = draftMed.unitPrice;
+                  m.status = draftMed.status;
+                  setHasUnsavedChanges(true); // Garante que sabemos que há dados em rascunho
+                }
+              }
+            }
           })
         );
 
+        // Restaura campos do rascunho (observações e estado das sacolas)
+        if (draftData) {
+          if (draftData.observations) setObservations(draftData.observations);
+          if (draftData.senderName && !isSenderLocked)
+            setSenderName(draftData.senderName);
+          if (draftData.readyBags) setReadyBags(draftData.readyBags);
+        }
+
         const finalData = recalculateShipmentTotal(dataWithMemory);
         setShipment(finalData);
-        setShipment(dataWithMemory);
 
         if (isFirstLoad) {
           const hasSeenTour = localStorage.getItem('medlogs_supplier_tour_v3');
@@ -179,14 +230,29 @@ export default function PublicShipmentView() {
           }
         }
       } catch (error) {
-        if (isFirstLoad) {
-          toast.error('Erro ao carregar pedido. Link inválido ou expirado.');
+        // NOVO: FALLBACK OFFLINE SÉNIOR
+        if ((!navigator.onLine || !error.response) && draftData?.shipment) {
+          toast('A carregar dados offline do seu dispositivo.', {
+            icon: '📶',
+            duration: 5000,
+            style: { background: '#f59e0b', color: '#fff' },
+          });
+          setShipment(draftData.shipment);
+          setObservations(draftData.observations || '');
+          setSenderName(draftData.senderName || '');
+          setReadyBags(draftData.readyBags || {});
+          setHasUnsavedChanges(true);
+        } else {
+          if (isFirstLoad) {
+            // Deixamos vazio para a tela de Erro Personalizada atuar depois
+            setShipment(null);
+          }
         }
       } finally {
         if (isFirstLoad) setLoading(false);
       }
     },
-    [token, API_URL]
+    [token, API_URL, DRAFT_KEY, isSenderLocked]
   );
 
   useEffect(() => {
@@ -381,6 +447,117 @@ export default function PublicShipmentView() {
     totalMeds === 0 ? 0 : Math.round((resolvedMeds / totalMeds) * 100);
   const isFullyResolved = totalMeds > 0 && resolvedMeds === totalMeds;
 
+  // =========================================================================
+  // 2. AUTO-SAVE: Guardar no LocalStorage sempre que houver mudanças
+  // =========================================================================
+  useEffect(() => {
+    // Só guarda se houver o shipment carregado, se não estiver finalizado e se houve alguma alteração
+    if (shipment && !finished && hasUnsavedChanges) {
+      const draftToSave = {
+        shipment,
+        observations,
+        senderName,
+        readyBags,
+        timestamp: Date.now(),
+      };
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draftToSave));
+    }
+  }, [
+    shipment,
+    observations,
+    senderName,
+    readyBags,
+    finished,
+    hasUnsavedChanges,
+    DRAFT_KEY,
+  ]);
+
+  // =========================================================================
+  // CARREGAMENTO INICIAL
+  // =========================================================================
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // =========================================================================
+  // HANDLERS DE INTERAÇÃO (Com gatilho para o Auto-Save)
+  // =========================================================================
+
+  const handleQuantityChange = (patientId, medId, newQuantity) => {
+    if (finished) return;
+    setHasUnsavedChanges(true); // <--- ATIVA O AUTO-SAVE
+    setShipment((prev) => {
+      const newShipment = { ...prev };
+      const pIndex = newShipment.items.findIndex((p) => p._id === patientId);
+      if (pIndex === -1) return prev;
+
+      const mIndex = newShipment.items[pIndex].medications.findIndex(
+        (m) => m._id === medId
+      );
+      if (mIndex === -1) return prev;
+
+      newShipment.items[pIndex].medications[mIndex].quantity =
+        Number(newQuantity);
+
+      // Lógica de ajuste automático de status com base na quantidade
+      if (Number(newQuantity) === 0) {
+        newShipment.items[pIndex].medications[mIndex].status = 'parcial';
+      } else if (
+        newShipment.items[pIndex].medications[mIndex].status === 'parcial'
+      ) {
+        newShipment.items[pIndex].medications[mIndex].status = 'enviado';
+      }
+
+      return recalculateShipmentTotal(newShipment);
+    });
+  };
+
+  const handleUnitPriceChange = (patientId, medId, newPrice) => {
+    if (finished) return;
+    setHasUnsavedChanges(true); // <--- ATIVA O AUTO-SAVE
+    setShipment((prev) => {
+      const newShipment = { ...prev };
+      const pIndex = newShipment.items.findIndex((p) => p._id === patientId);
+      if (pIndex === -1) return prev;
+
+      const mIndex = newShipment.items[pIndex].medications.findIndex(
+        (m) => m._id === medId
+      );
+      if (mIndex === -1) return prev;
+
+      newShipment.items[pIndex].medications[mIndex].unitPrice =
+        parseFloat(newPrice) || 0;
+      return recalculateShipmentTotal(newShipment);
+    });
+  };
+
+  const handleStatusChange = (patientId, medId, newStatus) => {
+    if (finished) return;
+    setHasUnsavedChanges(true); // <--- ATIVA O AUTO-SAVE
+    setShipment((prev) => {
+      const newShipment = { ...prev };
+      const pIndex = newShipment.items.findIndex((p) => p._id === patientId);
+      if (pIndex === -1) return prev;
+
+      const mIndex = newShipment.items[pIndex].medications.findIndex(
+        (m) => m._id === medId
+      );
+      if (mIndex === -1) return prev;
+
+      newShipment.items[pIndex].medications[mIndex].status = newStatus;
+
+      if (newStatus === 'falta') {
+        newShipment.items[pIndex].medications[mIndex].quantity = 0;
+        newShipment.items[pIndex].medications[mIndex].unitPrice = -1;
+      }
+
+      return recalculateShipmentTotal(newShipment);
+    });
+  };
+
+  // =========================================================================
+  // FINALIZAÇÃO E ENVIO (Com proteção Offline e ROTA ORIGINAL Restaurada)
+  // =========================================================================
   const handleConfirmOrderClick = () => {
     if (!senderName.trim()) {
       toast.error('Por favor, informe seu nome como responsável pelo ENVIO.', {
@@ -391,11 +568,20 @@ export default function PublicShipmentView() {
       return;
     }
 
+    // PROTEÇÃO SÉNIOR: Se não houver internet, bloqueia o envio mas avisa que está tudo seguro
+    if (!isOnline) {
+      toast.error(
+        'Você está offline! Aguarde a ligação voltar para finalizar. Os seus dados estão a salvo no dispositivo.',
+        { icon: '📶', duration: 6000 }
+      );
+      return;
+    }
+
     if (!isFullyResolved) {
       setConfirmation({
         isOpen: true,
         title: 'Enviar Parcialmente?',
-        message: `Você preencheu ${resolvedMeds} de ${totalMeds} itens. Os itens restantes continuarão pendentes neste link para você preencher depois.\n\nDeseja enviar os preenchidos agora para a conferência?`,
+        message: `Você preencheu ${resolvedMeds} de ${totalMeds} itens. Os itens restantes continuarão pendentes neste link para preencher depois.\n\nDeseja enviar os preenchidos agora para a conferência?`,
         confirmText: 'Sim, Salvar e Enviar Parcial',
         isDestructive: true,
         onConfirm: processOrder,
@@ -414,15 +600,11 @@ export default function PublicShipmentView() {
   };
 
   const closeConfirmation = () =>
-    setConfirmation({ ...confirmation, isOpen: false });
-
-  // LÓGICA DE ENVIO
+    setConfirmation((prev) => ({ ...prev, isOpen: false }));
   const processOrder = async () => {
     try {
-      // Pega a data e hora atual do sistema
       const dataAtual = new Date().toLocaleString('pt-BR');
 
-      // Formata a observação com tags escondidas para o sistema ler depois sem duplicar
       const formattedObservations = `[Responsável: ${senderName.trim()}]\n[Atualizado em: ${dataAtual}]\n${observations}`;
 
       await axios.post(`${API_URL}/shipments/public/${token}/confirm`, {
@@ -443,6 +625,10 @@ export default function PublicShipmentView() {
         await loadData(false);
       }
 
+      // SUCESSO: Limpa as variáveis de rascunho
+      setHasUnsavedChanges(false);
+      localStorage.removeItem(DRAFT_KEY);
+
       closeConfirmation();
       window.scrollTo(0, 0);
     } catch (error) {
@@ -450,11 +636,18 @@ export default function PublicShipmentView() {
         'Erro detalhado do Backend:',
         error.response?.data || error.message
       );
-      const errorMessage =
-        error.response?.data?.message ||
-        error.response?.data?.error ||
-        'Erro de conexão com o servidor. Tente novamente.';
-      toast.error(`Falha no envio: ${errorMessage}`);
+      if (!navigator.onLine) {
+        toast.error(
+          'A ligação falhou durante o envio. Os seus dados estão a salvo, tente novamente.',
+          { duration: 5000 }
+        );
+      } else {
+        const errorMessage =
+          error.response?.data?.message ||
+          error.response?.data?.error ||
+          'Erro de conexão com o servidor. Tente novamente.';
+        toast.error(`Falha no envio: ${errorMessage}`);
+      }
       closeConfirmation();
     }
   };
@@ -483,12 +676,65 @@ export default function PublicShipmentView() {
       </div>
     );
 
-  if (!shipment || (isExpired && !shipment))
+  // TELA PREMIUM DE LINK INVÁLIDO
+  if (!shipment || (isExpired && !shipment)) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-red-600 font-bold bg-red-50">
-        Remessa inválida ou finalizada pela secretaria.
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 relative overflow-hidden">
+        {/* Efeitos de fundo (Glow) */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute -top-[20%] -left-[10%] w-[70%] h-[70%] bg-rose-100/40 rounded-full blur-3xl"></div>
+          <div className="absolute -bottom-[20%] -right-[10%] w-[70%] h-[70%] bg-orange-100/40 rounded-full blur-3xl"></div>
+        </div>
+
+        {/* Cartão Central */}
+        <div className="bg-white p-10 md:p-14 rounded-[2.5rem] shadow-2xl max-w-lg w-full text-center border border-slate-100 relative z-10 animate-in fade-in zoom-in duration-500">
+          {/* Ícone de Alerta */}
+          <div className="w-24 h-24 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-8 shadow-inner border border-rose-100">
+            <FiAlertTriangle className="text-rose-500" size={48} />
+          </div>
+
+          <h2 className="text-3xl font-black text-slate-800 mb-4 tracking-tight">
+            Acesso Indisponível
+          </h2>
+
+          <p className="text-slate-500 text-lg font-medium leading-relaxed mb-8">
+            Não conseguimos carregar os dados desta solicitação. O link pode ter{' '}
+            <strong>expirado</strong>, sido <strong>cancelado</strong>, ou a sua
+            ligação falhou.
+          </p>
+
+          {/* Dicas de Resolução */}
+          <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100 mb-8 text-left space-y-4">
+            <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+              <FiInfo className="text-indigo-500" /> O que fazer agora?
+            </h3>
+            <ul className="text-sm text-slate-600 space-y-3 font-medium">
+              <li className="flex items-start gap-2">
+                <span className="text-indigo-500 font-bold mt-0.5">•</span>
+                Verifique se copiou o link inteiro sem cortar nenhuma letra.
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-indigo-500 font-bold mt-0.5">•</span>
+                Verifique a sua ligação à internet.
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-indigo-500 font-bold mt-0.5">•</span>
+                Se o erro persistir, solicite um novo link à secretaria.
+              </li>
+            </ul>
+          </div>
+
+          {/* Botão de Tentar Novamente */}
+          <button
+            onClick={() => window.location.reload()}
+            className="w-full px-6 py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold transition-colors shadow-lg active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <FiClock /> Tentar Novamente
+          </button>
+        </div>
       </div>
     );
+  }
 
   if (finished) {
     return (

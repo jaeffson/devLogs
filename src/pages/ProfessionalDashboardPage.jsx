@@ -1103,7 +1103,7 @@ const getMedicationName = (medicationId, meds = []) => {
                                 {med.nome || med.name}
                               </span>
                               <span className="font-black text-blue-600 bg-blue-100/50 px-2 py-1 rounded text-xs">
-                                {med.quantidade || med.quantity} un.
+                                {med.quantidade || med.quantity} 
                               </span>
                             </li>
                           ))

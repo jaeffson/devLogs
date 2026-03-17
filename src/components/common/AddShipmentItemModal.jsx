@@ -767,13 +767,11 @@ export default function AddShipmentItemModal({
                           <option value="CX">Caixa</option>
                           <option value="FR">Frasco</option>
                           <option value="TB">Tubo</option>
-                          <option value="UN">Unidade</option>
-                          <option value="CART">Cartela</option>
                           <option value="BIS">Bisnaga</option>
                           <option value="PCT">Pacote</option>
                           <option value="LATA">Lata</option>
                           <option value="AMP">Ampola</option>
-                          <option value="COMP">Comprim</option>
+                         
                         </select>
                         <FiChevronDown
                           className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
