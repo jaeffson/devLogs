@@ -556,7 +556,7 @@ export default function PublicShipmentView() {
   };
 
   // =========================================================================
-  // FINALIZAÇÃO E ENVIO (Com proteção Offline e ROTA ORIGINAL Restaurada)
+  // FINALIZAÇÃO E ENVIo
   // =========================================================================
   const handleConfirmOrderClick = () => {
     if (!senderName.trim()) {
