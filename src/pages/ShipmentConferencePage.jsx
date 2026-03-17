@@ -284,17 +284,23 @@ export default function ShipmentConferencePage({ onGlobalUpdate }) {
     }
   };
 
+// --- FILTRO BLINDADO DE REMESSAS ---
   const filteredShipments = shipments.filter((s) => {
+    // 1. Força o status para minúsculo para evitar bugs de digitação do banco de dados
+    const status = String(s.status || '').toLowerCase();
+    
+    // 2. Agrupa tudo que significa "Aberto" na aba incoming
     const isTabMatch =
       activeTab === 'incoming'
-        ? s.status === 'aguardando_conferencia' || s.status === 'parcial'
-        : s.status === 'finalizado';
+        ? ['aguardando_conferencia', 'parcial', 'pendente', 'aguardando'].includes(status)
+        : ['finalizado', 'concluido', 'entregue', 'recebido'].includes(status);
+
     const matchesSearch =
       (s.supplier || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (s.code || '').toLowerCase().includes(searchTerm.toLowerCase());
+      
     return isTabMatch && matchesSearch;
   });
-
   return (
     <div className="h-screen w-full bg-slate-50 flex flex-col font-sans text-slate-800 overflow-hidden">
       {/* HEADER FIXO SUPERIOR */}
