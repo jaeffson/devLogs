@@ -46,6 +46,8 @@ export default function PublicShipmentView() {
   const [isExpired, setIsExpired] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [isLoadedFromOfflineDraft, setIsLoadedFromOfflineDraft] =
+    useState(false);
 
   // Controla quais sacolas (pacientes) já foram lacradas pelo fornecedor
   const [readyBags, setReadyBags] = useState({});
@@ -149,7 +151,7 @@ export default function PublicShipmentView() {
           setIsExpired(false);
           setDaysLeft(0);
           setFinished(true);
-          localStorage.removeItem(DRAFT_KEY); // Limpa cache se já finalizou
+          localStorage.removeItem(DRAFT_KEY);
         } else {
           const createdAt = new Date(shipmentData.createdAt || new Date());
           const now = new Date();
@@ -186,13 +188,20 @@ export default function PublicShipmentView() {
         dataWithMemory.items.forEach((p) =>
           p.medications.forEach((m) => {
             m.requestedQuantity = m.quantity;
+
+            // Lógica original de status
             if (m.unitPrice === -1) m.status = 'falta';
             else if (m.quantity === 0) m.status = 'parcial';
+
             m.alreadySubmitted =
               (parseFloat(m.unitPrice) > 0 && !m.hasMemoryPrice) ||
-              m.status === 'falta';
+              m.status === 'falta' ||
+              m.status === 'enviado';
 
-            // MESCLA COM O RASCUNHO: Recupera o que ele estava a digitar antes de fechar/cair a net
+            if (m.alreadySubmitted) {
+              m.isLockedByBackend = true;
+            }
+
             if (draftData && draftData.shipment) {
               const draftPatient = draftData.shipment.items.find(
                 (dp) => dp._id === p._id
@@ -201,17 +210,17 @@ export default function PublicShipmentView() {
                 const draftMed = draftPatient.medications.find(
                   (dm) => dm._id === m._id
                 );
-                if (draftMed && !m.alreadySubmitted) {
+                // Só aplica o rascunho se o item NÃO estiver travado pelo backend
+                if (draftMed && !m.isLockedByBackend) {
                   m.quantity = draftMed.quantity;
                   m.unitPrice = draftMed.unitPrice;
                   m.status = draftMed.status;
-                  setHasUnsavedChanges(true); // Garante que sabemos que há dados em rascunho
+                  setHasUnsavedChanges(true);
                 }
               }
             }
           })
         );
-
         // Restaura campos do rascunho (observações e estado das sacolas)
         if (draftData) {
           if (draftData.observations) setObservations(draftData.observations);
@@ -230,22 +239,24 @@ export default function PublicShipmentView() {
           }
         }
       } catch (error) {
-        // NOVO: FALLBACK OFFLINE SÉNIOR
+        // NOVO: FALLBACK OFFLINE SÉNIOR REVISADO
         if ((!navigator.onLine || !error.response) && draftData?.shipment) {
-          toast('A carregar dados offline do seu dispositivo.', {
-            icon: '📶',
-            duration: 5000,
-            style: { background: '#f59e0b', color: '#fff' },
-          });
+          toast.error(
+            'Carregado offline! Conecte-se à internet para enviar dados atualizados.',
+            {
+              icon: '📶',
+              duration: 8000,
+            }
+          );
           setShipment(draftData.shipment);
           setObservations(draftData.observations || '');
           setSenderName(draftData.senderName || '');
           setReadyBags(draftData.readyBags || {});
           setHasUnsavedChanges(true);
+          setIsLoadedFromOfflineDraft(true); 
         } else {
-          if (isFirstLoad) {
-            // Deixamos vazio para a tela de Erro Personalizada atuar depois
-            setShipment(null);
+                   if (isFirstLoad) {
+                    setShipment(null);
           }
         }
       } finally {
@@ -558,14 +569,19 @@ export default function PublicShipmentView() {
   // =========================================================================
   // FINALIZAÇÃO E ENVIo
   // =========================================================================
+  
   const handleConfirmOrderClick = () => {
+    
     if (!senderName.trim()) {
+      
       toast.error('Por favor, informe seu nome como responsável pelo ENVIO.', {
         icon: '👤',
         style: { borderRadius: '10px', background: '#333', color: '#fff' },
       });
       window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+      
       return;
+      
     }
 
     // PROTEÇÃO SÉNIOR: Se não houver internet, bloqueia o envio mas avisa que está tudo seguro
