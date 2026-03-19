@@ -717,28 +717,20 @@ export default function ProfessionalDashboardPage({
       };
     });
   }, [records, patients]);
-  const filteredRecords = useMemo(() => {
+const filteredRecords = useMemo(() => {
     // 1. Organiza do mais novo para o mais velho
     let result = recordsWithPatientNames.sort(
-      (a, b) =>
-        new Date(b.entryDate || b.createdAt) -
-        new Date(a.entryDate || a.createdAt)
+      (a, b) => new Date(b.entryDate || b.createdAt) - new Date(a.entryDate || a.createdAt)
     );
 
-    // 2. O NOVO FILTRO DE ATRASADOS
-    if (statusFilter === '+30 dias') {
+    // 2. FILTRO DE STATUS (Atrasados, Pendente, etc)
+    if (statusFilter === 'Atrasados') {
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
+      
       result = result.filter((r) => {
-        const st = String(r.status)
-          .toLowerCase()
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '');
-        const isPending =
-          st.includes('pendente') ||
-          st.includes('parcial') ||
-          st.includes('aguardando');
+        const st = String(r.status).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const isPending = st.includes('pendente') || st.includes('parcial') || st.includes('aguardando');
         const recordDate = new Date(r.createdAt || r.entryDate);
         return isPending && recordDate < thirtyDaysAgo;
       });
@@ -746,13 +738,29 @@ export default function ProfessionalDashboardPage({
       result = result.filter((r) => r.status === statusFilter);
     }
 
+    // 3. A NOVA PESQUISA INTELIGENTE (Sem acentos, Maiúsculas/Minúsculas, CPF e SUS)
     if (debouncedHistorySearch) {
-      const lowerSearch = debouncedHistorySearch.toLowerCase();
-      result = result.filter((r) =>
-        r.patientName.toLowerCase().includes(lowerSearch)
-      );
-    }
+      // Função ajudante que remove acentos e transforma tudo em minúsculas
+      const normalizeText = (text) => 
+        String(text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 
+      const searchClean = normalizeText(debouncedHistorySearch);
+
+      result = result.filter((r) => {
+        const nameClean = normalizeText(r.patientName);
+        
+        // Tenta capturar o CPF ou SUS de onde o banco de dados tiver guardado
+        const cpfClean = normalizeText(r.patientId?.cpf || r.patient?.cpf || r.cpf);
+        const susClean = normalizeText(r.patientId?.susCard || r.patient?.susCard || r.susCard);
+
+        return (
+          nameClean.includes(searchClean) || 
+          cpfClean.includes(searchClean) || 
+          susClean.includes(searchClean)
+        );
+      });
+    }
+    
     return result;
   }, [recordsWithPatientNames, statusFilter, debouncedHistorySearch]);
 
@@ -2167,7 +2175,7 @@ export default function ProfessionalDashboardPage({
                                     )}
                                   <span className="text-indigo-600 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded font-black tracking-widest uppercase text-[9px]">
                                     {m.dosage ||
-                                      `${m.quantity} ${m.unit || 'UN'}`}
+                                      `${m.quantity} `}
                                   </span>
                                 </span>
                               ))
