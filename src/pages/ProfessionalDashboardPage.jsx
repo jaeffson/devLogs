@@ -13,12 +13,26 @@ import MedicationsPage from './MedicationsPage';
 import { icons } from '../utils/icons';
 import { getMedicationName } from '../utils/helpers';
 import { useDebounce } from '../hooks/useDebounce';
-import { FiSearch } from 'react-icons/fi';
-import { FiPlus } from 'react-icons/fi';
-import { FiClock } from 'react-icons/fi';
+import {
+  FiArrowRight,
+  FiSearch,
+  FiRefreshCw,
+  FiX,
+  FiTruck,
+  FiClock,
+  FiUsers,
+  FiActivity,
+  FiPlus,
+  FiAlertCircle,
+  FiBox,
+  FiDollarSign,
+  FiCalendar,
+  FiCheck,
+  FiAlertTriangle,
+} from 'react-icons/fi';
 
 // ============================================================================
-// ÁREA DE HELPERS (Funções auxiliares - FORA DO COMPONENTE)
+// ÁREA DE HELPERS (Funções auxiliares
 const fixDate = (dateString) => {
   if (!dateString) return '-';
   const cleanDate = String(dateString).split('T')[0];
@@ -27,40 +41,89 @@ const fixDate = (dateString) => {
   return `${day}/${month}/${year}`;
 };
 
-// 2. Define a Saudação
+const getPatientName = (record, patientsList) => {
+  if (!record) return 'Paciente não identificado';
+
+  if (typeof record.patientNameId === 'string' && record.patientNameId.trim())
+    return record.patientNameId;
+  if (
+    record.patient &&
+    typeof record.patient.name === 'string' &&
+    record.patient.name.trim()
+  )
+    return record.patient.name;
+  if (typeof record.nomePaciente === 'string' && record.nomePacienteId.trim())
+    return record.nomePacienteId;
+
+  // 2ª Tentativa: Captura o ID real do paciente de forma segura
+  let patientId = null;
+
+  if (record.patientId && typeof record.patientId !== 'object') {
+    patientId = record.patientId;
+  } else if (record.patient) {
+    if (typeof record.patient === 'object') {
+      patientId = record.patient._id || record.patient.id;
+    } else {
+      patientId = record.patient;
+    }
+  }
+
+  // Se, por algum motivo absurdo, o ID ainda for um objeto, tentamos limpar
+  if (typeof patientId === 'object' && patientId !== null) {
+    patientId = patientId._id || patientId.id || null;
+  }
+
+  // Transforma num texto seguro e ignora se for "[object Object]"
+  const safeId = patientId ? String(patientId).trim() : null;
+
+  // 3ª Tentativa: Se achamos um ID válido, vamos cruzar com a lista de pacientes
+  if (safeId && safeId !== '[object Object]' && Array.isArray(patientsList)) {
+    const found = patientsList.find((p) => String(p._id || p.id) === safeId);
+    if (found && found.name) return found.name;
+  }
+
+  // 4ª Tentativa: Fallback final - Mostra o ID cortado, desde que não seja um objeto quebrado
+  if (safeId && safeId !== '[object Object]') {
+    return `ID: ${safeId.substring(0, 6)}...`;
+  }
+
+  return 'Paciente não identificado';
+};
+const getFarmaciaName = (record) => {
+  return (
+    record.farmaciaDestino ||
+    record.pharmacy ||
+    record.distributor ||
+    'Destino não informado'
+  );
+};
+
+// 3. Dá bom dia, boa tarde ou boa noite dependendo da hora
 const getGreeting = () => {
   const hour = new Date().getHours();
   if (hour < 12) return 'Bom dia';
   if (hour < 18) return 'Boa tarde';
   return 'Boa noite';
 };
-
-// 3. Calcula dias de atraso (Lógica dos 35 dias)
-const calculateDaysLate = (lastVisitDate) => {
-  if (!lastVisitDate) return 0;
-  const last = new Date(lastVisitDate);
-  const today = new Date();
-  const diffTime = Math.abs(today - last);
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  return diffDays;
-};
+// ---------------------------------
 
 const MS_IN_30_DAYS = 30 * 24 * 60 * 60 * 1000;
 const MS_IN_20_DAYS = 20 * 24 * 60 * 60 * 1000;
-// --- Subcomponente: Modal de Busca de Paciente ---
+
 // --- Subcomponente: Modal de Busca de Paciente ---
 const SearchPatientModal = ({
   isOpen,
   onClose,
-  patients,
+  patients = [], // Blindagem: garante que nunca quebra se a lista estiver vazia
   onSelectPatient,
   onCreateNew,
+  records,
+  setRecords,
 }) => {
   const [term, setTerm] = useState('');
   const searchInputRef = useRef(null);
   const [isBackgroundSyncing, setIsBackgroundSyncing] = useState(false);
 
-  // 1. Hook de Focus no Input
   useEffect(() => {
     if (isOpen) {
       setTerm('');
@@ -70,42 +133,19 @@ const SearchPatientModal = ({
     }
   }, [isOpen]);
 
-  // 2. Hook de Filtragem de Pacientes
+  // Hook de Filtragem de Pacientes (Blindado contra erros)
   const filtered = useMemo(() => {
-    if (!term) return patients.slice(0, 10);
+    const safePatients = Array.isArray(patients) ? patients : [];
+    if (!term) return safePatients.slice(0, 10);
     const lowerTerm = term.toLowerCase();
-    return patients.filter(
+    return safePatients.filter(
       (p) =>
-        p.name.toLowerCase().includes(lowerTerm) ||
+        (p.name && p.name.toLowerCase().includes(lowerTerm)) ||
         (p.cpf && p.cpf.includes(lowerTerm)) ||
         (p.susCard && p.susCard.includes(lowerTerm))
     );
   }, [patients, term]);
 
-  // 3. Hook de Sincronização
-  useEffect(() => {
-    // Só sincroniza se o modal não estiver aberto (opcional, dependendo da sua regra)
-    const fetchDadosSilencioso = async () => {
-      try {
-        setIsBackgroundSyncing(true);
-        // NOTA: Certifique-se de que a rota e a função setRecords são recebidas aqui como props se precisar disto neste modal!
-        // const resposta = await api.get('/sua-rota-de-historico');
-        // setRecords(resposta.data);
-      } catch (error) {
-        console.error('Erro na sincronização oculta', error);
-      } finally {
-        setIsBackgroundSyncing(false);
-      }
-    };
-
-    const interval = setInterval(() => {
-      fetchDadosSilencioso();
-    }, 15000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  // 4. SÓ AGORA fazemos o return null (DEPOIS DE TODOS OS HOOKS)
   if (!isOpen) return null;
 
   return (
@@ -113,20 +153,20 @@ const SearchPatientModal = ({
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
         <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
           <h3 className="font-bold text-gray-800 flex items-center gap-2">
-            {icons.search} Buscar Próximo Paciente
+            <FiSearch className="text-indigo-600" /> Buscar Próximo Paciente
           </h3>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
+            className="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer p-1"
           >
-            {icons.close}
+            <FiX size={20} />
           </button>
         </div>
         <div className="p-4 border-b border-gray-100">
           <input
             ref={searchInputRef}
             type="text"
-            className="w-full bg-gray-100 border-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 rounded-xl px-4 py-3 text-base transition-all outline-none"
+            className="w-full bg-gray-100 border-transparent focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 rounded-xl px-4 py-3 text-base transition-all outline-none"
             placeholder="Digite nome, CPF ou SUS..."
             value={term}
             onChange={(e) => setTerm(e.target.value)}
@@ -138,11 +178,11 @@ const SearchPatientModal = ({
               <button
                 key={p._id || p.id}
                 onClick={() => onSelectPatient(p)}
-                className="w-full text-left p-3 hover:bg-blue-50 rounded-xl transition-colors flex items-center justify-between group cursor-pointer"
+                className="w-full text-left p-3 hover:bg-indigo-50 rounded-xl transition-colors flex items-center justify-between group cursor-pointer"
               >
                 <div className="flex items-center gap-3 overflow-hidden">
-                  <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm flex-shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                    {p.name.charAt(0).toUpperCase()}
+                  <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm flex-shrink-0 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                    {p.name ? p.name.charAt(0).toUpperCase() : '?'}
                   </div>
                   <div className="min-w-0">
                     <p className="font-semibold text-gray-800 truncate">
@@ -153,8 +193,8 @@ const SearchPatientModal = ({
                     </p>
                   </div>
                 </div>
-                <div className="text-gray-400 group-hover:text-blue-600">
-                  {icons.arrowRight || '>'}
+                <div className="text-gray-400 group-hover:text-indigo-600">
+                  <FiArrowRight />
                 </div>
               </button>
             ))
@@ -167,17 +207,15 @@ const SearchPatientModal = ({
         <div className="p-4 border-t border-gray-100 bg-gray-50">
           <button
             onClick={onCreateNew}
-            className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-md transition-all flex justify-center items-center gap-2 cursor-pointer"
+            className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-md transition-all flex justify-center items-center gap-2 cursor-pointer active:scale-95"
           >
-            {icons.plus} Cadastrar Novo Paciente
+            <FiPlus size={18} /> Cadastrar Novo Paciente
           </button>
         </div>
       </div>
     </div>
   );
 };
-
-// --- Componente Principal ---
 export default function ProfessionalDashboardPage({
   user,
   patients = [],
@@ -203,6 +241,27 @@ export default function ProfessionalDashboardPage({
   const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
   const [detalhesMovimentacao, setDetalhesMovimentacao] = useState(null);
   const [isBackgroundSyncing, setIsBackgroundSyncing] = useState(false);
+
+  // --- INTELIGÊNCIA DE NEGÓCIO: Alerta de 30 Dias ---
+  const pendingOver30Days = useMemo(() => {
+    if (!records) return [];
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    return records.filter((r) => {
+      const status = String(r.status || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+      const isPending =
+        status.includes('pendente') ||
+        status.includes('parcial') ||
+        status.includes('aguardando');
+      const recordDate = new Date(r.createdAt || r.entryDate);
+
+      return isPending && recordDate < thirtyDaysAgo;
+    });
+  }, [records]);
+  // ---------------------------------------------------
 
   // NOVO: Estado para Modal de Nova Remessa
   const [isAddShipmentModalOpen, setIsAddShipmentModalOpen] = useState(false);
@@ -280,22 +339,58 @@ export default function ProfessionalDashboardPage({
       isDestructive: false,
     });
 
-  const getPatientNameById = (patientId) => {
-    if (!patientId) return 'Desconhecido';
-
-    // quando vem populate do backend
-    if (typeof patientId === 'object') {
-      return patientId.name || 'Desconhecido';
+  const getPatientName = (record, patientsList) => {
+    if (!record) return 'Paciente não identificado';
+    if (
+      record.patientId &&
+      typeof record.patientId === 'object' &&
+      record.patientId.name
+    ) {
+      return record.patientId.name;
     }
 
-    // quando vem só o ID
-    const patient = patients.find(
-      (p) =>
-        String(p._id) === String(patientId) ||
-        String(p.id) === String(patientId)
-    );
+    // Fallbacks de segurança caso algum registro antigo venha diferente
+    if (typeof record.patientName === 'string' && record.patientName.trim())
+      return record.patientName;
+    if (
+      record.patient &&
+      typeof record.patient.name === 'string' &&
+      record.patient.name.trim()
+    )
+      return record.patient.name;
 
-    return patient?.name || 'Desconhecido';
+    // Se vier só o texto do ID solto
+    let pId = null;
+    if (typeof record.patientId === 'string') pId = record.patientId;
+    else if (record.patientId && record.patientId._id)
+      pId = record.patientId._id;
+
+    // Cruza com a lista de pacientes se tivermos apenas o ID
+    if (pId && Array.isArray(patientsList)) {
+      const found = patientsList.find(
+        (p) => String(p._id || p.id) === String(pId)
+      );
+      if (found && found.name) return found.name;
+    }
+
+    return 'Paciente não identificado';
+  };
+
+  const getFarmaciaName = (record) => {
+    return (
+      record.farmacia ||
+      record.pharmacy ||
+      record.farmaciaDestino ||
+      record.distributor ||
+      'Destino não informado'
+    );
+  };
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Bom dia';
+    if (hour < 18) return 'Boa tarde';
+    return 'Boa noite';
   };
   const findRecentRecord = (patient) => {
     if (!patient || !records) return null;
@@ -306,13 +401,11 @@ export default function ProfessionalDashboardPage({
     const recentRecords = records.filter((r) => {
       if (!r) return false;
 
-      // Tenta pegar o ID do paciente de onde quer que ele esteja guardado no registro
       const recId = r.patient?._id || r.patient?.id || r.patientId || r.patient;
 
       return String(recId) === String(patientId);
     });
 
-    // Se a sua função original procurava apenas por registros em aberto, garantimos isso aqui:
     const openRecord = recentRecords.find(
       (r) =>
         r.status === 'Pendente' ||
@@ -335,21 +428,16 @@ export default function ProfessionalDashboardPage({
     if (!patient) return;
 
     const recent = findRecentRecord(patient);
-
-    // BLINDAGEM (LINHA 332 CORRIGIDA):
-    // Só tenta ler o "status" ou abrir o histórico se o "recent" realmente existir!
     if (
       recent &&
       (recent.status === 'Pendente' ||
         recent.status === 'Aguardando' ||
         recent.status === 'Parcial')
     ) {
-      setEditingRecord(recent); // Continua o atendimento pendente
+      setEditingRecord(recent); 
     } else {
-      setEditingRecord(null); // Paciente novo ou sem pendências: abre um registro limpo
+      setEditingRecord(null); 
     }
-
-    // Fecha o modal de busca e abre o modal de novo registro
     // (Verifique se os nomes dos seus setters são exatamente estes, senão adapte para os seus)
     if (typeof setSelectedPatient === 'function') setSelectedPatient(patient);
     if (typeof setIsRecordModalOpen === 'function') setIsRecordModalOpen(true);
@@ -630,18 +718,41 @@ export default function ProfessionalDashboardPage({
     });
   }, [records, patients]);
   const filteredRecords = useMemo(() => {
+    // 1. Organiza do mais novo para o mais velho
     let result = recordsWithPatientNames.sort(
-      (a, b) => new Date(b.entryDate) - new Date(a.entryDate)
+      (a, b) =>
+        new Date(b.entryDate || b.createdAt) -
+        new Date(a.entryDate || a.createdAt)
     );
-    if (statusFilter !== 'Todos') {
+
+    // 2. O NOVO FILTRO DE ATRASADOS
+    if (statusFilter === '+30 dias') {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      result = result.filter((r) => {
+        const st = String(r.status)
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '');
+        const isPending =
+          st.includes('pendente') ||
+          st.includes('parcial') ||
+          st.includes('aguardando');
+        const recordDate = new Date(r.createdAt || r.entryDate);
+        return isPending && recordDate < thirtyDaysAgo;
+      });
+    } else if (statusFilter !== 'Todos') {
       result = result.filter((r) => r.status === statusFilter);
     }
+
     if (debouncedHistorySearch) {
       const lowerSearch = debouncedHistorySearch.toLowerCase();
       result = result.filter((r) =>
         r.patientName.toLowerCase().includes(lowerSearch)
       );
     }
+
     return result;
   }, [recordsWithPatientNames, statusFilter, debouncedHistorySearch]);
 
@@ -689,9 +800,349 @@ export default function ProfessionalDashboardPage({
   const renderCurrentView = () => {
     switch (currentView) {
       // ======================================================================
-      // DASHBOARD (DESIGN SENIOR CORRIGIDO)
+      // DASHBOARD 
       // ======================================================================
       case 'dashboard':
+        return (
+          <div className="h-[calc(100vh-8rem)] overflow-y-auto custom-scrollbar p-4 animate-fade-in bg-slate-50/50 space-y-6">
+            {/* CABEÇALHO EXECUTIVO & AÇÕES RÁPIDAS */}
+            <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 rounded-3xl shadow-lg p-8 text-white flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+              <div>
+                <h2 className="text-3xl font-black tracking-tight mb-2">
+                  {getGreeting()}, {user?.name?.split(' ')[0] || 'Profissional'}
+                  !
+                </h2>
+                <p className="text-indigo-200 font-medium flex items-center gap-2">
+                  <FiClock className="animate-pulse" /> Resumo operacional e
+                  insights de hoje
+                </p>
+              </div>
+
+              {/* BOTÕES DE AÇÃO RÁPIDA */}
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={() => setIsSearchModalOpen(true)} // Adapte para a sua função de abrir modal de registro
+                  className="px-5 py-3 bg-indigo-500 hover:bg-indigo-400 text-white rounded-xl font-bold flex items-center gap-2 transition-all shadow-md active:scale-95 cursor-pointer"
+                >
+                  <FiPlus size={18} /> Novo Registro Rápido
+                </button>
+                <button
+                  onClick={() => setCurrentView('patients')}
+                  className="px-5 py-3 bg-white/10 hover:bg-white/20 border border-white/20 text-white rounded-xl font-bold flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
+                >
+                  <FiUsers size={18} /> Gerenciar Pacientes
+                </button>
+              </div>
+            </div>
+
+            {/* ALERTA CRÍTICO: PACIENTES PENDENTES > 30 DIAS */}
+            {pendingOver30Days.length > 0 && (
+              <div
+                onClick={() => {
+                  setStatusFilter('+30 dias'); // Ativa o filtro que criámos
+                  setCurrentView('historico'); // Muda para a aba do histórico
+                }}
+                className="bg-rose-50 border border-rose-200 rounded-3xl p-5 md:p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 cursor-pointer hover:bg-rose-100 transition-colors shadow-sm group"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                    <FiAlertTriangle size={28} />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-rose-800">
+                      Atenção Crítica: Pedidos Atrasados
+                    </h3>
+                    <p className="text-sm font-medium text-rose-600 mt-1">
+                      Você tem{' '}
+                      <strong className="text-rose-900 text-base">
+                        {pendingOver30Days.length} paciente(s)
+                      </strong>{' '}
+                      aguardando itens há mais de 30 dias.
+                    </p>
+                  </div>
+                </div>
+                <button className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-95 transition-all cursor-pointer text-white rounded-xl font-bold text-sm shadow-md flex items-center gap-2 shrink-0">
+                  Resolver Agora <FiArrowRight />
+                </button>
+              </div>
+            )}
+
+            {/* BENTO BOX: CARDS DE MÉTRICAS REAIS */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div
+                className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => setCurrentView('patients')}
+              >
+                <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-4">
+                  <FiUsers size={24} />
+                </div>
+                <h3 className="text-3xl font-black text-slate-800">
+                  {patients?.length || 0}
+                </h3>
+                <p className="text-slate-500 font-bold text-xs uppercase tracking-widest mt-1">
+                  Total de Pacientes
+                </p>
+              </div>
+              <div
+                className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => setCurrentView('historico')}
+              >
+                <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mb-4">
+                  <FiActivity size={24} />
+                </div>
+                <h3 className="text-3xl font-black text-slate-800">
+                  {records?.filter((r) => {
+                    const st = String(r.status).toLowerCase();
+                    return (
+                      st.includes('pendente') ||
+                      st.includes('parcial') ||
+                      st.includes('aguardando')
+                    );
+                  }).length || 0}
+                </h3>
+                <p className="text-slate-500 font-bold text-xs uppercase tracking-widest mt-1">
+                  Aguardando Envio
+                </p>
+              </div>
+              <div
+                className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => setCurrentView('historico')}
+              >
+                <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mb-4">
+                  <FiCheck size={24} />
+                </div>
+                <h3 className="text-3xl font-black text-slate-800">
+                  {records?.filter((r) => {
+                    // BLINDAGEM: Converte para minúsculas E remove todos os acentos
+                    const st = String(r.status)
+                      .toLowerCase()
+                      .normalize('NFD')
+                      .replace(/[\u0300-\u036f]/g, '');
+                    return (
+                      st.includes('concluido') ||
+                      st.includes('finalizado') ||
+                      st.includes('entregue') ||
+                      st.includes('atendido') ||
+                      st.includes('recebido')
+                    );
+                  }).length || 0}
+                </h3>
+                <p className="text-slate-500 font-bold text-xs uppercase tracking-widest mt-1">
+                  Entregas Concluídas
+                </p>
+              </div>
+              <div
+                className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => setCurrentView('medications')}
+              >
+                <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mb-4">
+                  <FiBox size={24} />
+                </div>
+                <h3 className="text-3xl font-black text-slate-800">
+                  {medications?.length || 0}
+                </h3>
+                <p className="text-slate-500 font-bold text-xs uppercase tracking-widest mt-1">
+                  Itens no Catálogo
+                </p>
+              </div>
+            </div>
+
+            {/* TABELA: ÚLTIMAS MOVIMENTAÇÕES */}
+            <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <div>
+                  <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                    Últimas Movimentações
+                  </h3>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">
+                    Clique num registro para ver os detalhes
+                  </p>
+                </div>
+                <button
+                  onClick={() => setCurrentView('historico')}
+                  className="text-indigo-600 font-bold text-sm hover:underline flex items-center gap-1"
+                >
+                  Ver Histórico Completo <FiArrowRight />
+                </button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead className="bg-white text-slate-400 text-[10px] uppercase font-black tracking-widest border-b border-slate-100">
+                    <tr>
+                      <th className="px-6 py-5">Paciente & Destino</th>
+                      <th className="px-6 py-5">Data e Hora</th>
+                      <th className="px-6 py-5">Status</th>
+                      <th className="px-6 py-5 text-right">Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {/* Exibe os 6 registros mais recentes */}
+                    {records?.slice(0, 6).map((r, i) => (
+                      <tr
+                        key={r._id || i}
+                        onClick={() => setDetalhesMovimentacao(r)}
+                        className="hover:bg-indigo-50/40 transition-colors cursor-pointer group"
+                      >
+                        <td className="px-6 py-4">
+                          <div className="font-black text-slate-800 text-sm">
+                            {getPatientName(r, patients)}
+                          </div>
+                          <div className="text-xs font-bold text-slate-400 mt-1 flex items-center gap-1.5">
+                            <FiTruck size={12} className="text-indigo-400" />
+                            {getFarmaciaName(r)}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm font-bold text-slate-600">
+                            {new Date(
+                              r.createdAt || r.entryDate
+                            ).toLocaleDateString('pt-BR')}
+                          </div>
+                          <div className="text-[10px] font-bold text-slate-400 mt-0.5">
+                            às{' '}
+                            {new Date(
+                              r.createdAt || r.entryDate
+                            ).toLocaleTimeString('pt-BR', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <StatusBadge status={r.status} />
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <span className="text-indigo-600 font-bold text-xs opacity-0 group-hover:opacity-100 transition-opacity">
+                            Ver Detalhes &rarr;
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                    {!records?.length && (
+                      <tr>
+                        <td
+                          colSpan="4"
+                          className="p-12 text-center text-slate-400 font-medium"
+                        >
+                          Nenhum registro encontrado no banco de dados.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* MODAL MODERNO DE DETALHES DA MOVIMENTAÇÃO */}
+            {detalhesMovimentacao && (
+              <div className="fixed inset-0 bg-slate-900/40 z-50 flex items-center justify-center backdrop-blur-sm p-4 animate-in fade-in zoom-in duration-200">
+                <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl overflow-hidden border border-slate-100">
+                  <div className="p-8 border-b border-slate-100 flex justify-between items-start bg-slate-50/50">
+                    <div>
+                      <div className="flex items-center gap-3 mb-2">
+                        <StatusBadge status={detalhesMovimentacao.status} />
+                        <span className="text-xs font-bold text-slate-400 flex items-center gap-1">
+                          <FiClock />{' '}
+                          {new Date(
+                            detalhesMovimentacao.createdAt ||
+                              detalhesMovimentacao.entryDate
+                          ).toLocaleString('pt-BR')}
+                        </span>
+                      </div>
+                      <h3 className="font-black text-2xl text-slate-800">
+                        {getPatientName(detalhesMovimentacao, patients)}
+                      </h3>
+                    </div>
+                    <button
+                      onClick={() => setDetalhesMovimentacao(null)}
+                      className="p-2 text-slate-400 hover:bg-slate-200 hover:text-slate-700 rounded-full transition-colors cursor-pointer"
+                    >
+                      <FiX size={20} />
+                    </button>
+                  </div>
+
+                  <div className="p-8 space-y-6">
+                    {/* Fornecedor / Destino */}
+                    <div className="bg-indigo-50 p-5 rounded-2xl border border-indigo-100 flex items-start gap-4">
+                      <div className="p-3 bg-white text-indigo-600 rounded-xl shadow-sm shrink-0">
+                        <FiTruck size={20} />
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">
+                          Unidade Responsável / Fornecedor
+                        </p>
+                        <p className="text-lg font-black text-indigo-900">
+                          {getFarmaciaName(detalhesMovimentacao)}
+                        </p>
+                        {detalhesMovimentacao.senderName && (
+                          <p className="text-xs font-bold text-indigo-600 mt-1">
+                            Separado por: {detalhesMovimentacao.senderName}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Lista de Medicamentos */}
+                    <div>
+                      <span className="text-xs font-black text-slate-400 uppercase tracking-widest block mb-3">
+                        Itens Relacionados neste Pedido
+                      </span>
+                      <ul className="space-y-3 max-h-[250px] overflow-y-auto custom-scrollbar pr-2">
+                        {(
+                          detalhesMovimentacao.medicamentos ||
+                          detalhesMovimentacao.medications ||
+                          detalhesMovimentacao.items ||
+                          []
+                        ).map((med, idx) => (
+                          <li
+                            key={idx}
+                            className="flex justify-between items-center p-4 bg-white rounded-xl border border-slate-100 shadow-sm"
+                          >
+                            <span className="font-bold text-slate-700">
+                              {med.name ||
+                                med.medicationId?.name ||
+                                getMedicationName(
+                                  med.medicationId,
+                                  medications
+                                ) ||
+                                'Item não especificado'}
+                            </span>
+                            <div className="flex items-center gap-3">
+                              <span className="text-xs font-bold text-slate-400">
+                                Qtd:
+                              </span>
+                              <span className="font-black text-indigo-700 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-lg">
+                                {med.quantity || med.requestedQuantity || 1}
+                              </span>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+
+                  <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+                    <button
+                      onClick={() => setDetalhesMovimentacao(null)}
+                      className="px-6 py-3 text-slate-500 hover:bg-slate-200 rounded-xl font-bold cursor-pointer transition-colors"
+                    >
+                      Fechar
+                    </button>
+                    <button
+                      onClick={() => {
+                        setDetalhesMovimentacao(null);
+                        setCurrentView('historico');
+                      }}
+                      className="px-6 py-3 bg-slate-900 hover:bg-black text-white rounded-xl font-black cursor-pointer shadow-lg transition-all active:scale-95"
+                    >
+                      Ver no Histórico Completo
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
         // --- 1. MÉTRICAS E CÁLCULOS ---
         const totalPacientes = patients?.length || 0;
         const totalMedicamentos = medications?.length || 0;
@@ -1621,7 +2072,7 @@ export default function ProfessionalDashboardPage({
                   <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="text"
-                    placeholder="Buscar por paciente ou CPF..."
+                    placeholder="Buscar por paciente ou CPF/SUS..."
                     value={historySearchTerm}
                     onChange={(e) => setHistorySearchTerm(e.target.value)}
                     className="pl-11 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 w-full sm:w-72 transition-all shadow-sm"
@@ -1629,21 +2080,26 @@ export default function ProfessionalDashboardPage({
                 </div>
 
                 <div className="flex bg-slate-100 p-1 rounded-xl w-full sm:w-auto shadow-inner border border-slate-200/50 overflow-x-auto custom-scrollbar">
-                  {['Todos', 'Pendente', 'Atendido', 'Cancelado'].map(
-                    (status) => (
-                      <button
-                        key={status}
-                        onClick={() => setStatusFilter(status)}
-                        className={`flex-1 sm:flex-none px-5 py-2 text-xs font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer whitespace-nowrap ${
-                          statusFilter === status
-                            ? 'bg-white text-indigo-700 shadow-sm border border-slate-200'
-                            : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
-                        }`}
-                      >
-                        {status}
-                      </button>
-                    )
-                  )}
+                  {[
+                    'Todos',
+                    'Pendente',
+                    'Atendido',
+                    'Cancelado',
+                    '+30 dias',
+                    ,
+                  ].map((status) => (
+                    <button
+                      key={status}
+                      onClick={() => setStatusFilter(status)}
+                      className={`flex-1 sm:flex-none px-5 py-2 text-xs font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                        statusFilter === status
+                          ? 'bg-white text-indigo-700 shadow-sm border border-slate-200'
+                          : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
+                      }`}
+                    >
+                      {status}
+                    </button>
+                  ))}
                 </div>
 
                 <button
@@ -1971,6 +2427,8 @@ export default function ProfessionalDashboardPage({
         onCreateNew={() => {
           setIsSearchModalOpen(false);
           handleEditPatient(null);
+          records = { records };
+          setRecords = { setRecords };
         }}
       />
 
@@ -1983,7 +2441,7 @@ export default function ProfessionalDashboardPage({
             addToast('Remessa registrada com sucesso!', 'success');
             syncGlobalState(setRecords, 'registros'); // Atualiza a lista
           }}
-          currentShipmentId={null} // Ou lógica para criar novo ID
+          currentShipmentId={null} 
         />
       )}
 
