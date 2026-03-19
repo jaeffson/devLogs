@@ -13,10 +13,9 @@ import MedicationsPage from './MedicationsPage';
 import { icons } from '../utils/icons';
 import { getMedicationName } from '../utils/helpers';
 import { useDebounce } from '../hooks/useDebounce';
-import { FiSearch  } from 'react-icons/fi';
-import { FiPlus  } from 'react-icons/fi';
-import { FiClock  } from 'react-icons/fi';
-
+import { FiSearch } from 'react-icons/fi';
+import { FiPlus } from 'react-icons/fi';
+import { FiClock } from 'react-icons/fi';
 
 // ============================================================================
 // ÁREA DE HELPERS (Funções auxiliares - FORA DO COMPONENTE)
@@ -49,6 +48,7 @@ const calculateDaysLate = (lastVisitDate) => {
 const MS_IN_30_DAYS = 30 * 24 * 60 * 60 * 1000;
 const MS_IN_20_DAYS = 20 * 24 * 60 * 60 * 1000;
 // --- Subcomponente: Modal de Busca de Paciente ---
+// --- Subcomponente: Modal de Busca de Paciente ---
 const SearchPatientModal = ({
   isOpen,
   onClose,
@@ -58,7 +58,9 @@ const SearchPatientModal = ({
 }) => {
   const [term, setTerm] = useState('');
   const searchInputRef = useRef(null);
+  const [isBackgroundSyncing, setIsBackgroundSyncing] = useState(false);
 
+  // 1. Hook de Focus no Input
   useEffect(() => {
     if (isOpen) {
       setTerm('');
@@ -68,6 +70,7 @@ const SearchPatientModal = ({
     }
   }, [isOpen]);
 
+  // 2. Hook de Filtragem de Pacientes
   const filtered = useMemo(() => {
     if (!term) return patients.slice(0, 10);
     const lowerTerm = term.toLowerCase();
@@ -79,31 +82,31 @@ const SearchPatientModal = ({
     );
   }, [patients, term]);
 
+  // 3. Hook de Sincronização
+  useEffect(() => {
+    // Só sincroniza se o modal não estiver aberto (opcional, dependendo da sua regra)
+    const fetchDadosSilencioso = async () => {
+      try {
+        setIsBackgroundSyncing(true);
+        // NOTA: Certifique-se de que a rota e a função setRecords são recebidas aqui como props se precisar disto neste modal!
+        // const resposta = await api.get('/sua-rota-de-historico');
+        // setRecords(resposta.data);
+      } catch (error) {
+        console.error('Erro na sincronização oculta', error);
+      } finally {
+        setIsBackgroundSyncing(false);
+      }
+    };
+
+    const interval = setInterval(() => {
+      fetchDadosSilencioso();
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // 4. SÓ AGORA fazemos o return null (DEPOIS DE TODOS OS HOOKS)
   if (!isOpen) return null;
-  const [isBackgroundSyncing, setIsBackgroundSyncing] = useState(false);
-
-useEffect(() => {
-  // Função que busca os dados lá na sua API
-  const fetchDadosSilencioso = async () => {
-    try {
-      setIsBackgroundSyncing(true);
-      const resposta = await api.get('/sua-rota-de-historico'); // Ajuste para a sua rota
-      setRecords(resposta.data); // Atualiza os dados da tabela
-    } catch (error) {
-      console.error("Erro na sincronização oculta", error);
-    } finally {
-      setIsBackgroundSyncing(false);
-    }
-  };
-
-  // Chama a cada 15 segundos
-  const interval = setInterval(() => {
-    fetchDadosSilencioso();
-  }, 15000); 
-
-  // Limpa o intervalo se o usuário sair da tela
-  return () => clearInterval(interval);
-}, []); // As dependências vão depender do seu contexto
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
@@ -158,19 +161,13 @@ useEffect(() => {
           ) : (
             <div className="text-center py-8 text-gray-400">
               <p>Nenhum paciente encontrado.</p>
-              <button
-                onClick={onCreateNew}
-                className="mt-3 text-blue-600 hover:underline font-medium text-sm cursor-pointer"
-              >
-                + Cadastrar Novo Paciente
-              </button>
             </div>
           )}
         </div>
-        <div className="p-3 bg-gray-50 border-t border-gray-100 text-center">
+        <div className="p-4 border-t border-gray-100 bg-gray-50">
           <button
             onClick={onCreateNew}
-            className="w-full py-2.5 rounded-xl border border-blue-200 text-blue-700 font-semibold hover:bg-blue-50 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-md transition-all flex justify-center items-center gap-2 cursor-pointer"
           >
             {icons.plus} Cadastrar Novo Paciente
           </button>
@@ -283,42 +280,48 @@ export default function ProfessionalDashboardPage({
       isDestructive: false,
     });
 
-const getPatientNameById = (patientId) => {
+  const getPatientNameById = (patientId) => {
+    if (!patientId) return 'Desconhecido';
 
-  if (!patientId) return "Desconhecido";
+    // quando vem populate do backend
+    if (typeof patientId === 'object') {
+      return patientId.name || 'Desconhecido';
+    }
 
-  // quando vem populate do backend
-  if (typeof patientId === "object") {
-    return patientId.name || "Desconhecido";
-  }
+    // quando vem só o ID
+    const patient = patients.find(
+      (p) =>
+        String(p._id) === String(patientId) ||
+        String(p.id) === String(patientId)
+    );
 
-  // quando vem só o ID
-  const patient = patients.find(
-    (p) => String(p._id) === String(patientId) || String(p.id) === String(patientId)
-  );
+    return patient?.name || 'Desconhecido';
+  };
+  const findRecentRecord = (patient) => {
+    if (!patient || !records) return null;
 
-  return patient?.name || "Desconhecido";
-};
-  const findRecentRecord = (patientId, recordToExcludeId = null) => {
-    if (!patientId || !Array.isArray(records)) return null;
-    const now = new Date().getTime();
-    const patientRecords = records
-      .filter((r) => {
-        const recordId = r._id || r.id;
-        const pId =
-          typeof r.patientId === 'object' ? r.patientId._id : r.patientId;
-        return (
-          pId === patientId &&
-          r.status !== 'Cancelado' &&
-          recordId !== recordToExcludeId
-        );
-      })
-      .sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate));
+    const patientId = patient._id || patient.id;
 
-    if (patientRecords.length === 0) return null;
-    if (now - new Date(patientRecords[0].entryDate).getTime() < MS_IN_20_DAYS)
-      return patientRecords[0];
-    return null;
+    // Filtra de forma blindada, ignorando registros vazios ou sem paciente
+    const recentRecords = records.filter((r) => {
+      if (!r) return false;
+
+      // Tenta pegar o ID do paciente de onde quer que ele esteja guardado no registro
+      const recId = r.patient?._id || r.patient?.id || r.patientId || r.patient;
+
+      return String(recId) === String(patientId);
+    });
+
+    // Se a sua função original procurava apenas por registros em aberto, garantimos isso aqui:
+    const openRecord = recentRecords.find(
+      (r) =>
+        r.status === 'Pendente' ||
+        r.status === 'Aguardando' ||
+        r.status === 'Parcial'
+    );
+
+    // Retorna o registro em aberto, ou o mais recente, ou null se não houver nenhum
+    return openRecord || recentRecords[0] || null;
   };
 
   const openSearchModal = () => setIsSearchModalOpen(true);
@@ -328,32 +331,29 @@ const getPatientNameById = (patientId) => {
     openRecordModalWithCheck(patient, null);
   };
 
-  const openRecordModalWithCheck = (patient, recordData = null) => {
-    const patientId = patient?._id || patient?.id;
-    const recentRecord = findRecentRecord(
-      patientId,
-      recordData?._id || recordData?.id || null
-    );
+  const openRecordModalWithCheck = (patient) => {
+    if (!patient) return;
 
-    if (recordData === null && recentRecord) {
-      setConfirmation({
-        isOpen: true,
-        title: 'Aviso de Registro Recente',
-        message: `Este paciente já possui um registro recente (${new Date(recentRecord.entryDate).toLocaleDateString('pt-BR')}). Criar novo?`,
-        onConfirm: () => {
-          setSelectedPatient(patient);
-          setEditingRecord(null);
-          setIsRecordModalOpen(true);
-          closeConfirmation();
-        },
-        confirmText: 'Sim, Criar',
-        isDestructive: false,
-      });
+    const recent = findRecentRecord(patient);
+
+    // BLINDAGEM (LINHA 332 CORRIGIDA):
+    // Só tenta ler o "status" ou abrir o histórico se o "recent" realmente existir!
+    if (
+      recent &&
+      (recent.status === 'Pendente' ||
+        recent.status === 'Aguardando' ||
+        recent.status === 'Parcial')
+    ) {
+      setEditingRecord(recent); // Continua o atendimento pendente
     } else {
-      setSelectedPatient(patient);
-      setEditingRecord(recordData);
-      setIsRecordModalOpen(true);
+      setEditingRecord(null); // Paciente novo ou sem pendências: abre um registro limpo
     }
+
+    // Fecha o modal de busca e abre o modal de novo registro
+    // (Verifique se os nomes dos seus setters são exatamente estes, senão adapte para os seus)
+    if (typeof setSelectedPatient === 'function') setSelectedPatient(patient);
+    if (typeof setIsRecordModalOpen === 'function') setIsRecordModalOpen(true);
+    if (typeof setIsSearchModalOpen === 'function') setIsSearchModalOpen(false);
   };
 
   const handleEditPatient = (patient) => {
@@ -539,69 +539,96 @@ const getPatientNameById = (patientId) => {
         : [],
     [patients, debouncedSearchTerm]
   );
-
   const patientRecords = useMemo(() => {
-    const targetId = selectedPatient?._id || selectedPatient?.id;
-    if (!targetId || !Array.isArray(records)) return [];
-    return records
-      .filter((r) => {
-        const pId =
-          typeof r.patientId === 'object' ? r.patientId._id : r.patientId;
-        return pId === targetId;
-      })
-      .sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate));
-  }, [records, selectedPatient]);
+    // Se não tiver registros carregados ou paciente selecionado, retorna vazio
+    if (!records || !selectedPatient) return [];
 
-const recordsWithPatientNames = useMemo(() => {
+    const targetId = String(
+      selectedPatient._id || selectedPatient.id || ''
+    ).trim();
+    const targetName = String(selectedPatient.name || '')
+      .trim()
+      .toLowerCase();
 
-  if (!records) return [];
+    return records.filter((r) => {
+      if (!r) return false;
 
-  const patientMap = new Map();
+      // 1. TENTATIVA DIRETA (Verifica os campos padrão)
+      const pId = String(
+        r.patient?._id ||
+          r.patient?.id ||
+          r.patientId ||
+          (typeof r.patient === 'string' ? r.patient : '')
+      ).trim();
+      const pName = String(r.patientName || r.patient?.name || '')
+        .trim()
+        .toLowerCase();
 
-  if (Array.isArray(patients)) {
-    patients.forEach((p) => {
-      const id = String(p?._id || p?.id);
-      if (id) {
-        patientMap.set(id, p?.name || "Desconhecido");
+      if (targetId && pId === targetId) return true;
+      if (targetName && pName === targetName) return true;
+      const recordTextJSON = JSON.stringify(r).toLowerCase();
+      if (
+        targetId &&
+        targetId.length > 5 &&
+        JSON.stringify(r).includes(targetId)
+      ) {
+        return true;
       }
+
+      if (
+        targetName &&
+        targetName.length > 3 &&
+        recordTextJSON.includes(targetName)
+      ) {
+        return true;
+      }
+
+      return false;
     });
-  }
+  }, [records, selectedPatient]);
+  const recordsWithPatientNames = useMemo(() => {
+    if (!records) return [];
 
-  return records.map((r) => {
+    const patientMap = new Map();
 
-    let patientName = "Desconhecido";
-    let patientId = null;
+    if (Array.isArray(patients)) {
+      patients.forEach((p) => {
+        const id = String(p?._id || p?.id);
+        if (id) {
+          patientMap.set(id, p?.name || 'Desconhecido');
+        }
+      });
+    }
 
-    // caso patientId exista
-    if (r?.patientId) {
+    return records.map((r) => {
+      let patientName = 'Desconhecido';
+      let patientId = null;
 
-      if (typeof r.patientId === "object") {
-        patientId = r.patientId?._id || r.patientId?.id;
-        patientName = r.patientId?.name || "Desconhecido";
-      } else {
-        patientId = r.patientId;
+      if (r?.patientId) {
+        if (typeof r.patientId === 'object') {
+          patientId = r.patientId?._id || r.patientId?.id;
+          patientName = r.patientId?.name || 'Desconhecido';
+        } else {
+          patientId = r.patientId;
+        }
       }
 
-    }
+      // busca no mapa
+      if (patientId && patientMap.has(String(patientId))) {
+        patientName = patientMap.get(String(patientId));
+      }
 
-    // busca no mapa
-    if (patientId && patientMap.has(String(patientId))) {
-      patientName = patientMap.get(String(patientId));
-    }
+      // fallback
+      if (r?.patientName) {
+        patientName = r.patientName;
+      }
 
-    // fallback
-    if (r?.patientName) {
-      patientName = r.patientName;
-    }
-
-    return {
-      ...r,
-      patientName
-    };
-
-  });
-
-}, [records, patients]);
+      return {
+        ...r,
+        patientName,
+      };
+    });
+  }, [records, patients]);
   const filteredRecords = useMemo(() => {
     let result = recordsWithPatientNames.sort(
       (a, b) => new Date(b.entryDate) - new Date(a.entryDate)
@@ -645,23 +672,20 @@ const recordsWithPatientNames = useMemo(() => {
       .sort((a, b) => new Date(b.deliveryDate) - new Date(a.deliveryDate));
   }, [records]);
 
-const getMedicationName = (medicationId, meds = []) => {
+  const getMedicationName = (medicationId, meds = []) => {
+    if (!medicationId) return '-';
 
-  if (!medicationId) return "-";
+    const id =
+      typeof medicationId === 'object'
+        ? medicationId._id || medicationId.id
+        : medicationId;
 
-  const id =
-    typeof medicationId === "object"
-      ? medicationId._id || medicationId.id
-      : medicationId;
+    const med = meds.find(
+      (m) => String(m._id) === String(id) || String(m.id) === String(id)
+    );
 
-  const med = meds.find(
-    (m) =>
-      String(m._id) === String(id) ||
-      String(m.id) === String(id)
-  );
-
-  return med?.name || "Desconhecido";
-};
+    return med?.name || 'Desconhecido';
+  };
   const renderCurrentView = () => {
     switch (currentView) {
       // ======================================================================
@@ -1103,7 +1127,7 @@ const getMedicationName = (medicationId, meds = []) => {
                                 {med.nome || med.name}
                               </span>
                               <span className="font-black text-blue-600 bg-blue-100/50 px-2 py-1 rounded text-xs">
-                                {med.quantidade || med.quantity} 
+                                {med.quantidade || med.quantity}
                               </span>
                             </li>
                           ))
@@ -1571,7 +1595,7 @@ const getMedicationName = (medicationId, meds = []) => {
           </div>
         );
 
-     case 'historico':
+      case 'historico':
         return (
           <div className="flex flex-col h-full w-full min-h-0 animate-in fade-in duration-300">
             {/* CABEÇALHO E FILTROS */}
@@ -1582,7 +1606,8 @@ const getMedicationName = (medicationId, meds = []) => {
                   {/* Indicador de Sincronização em Tempo Real (Requer variável isBackgroundSyncing no seu state) */}
                   {isBackgroundSyncing && (
                     <span className="flex items-center gap-1 text-[10px] font-bold tracking-widest uppercase bg-indigo-50 text-indigo-500 px-2 py-1 rounded-md animate-pulse border border-indigo-100">
-                      <FiRefreshCw className="animate-spin" size={10} /> Sincronizando
+                      <FiRefreshCw className="animate-spin" size={10} />{' '}
+                      Sincronizando
                     </span>
                   )}
                 </h2>
@@ -1604,19 +1629,21 @@ const getMedicationName = (medicationId, meds = []) => {
                 </div>
 
                 <div className="flex bg-slate-100 p-1 rounded-xl w-full sm:w-auto shadow-inner border border-slate-200/50 overflow-x-auto custom-scrollbar">
-                  {['Todos', 'Pendente', 'Atendido', 'Cancelado'].map((status) => (
-                    <button
-                      key={status}
-                      onClick={() => setStatusFilter(status)}
-                      className={`flex-1 sm:flex-none px-5 py-2 text-xs font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer whitespace-nowrap ${
-                        statusFilter === status 
-                          ? 'bg-white text-indigo-700 shadow-sm border border-slate-200' 
-                          : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
-                      }`}
-                    >
-                      {status}
-                    </button>
-                  ))}
+                  {['Todos', 'Pendente', 'Atendido', 'Cancelado'].map(
+                    (status) => (
+                      <button
+                        key={status}
+                        onClick={() => setStatusFilter(status)}
+                        className={`flex-1 sm:flex-none px-5 py-2 text-xs font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                          statusFilter === status
+                            ? 'bg-white text-indigo-700 shadow-sm border border-slate-200'
+                            : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
+                        }`}
+                      >
+                        {status}
+                      </button>
+                    )
+                  )}
                 </div>
 
                 <button
@@ -1652,33 +1679,46 @@ const getMedicationName = (medicationId, meds = []) => {
                             {record.patientName}
                           </div>
                         </td>
-                        
+
                         <td className="py-4 px-4">
                           <div className="font-bold text-slate-700">
-                            {new Date(record.entryDate).toLocaleDateString('pt-BR')}
+                            {new Date(record.entryDate).toLocaleDateString(
+                              'pt-BR'
+                            )}
                           </div>
                           <div className="text-xs text-slate-400 font-medium mt-0.5 flex items-center gap-1">
                             <FiClock size={10} />
-                            {new Date(record.entryDate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                            {new Date(record.entryDate).toLocaleTimeString(
+                              'pt-BR',
+                              { hour: '2-digit', minute: '2-digit' }
+                            )}
                           </div>
                         </td>
 
                         <td className="py-4 px-4">
                           <div className="flex flex-wrap gap-2">
-                            {Array.isArray(record.medications) && record.medications.length > 0 ? (
+                            {Array.isArray(record.medications) &&
+                            record.medications.length > 0 ? (
                               record.medications.map((m, i) => (
                                 <span
                                   key={i}
                                   className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-slate-200 text-slate-700 text-[11px] font-bold rounded-lg shadow-sm"
                                 >
-                                  {m.name || getMedicationName(m.medicationId, medications)}
+                                  {m.name ||
+                                    getMedicationName(
+                                      m.medicationId,
+                                      medications
+                                    )}
                                   <span className="text-indigo-600 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded font-black tracking-widest uppercase text-[9px]">
-                                    {m.dosage || `${m.quantity} ${m.unit || 'UN'}`}
+                                    {m.dosage ||
+                                      `${m.quantity} ${m.unit || 'UN'}`}
                                   </span>
                                 </span>
                               ))
                             ) : (
-                              <span className="text-slate-400 italic text-xs font-medium">Nenhuma informada</span>
+                              <span className="text-slate-400 italic text-xs font-medium">
+                                Nenhuma informada
+                              </span>
                             )}
                           </div>
                         </td>
@@ -1689,17 +1729,22 @@ const getMedicationName = (medicationId, meds = []) => {
 
                         <td className="py-4 px-6 text-right">
                           <div className="flex items-center justify-end gap-2 opacity-100 sm:opacity-50 sm:group-hover:opacity-100 transition-opacity">
-                            
                             {record.status === 'Pendente' && (
                               <>
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); setAttendingRecord(record); }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setAttendingRecord(record);
+                                  }}
                                   className="text-white bg-emerald-500 hover:bg-emerald-600 shadow-sm shadow-emerald-200 px-4 py-2 rounded-xl text-xs font-black tracking-wide transition-all cursor-pointer active:scale-95 flex items-center gap-1"
                                 >
                                   ATENDER
                                 </button>
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); setCancelingRecord(record); }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setCancelingRecord(record);
+                                  }}
                                   className="text-red-500 hover:bg-red-50 hover:text-red-600 p-2 rounded-xl transition-all cursor-pointer border border-transparent hover:border-red-100"
                                   title="Cancelar"
                                 >
@@ -1709,7 +1754,10 @@ const getMedicationName = (medicationId, meds = []) => {
                             )}
 
                             <button
-                              onClick={(e) => { e.stopPropagation(); handleEditRecordClick(record); }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditRecordClick(record);
+                              }}
                               className="text-slate-400 hover:text-indigo-600 p-2 rounded-xl hover:bg-indigo-50 transition-all cursor-pointer"
                               title="Editar"
                             >
@@ -1726,7 +1774,9 @@ const getMedicationName = (medicationId, meds = []) => {
                                     message: `Deseja realmente excluir o registro de ${record.patientName}? Ação irreversível.`,
                                     onConfirm: () => {
                                       closeConfirmation();
-                                      handleDeleteRecord(record._id || record.id);
+                                      handleDeleteRecord(
+                                        record._id || record.id
+                                      );
                                     },
                                     isDestructive: true,
                                     confirmText: 'Excluir Definitivamente',
@@ -1750,9 +1800,12 @@ const getMedicationName = (medicationId, meds = []) => {
                     <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-4 border border-slate-100">
                       <FiSearch size={32} className="text-slate-300" />
                     </div>
-                    <p className="text-xl font-black text-slate-700 tracking-tight">Nenhum registro encontrado</p>
+                    <p className="text-xl font-black text-slate-700 tracking-tight">
+                      Nenhum registro encontrado
+                    </p>
                     <p className="text-sm font-medium mt-1 text-slate-500">
-                      A sua busca ou filtro não retornou nenhum paciente para esta lista.
+                      A sua busca ou filtro não retornou nenhum paciente para
+                      esta lista.
                     </p>
                   </div>
                 )}
@@ -1763,7 +1816,14 @@ const getMedicationName = (medicationId, meds = []) => {
             {filteredRecords.length > 0 && (
               <div className="flex justify-between items-center mt-4 pt-3 border-t border-slate-200 shrink-0">
                 <p className="text-sm font-bold text-slate-500">
-                  Mostrando página <span className="text-slate-800 font-black">{currentPage}</span> de <span className="text-slate-800 font-black">{totalPages}</span>
+                  Mostrando página{' '}
+                  <span className="text-slate-800 font-black">
+                    {currentPage}
+                  </span>{' '}
+                  de{' '}
+                  <span className="text-slate-800 font-black">
+                    {totalPages}
+                  </span>
                 </p>
                 <div className="flex gap-2">
                   <button
