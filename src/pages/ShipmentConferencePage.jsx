@@ -92,7 +92,7 @@ export default function ShipmentConferencePage({ onGlobalUpdate }) {
       const isFalta =
         med.unitPrice === -1 || med.status?.toLowerCase() === 'falta';
       const isPendente =
-        !isFalta && (!med.unitPrice || parseFloat(med.unitPrice) === 0);
+        !isFalta && (!med.unitPrice || parseFloat(med.unitPrice) === false);
       return !isFalta && !isPendente;
     });
   };
@@ -105,7 +105,7 @@ export default function ShipmentConferencePage({ onGlobalUpdate }) {
         const isFalta =
           med.unitPrice === -1 || med.status?.toLowerCase() === 'falta';
         const isPendente =
-          !isFalta && (!med.unitPrice || parseFloat(med.unitPrice) === 0);
+          !isFalta && (!med.unitPrice || parseFloat(med.unitPrice) === false);
         const isParcial = med.status?.toLowerCase() === 'parcial';
 
         if (isFalta || isPendente || isParcial) {
@@ -124,7 +124,6 @@ export default function ShipmentConferencePage({ onGlobalUpdate }) {
 
   const fetchShipments = async () => {
     try {
-      // Adicionamos um timestamp para forçar o navegador a não usar Cache antigo
       const res = await api
         .get(`/shipments/history?t=${new Date().getTime()}`)
         .catch(() => shipmentService.getHistory());
@@ -165,15 +164,12 @@ export default function ShipmentConferencePage({ onGlobalUpdate }) {
           const isFalta =
             med.unitPrice === -1 || med.status?.toLowerCase() === 'falta';
           const isPendente =
-            !isFalta && (!med.unitPrice || parseFloat(med.unitPrice) === 0);
+            !isFalta && (!med.unitPrice || parseFloat(med.unitPrice) === false);
 
           if (isFalta || isPendente) {
             initial[key] = 0;
           } else {
-            initial[key] =
-              med.receivedQuantity !== undefined
-                ? med.receivedQuantity
-                : med.quantity || 0;
+            initial[key] = med.quantity || 0;
           }
         });
       });
@@ -221,84 +217,127 @@ export default function ShipmentConferencePage({ onGlobalUpdate }) {
   };
 
   // =========================================================================
-  // ⚡ A MÁGICA: ATUALIZAÇÃO OTIMISTA (SEM PRECISAR DE F5)
+  // ⚡ A MÁGICA: ATUALIZAÇÃO OTIMISTA INTELIGENTE E ANTI-DUPLICAÇÃO
   // =========================================================================
+
   const executeReceive = async (shipment) => {
     const loadingToast = toast.loading('A guardar conferência no sistema...');
 
     try {
+      let temAlgumParcial = false;
+
       const payloadItems = shipment.items.map((item) => ({
         _id: item._id,
         patientName: item.patientName,
         medications: item.medications.map((med) => {
           const key = `${item._id}-${med._id}`;
+
           const isFalta =
             med.unitPrice === -1 || med.status?.toLowerCase() === 'falta';
           const isPendente =
             !isFalta && (!med.unitPrice || parseFloat(med.unitPrice) === 0);
 
+          // Verifica se o item JÁ FOI recebido numa conferência anterior
+          const isAlreadyConcluido =
+            med.status === 'concluido' || med.status === 'enviado';
+
+          const originalQty = Number(med.quantity) || 0;
           let finalQty = 0;
-          if (isFalta || isPendente) {
+          let finalStatus = med.status;
+
+          if (isAlreadyConcluido) {
             finalQty = 0;
+            finalStatus = med.status;
+          } else if (isFalta || isPendente) {
+            finalQty = 0;
+            if (isFalta) finalStatus = 'falta';
           } else {
             finalQty =
               adjustedQuantities[key] !== undefined
-                ? adjustedQuantities[key]
-                : med.quantity || 0;
+                ? Number(adjustedQuantities[key])
+                : originalQty;
+
+            if (finalQty >= originalQty && originalQty > 0) {
+              // 🚀 CORREÇÃO AQUI: Usar 'enviado' em vez de 'concluido'
+              finalStatus = 'enviado';
+            } else if (finalQty > 0 && finalQty < originalQty) {
+              finalStatus = 'parcial';
+              temAlgumParcial = true;
+            } else if (finalQty === 0 && !isFalta && !isPendente) {
+              finalStatus = 'falta';
+            }
           }
 
-          return { ...med, receivedQuantity: finalQty };
+          if (isPendente) temAlgumParcial = true;
+
+          return {
+            ...med,
+            quantity: isFalta ? 0 : originalQty,
+            receivedQuantity: finalQty,
+            status: finalStatus,
+          };
         }),
       }));
 
-      // 1. Manda a API guardar os dados
       await api.put(`/shipments/${shipment._id}/receive`, {
         items: payloadItems,
+        forceClose: !temAlgumParcial,
       });
 
-      // 2. ATUALIZAÇÃO OTIMISTA: Força a remessa a ficar como 'finalizado' instantaneamente na memória da tela!
       setShipments((prevShipments) =>
-        prevShipments.map((s) =>
-          s._id === shipment._id ? { ...s, status: 'finalizado' } : s
-        )
+        prevShipments.map((s) => {
+          if (s._id === shipment._id) {
+            return {
+              ...s,
+              status: temAlgumParcial ? 'aguardando_conferencia' : 'finalizado',
+              items: payloadItems,
+            };
+          }
+          return s;
+        })
       );
 
-      // 3. Limpa os modais e muda de aba imediatamente, para dar a sensação de velocidade
       setConfirmation({ ...confirmation, isOpen: false });
-      setExpandedId(null);
-      setActiveTab('completed');
 
-      toast.success('Conferência realizada com sucesso!', { id: loadingToast });
+      if (!temAlgumParcial) {
+        setExpandedId(null);
+        setActiveTab('completed');
+      }
 
-      // 4. Dá 1,5 segundos para o Banco de Dados terminar de calcular o stock no fundo
-      // E só então manda o App.jsx e a página atualizar os dados verdadeiros silenciosamente
+      toast.success(
+        temAlgumParcial
+          ? 'Itens recebidos! A remessa continua aberta.'
+          : 'Conferência total realizada!',
+        { id: loadingToast }
+      );
+
       setTimeout(() => {
-        fetchShipments(); // Atualiza a página atual em silêncio
-        if (typeof onGlobalUpdate === 'function') {
-          onGlobalUpdate(); // Atualiza o App.jsx inteiro em silêncio
-        }
+        fetchShipments();
+        if (typeof onGlobalUpdate === 'function') onGlobalUpdate();
       }, 1500);
     } catch (error) {
-      toast.error('Erro ao registrar conferência.', { id: loadingToast });
+      toast.error('Erro ao registar conferência.', { id: loadingToast });
       setConfirmation({ ...confirmation, isOpen: false });
     }
   };
-
-// --- FILTRO BLINDADO DE REMESSAS ---
+  // --- FILTRO BLINDADO DE REMESSAS ---
   const filteredShipments = shipments.filter((s) => {
-    // 1. Força o status para minúsculo para evitar bugs de digitação do banco de dados
     const status = String(s.status || '').toLowerCase();
-    
-    // 2. Agrupa tudo que significa "Aberto" na aba incoming
+
     const isTabMatch =
       activeTab === 'incoming'
-        ? ['aguardando_conferencia', 'parcial', 'pendente', 'aguardando'].includes(status)
+        ? [
+            'aguardando_conferencia',
+            'parcial',
+            'pendente',
+            'aguardando',
+          ].includes(status)
         : ['finalizado', 'concluido', 'entregue', 'recebido'].includes(status);
 
     const matchesSearch =
       (s.supplier || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (s.code || '').toLowerCase().includes(searchTerm.toLowerCase());
-      
+
     return isTabMatch && matchesSearch;
   });
   return (
@@ -613,204 +652,277 @@ export default function ShipmentConferencePage({ onGlobalUpdate }) {
                                       : 'border-slate-200 shadow-md hover:border-emerald-400'
                                 }`}
                               >
-                                <div
-                                  className={`px-5 py-4 flex items-center justify-between transition-colors ${
-                                    !hasPhysicalDelivery
-                                      ? 'bg-amber-50'
-                                      : isChecked
-                                        ? 'bg-emerald-50'
-                                        : 'bg-white hover:bg-slate-50'
-                                  }`}
-                                  onClick={() =>
+                                {(() => {
+                                  // 🚀 1. LÓGICA DE BLOQUEIO: Verifica se todos os remédios do paciente já estão resolvidos
+                                  const isPatientLocked =
                                     activeTab === 'incoming' &&
-                                    toggleBagCheck(
-                                      item._id,
-                                      hasPhysicalDelivery
-                                    )
-                                  }
-                                  style={{
-                                    cursor:
-                                      hasPhysicalDelivery &&
-                                      activeTab === 'incoming'
-                                        ? 'pointer'
-                                        : 'default',
-                                  }}
-                                >
-                                  <div className="flex items-center gap-4">
-                                    {activeTab === 'incoming' &&
-                                      (hasPhysicalDelivery ? (
-                                        <div
-                                          className={`w-6 h-6 rounded-lg flex items-center justify-center border-2 transition-all shadow-sm ${
-                                            isChecked
-                                              ? 'bg-emerald-500 border-emerald-500 text-white'
-                                              : 'bg-white border-slate-300 text-transparent'
-                                          }`}
-                                        >
-                                          <FiCheck
-                                            size={16}
-                                            className="stroke-[3px]"
-                                          />
-                                        </div>
-                                      ) : (
-                                        <div className="w-6 h-6 flex items-center justify-center text-amber-500">
-                                          <FiClock size={20} />
-                                        </div>
-                                      ))}
-                                    <h4
-                                      className={`font-black text-base md:text-lg ${
-                                        !hasPhysicalDelivery
-                                          ? 'text-amber-900'
-                                          : isChecked
-                                            ? 'text-emerald-900'
-                                            : 'text-slate-800'
-                                      }`}
+                                    item.medsToConfer &&
+                                    !item.medsToConfer.some(
+                                      (med) =>
+                                        med.status !== 'concluido' &&
+                                        med.status !== 'enviado' &&
+                                        med.status !== 'falta'
+                                    );
+
+                                  return (
+                                    <div
+                                      className={`transition-all duration-300 ${isPatientLocked ? 'opacity-50 grayscale-[40%] bg-slate-50 pointer-events-none' : ''}`}
                                     >
-                                      {item.patientName}
-                                    </h4>
-                                  </div>
-
-                                  {activeTab === 'incoming' &&
-                                    (!hasPhysicalDelivery ? (
-                                      <span className="text-[10px] font-black text-amber-700 bg-amber-100 border border-amber-200 px-2.5 py-1 rounded-md uppercase tracking-widest flex items-center gap-1 shadow-sm">
-                                        100% PENDENTE
-                                      </span>
-                                    ) : !isChecked ? (
-                                      <span className="text-[10px] font-black text-slate-500 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-md uppercase tracking-widest shadow-sm">
-                                        Aguardar Bipagem
-                                      </span>
-                                    ) : null)}
-                                </div>
-
-                                <div
-                                  className={`px-5 pb-4 overflow-x-auto ${!hasPhysicalDelivery ? 'opacity-80' : ''}`}
-                                >
-                                  <table className="w-full text-left text-sm whitespace-nowrap">
-                                    <thead
-                                      className={`text-[10px] font-black uppercase tracking-widest border-b ${
-                                        !hasPhysicalDelivery
-                                          ? 'text-amber-600/60 border-amber-200'
-                                          : 'text-slate-400 border-slate-100'
-                                      }`}
-                                    >
-                                      <tr>
-                                        <th className="py-3 pl-2">
-                                          Medicamento
-                                        </th>
-                                        <th className="py-3 text-center">
-                                          Status Físico
-                                        </th>
-                                        <th className="py-3 pr-2 text-right">
-                                          Qtd Solicitada / Recebida
-                                        </th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-50">
-                                      {item.medsToConfer.map((med, idx) => {
-                                        const isFalta =
-                                          med.unitPrice === -1 ||
-                                          med.status?.toLowerCase() === 'falta';
-                                        const isPendente =
-                                          !isFalta &&
-                                          (!med.unitPrice ||
-                                            parseFloat(med.unitPrice) === 0);
-                                        const isBloqueado =
-                                          isFalta || isPendente;
-                                        const key = `${item._id}-${med._id}`;
-                                        const currentQty =
-                                          adjustedQuantities[key];
-
-                                        return (
-                                          <tr
-                                            key={idx}
-                                            className={`${isFalta ? 'bg-red-50/30' : isPendente ? 'bg-amber-50/30' : 'hover:bg-slate-50/50 transition-colors'}`}
-                                          >
-                                            <td className="py-3 pl-2">
+                                      <div
+                                        className={`px-5 py-4 flex items-center justify-between transition-colors ${
+                                          isPatientLocked
+                                            ? 'bg-slate-100/50' // Cor cinza se estiver bloqueado
+                                            : !hasPhysicalDelivery
+                                              ? 'bg-amber-50'
+                                              : isChecked
+                                                ? 'bg-emerald-50'
+                                                : 'bg-white hover:bg-slate-50'
+                                        }`}
+                                        onClick={() => {
+                                          // 🚀 2. TRAVA DE CLIQUE: Só permite bipar/clicar se NÃO estiver bloqueado
+                                          if (
+                                            !isPatientLocked &&
+                                            activeTab === 'incoming'
+                                          ) {
+                                            toggleBagCheck(
+                                              item._id,
+                                              hasPhysicalDelivery
+                                            );
+                                          }
+                                        }}
+                                        style={{
+                                          cursor: isPatientLocked
+                                            ? 'not-allowed'
+                                            : hasPhysicalDelivery &&
+                                                activeTab === 'incoming'
+                                              ? 'pointer'
+                                              : 'default',
+                                        }}
+                                      >
+                                        <div className="flex items-center gap-4">
+                                          {activeTab === 'incoming' &&
+                                            (hasPhysicalDelivery ? (
                                               <div
-                                                className={`font-bold text-base ${isFalta ? 'text-red-500 line-through' : isPendente ? 'text-amber-700' : 'text-slate-700'}`}
-                                              >
-                                                {med.name}
-                                              </div>
-                                              {med.observation && (
-                                                <div className="text-xs font-medium text-slate-500 mt-0.5">
-                                                  <FiInfo className="inline mr-1" />{' '}
-                                                  {med.observation}
-                                                </div>
-                                              )}
-                                            </td>
-
-                                            <td className="py-3 text-center">
-                                              {isFalta ? (
-                                                <span className="bg-white border border-red-200 text-red-600 px-3 py-1 rounded-lg text-[10px] font-black uppercase shadow-sm">
-                                                  Falta Declarada
-                                                </span>
-                                              ) : isPendente ? (
-                                                <span className="bg-white border border-amber-200 text-amber-600 px-3 py-1 rounded-lg text-[10px] font-black uppercase shadow-sm">
-                                                  Pendente Fornecedor
-                                                </span>
-                                              ) : (
-                                                <span className="bg-white border border-emerald-200 text-emerald-600 px-3 py-1 rounded-lg text-[10px] font-black uppercase shadow-sm">
-                                                  Recebido (Caixa)
-                                                </span>
-                                              )}
-                                            </td>
-
-                                            <td className="py-3 pr-2 text-right flex items-center justify-end gap-3">
-                                              <span className="text-slate-500 font-bold text-[11px] uppercase tracking-wider bg-slate-100 border border-slate-200 px-2 py-1 rounded-md shadow-sm">
-                                                Sol: {med.quantity}{' '}
-                                                {getSmartUnitDisplay(
-                                                  med.quantity,
-                                                  med.unit
-                                                )}
-                                              </span>
-
-                                              <input
-                                                type="number"
-                                                min="0"
-                                                disabled={
-                                                  isBloqueado ||
-                                                  activeTab === 'completed'
-                                                }
-                                                value={
-                                                  currentQty !== undefined
-                                                    ? currentQty
-                                                    : ''
-                                                }
-                                                onChange={(e) =>
-                                                  handleQtyChange(
-                                                    item._id,
-                                                    med._id,
-                                                    isBloqueado,
-                                                    e.target.value
-                                                  )
-                                                }
-                                                className={`w-16 text-center font-black rounded-lg py-1.5 border outline-none transition-all shadow-inner ${
-                                                  isFalta
-                                                    ? 'bg-red-50 text-red-300 border-red-100 cursor-not-allowed'
-                                                    : isPendente
-                                                      ? 'bg-amber-50 text-amber-300 border-amber-100 cursor-not-allowed'
-                                                      : activeTab ===
-                                                          'completed'
-                                                        ? 'bg-slate-50 text-slate-600 border-slate-200 cursor-default'
-                                                        : currentQty <
-                                                            med.quantity
-                                                          ? 'bg-amber-50 text-amber-700 border-amber-300 focus:ring-2 focus:ring-amber-500/20'
-                                                          : 'bg-white text-emerald-700 border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20'
+                                                className={`w-6 h-6 rounded-lg flex items-center justify-center border-2 transition-all shadow-sm ${
+                                                  isPatientLocked || isChecked
+                                                    ? 'bg-emerald-500 border-emerald-500 text-white'
+                                                    : 'bg-white border-slate-300 text-transparent'
                                                 }`}
-                                              />
+                                              >
+                                                <FiCheck
+                                                  size={16}
+                                                  className="stroke-[3px]"
+                                                />
+                                              </div>
+                                            ) : (
+                                              <div className="w-6 h-6 flex items-center justify-center text-amber-500">
+                                                <FiClock size={20} />
+                                              </div>
+                                            ))}
+                                          <h4
+                                            className={`font-black text-base md:text-lg ${
+                                              isPatientLocked
+                                                ? 'text-slate-500 line-through decoration-slate-300' // Nome riscado se estiver trancado
+                                                : !hasPhysicalDelivery
+                                                  ? 'text-amber-900'
+                                                  : isChecked
+                                                    ? 'text-emerald-900'
+                                                    : 'text-slate-800'
+                                            }`}
+                                          >
+                                            {item.patientName}
+                                          </h4>
+                                        </div>
 
-                                              <span className="text-indigo-600 font-black text-[11px] uppercase tracking-widest w-20 text-left bg-indigo-50 border border-indigo-100 px-2 py-1.5 rounded-md text-center shadow-sm">
-                                                {getSmartUnitDisplay(
-                                                  currentQty,
-                                                  med.unit
-                                                )}
-                                              </span>
-                                            </td>
-                                          </tr>
-                                        );
-                                      })}
-                                    </tbody>
-                                  </table>
-                                </div>
+                                        {activeTab === 'incoming' &&
+                                          (isPatientLocked ? (
+                                            // 🚀 3. NOVO CRACHÁ PARA PACIENTE JÁ CONFERIDO
+                                            <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-md uppercase tracking-widest shadow-sm">
+                                              100% CONFERIDO
+                                            </span>
+                                          ) : !hasPhysicalDelivery ? (
+                                            <span className="text-[10px] font-black text-amber-700 bg-amber-100 border border-amber-200 px-2.5 py-1 rounded-md uppercase tracking-widest shadow-sm">
+                                              100% PENDENTE
+                                            </span>
+                                          ) : !isChecked ? (
+                                            <span className="text-[10px] font-black text-slate-500 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-md uppercase tracking-widest shadow-sm">
+                                              Aguardar Bipagem
+                                            </span>
+                                          ) : null)}
+                                      </div>
+
+                                      <div
+                                        className={`px-5 pb-4 overflow-x-auto ${!hasPhysicalDelivery ? 'opacity-80' : ''}`}
+                                      >
+                                        <table className="w-full text-left text-sm whitespace-nowrap">
+                                          <thead
+                                            className={`text-[10px] font-black uppercase tracking-widest border-b ${
+                                              !hasPhysicalDelivery
+                                                ? 'text-amber-600/60 border-amber-200'
+                                                : 'text-slate-400 border-slate-100'
+                                            }`}
+                                          >
+                                            <tr>
+                                              <th className="py-3 pl-2">
+                                                Medicamento
+                                              </th>
+                                              <th className="py-3 text-center">
+                                                Status Físico
+                                              </th>
+                                              <th className="py-3 pr-2 text-right">
+                                                Qtd Solicitada / Recebida
+                                              </th>
+                                            </tr>
+                                          </thead>
+                                          <tbody className="divide-y divide-slate-50">
+                                            {item.medsToConfer.map(
+                                              (med, idx) => {
+                                                const isFalta =
+                                                  med.unitPrice === -1 ||
+                                                  med.status?.toLowerCase() ===
+                                                    'falta';
+                                                const isPendente =
+                                                  !isFalta &&
+                                                  (!med.unitPrice ||
+                                                    parseFloat(
+                                                      med.unitPrice
+                                                    ) === 0);
+                                                const isBloqueado =
+                                                  isFalta || isPendente;
+                                                const key = `${item._id}-${med._id}`;
+                                                const currentQty =
+                                                  adjustedQuantities[key];
+
+                                                return (
+                                                  <tr
+                                                    key={idx}
+                                                    className={`${isFalta ? 'bg-red-50/30' : isPendente ? 'bg-amber-50/30' : 'hover:bg-slate-50/50 transition-colors'}`}
+                                                  >
+                                                    <td className="py-3 pl-2">
+                                                      <div
+                                                        className={`font-bold text-base ${isFalta ? 'text-red-500 line-through' : isPendente ? 'text-amber-700' : 'text-slate-700'}`}
+                                                      >
+                                                        {med.name}
+                                                      </div>
+                                                      {med.observation && (
+                                                        <div className="text-xs font-medium text-slate-500 mt-0.5">
+                                                          <FiInfo className="inline mr-1" />{' '}
+                                                          {med.observation}
+                                                        </div>
+                                                      )}
+                                                    </td>
+
+                                                    <td className="py-3 text-center">
+                                                      {isFalta ? (
+                                                        <span className="bg-white border border-red-200 text-red-600 px-3 py-1 rounded-lg text-[10px] font-black uppercase shadow-sm">
+                                                          Falta Declarada
+                                                        </span>
+                                                      ) : isPendente ? (
+                                                        <span className="bg-white border border-amber-200 text-amber-600 px-3 py-1 rounded-lg text-[10px] font-black uppercase shadow-sm">
+                                                          Pendente Fornecedor
+                                                        </span>
+                                                      ) : (
+                                                        <span className="bg-white border border-emerald-200 text-emerald-600 px-3 py-1 rounded-lg text-[10px] font-black uppercase shadow-sm">
+                                                          Recebido (Caixa)
+                                                        </span>
+                                                      )}
+                                                    </td>
+
+                                                    <td className="py-3 pr-2 text-right flex items-center justify-end gap-3">
+                                                      <span className="text-slate-500 font-bold text-[11px] uppercase tracking-wider bg-slate-100 border border-slate-200 px-2 py-1 rounded-md shadow-sm">
+                                                        Sol: {med.quantity}{' '}
+                                                        {med.unit
+                                                          ? String(
+                                                              med.unit
+                                                            ).toUpperCase()
+                                                          : 'UN'}
+                                                      </span>
+
+                                                      {/* 🚀 LÓGICA DE BLOQUEIO VISUAL DO INPUT */}
+                                                      {(() => {
+                                                        const isAlreadyConcluido =
+                                                          med.status ===
+                                                            'concluido' ||
+                                                          med.status ===
+                                                            'enviado';
+                                                        const key = `${item._id}-${med._id}`;
+
+                                                        if (
+                                                          isAlreadyConcluido &&
+                                                          activeTab ===
+                                                            'incoming'
+                                                        ) {
+                                                          return (
+                                                            <div className="bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg flex items-center gap-2">
+                                                              <FiCheckCircle
+                                                                className="text-emerald-500"
+                                                                size={14}
+                                                              />
+                                                              <span className="text-emerald-700 text-xs font-bold whitespace-nowrap">
+                                                                Já conferido
+                                                              </span>
+                                                            </div>
+                                                          );
+                                                        }
+
+                                                        return (
+                                                          <input
+                                                            type="number"
+                                                            min="0"
+                                                            disabled={
+                                                              isBloqueado ||
+                                                              activeTab ===
+                                                                'completed'
+                                                            }
+                                                            value={
+                                                              adjustedQuantities[
+                                                                key
+                                                              ] !== undefined
+                                                                ? adjustedQuantities[
+                                                                    key
+                                                                  ]
+                                                                : med.quantity ||
+                                                                  0
+                                                            }
+                                                            onChange={(e) =>
+                                                              handleQtyChange(
+                                                                item._id,
+                                                                med._id,
+                                                                isBloqueado,
+                                                                e.target.value
+                                                              )
+                                                            }
+                                                            className={`w-20 text-center font-black text-lg py-1.5 rounded-xl border-2 transition-all outline-none ${
+                                                              isBloqueado
+                                                                ? 'bg-slate-100 border-slate-200 text-slate-400 opacity-60'
+                                                                : activeTab ===
+                                                                    'completed'
+                                                                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                                                                  : adjustedQuantities[
+                                                                        key
+                                                                      ] !==
+                                                                        undefined &&
+                                                                      adjustedQuantities[
+                                                                        key
+                                                                      ] !==
+                                                                        med.quantity
+                                                                    ? 'bg-amber-50 border-amber-400 text-amber-700 shadow-inner'
+                                                                    : 'bg-white border-slate-300 text-slate-700 hover:border-emerald-400 focus:border-emerald-500 shadow-sm'
+                                                            }`}
+                                                          />
+                                                        );
+                                                      })()}
+                                                    </td>
+                                                  </tr>
+                                                );
+                                              }
+                                            )}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
                               </div>
                             );
                           })}
@@ -820,30 +932,61 @@ export default function ShipmentConferencePage({ onGlobalUpdate }) {
                     {/* BOTÃO FINALIZAR (STICKY E DESTACADO) */}
                     {activeTab === 'incoming' && confItems.length > 0 && (
                       <div className="mt-6 pt-4 border-t border-slate-200 flex justify-end sticky bottom-0 bg-slate-50/80 backdrop-blur-md pb-2 z-20">
-                        <button
-                          onClick={() =>
-                            confirmReceive(
-                              shipment,
-                              confItems,
-                              validItemsForCheck
+                        {/* 🚀 VERIFICA SE AINDA HÁ ALGO PARA BIPAR NESSA REMESSA */}
+                        {(() => {
+                          const temAlgoParaBipar = confItems.some((patient) =>
+                            patient.medsToConfer.some(
+                              (med) =>
+                                med.status !== 'concluido' &&
+                                med.status !== 'enviado' &&
+                                med.status !== 'falta'
                             )
+                          );
+
+                          // Se não tem nada para bipar, bloqueia o botão para não dar Erro 500!
+                          if (!temAlgoParaBipar) {
+                            return (
+                              <div className="w-full p-4 bg-slate-100 border border-slate-300 rounded-xl text-center flex items-center justify-center gap-3">
+                                <FiCheckCircle
+                                  size={20}
+                                  className="text-emerald-500"
+                                />
+                                <p className="text-slate-600 font-bold">
+                                  Todos os itens pendentes já foram processados.
+                                  Esta remessa pode ser encerrada.
+                                </p>
+                              </div>
+                            );
                           }
-                          className={`px-8 py-3.5 rounded-xl font-black text-sm transition-all shadow-lg flex items-center gap-3 cursor-pointer active:scale-95 ${
-                            isAllChecked
-                              ? 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-emerald-500/30'
-                              : 'bg-slate-800 text-white hover:bg-slate-900 shadow-slate-800/20'
-                          }`}
-                        >
-                          {isAllChecked ? (
-                            <FiCheckCircle size={20} />
-                          ) : (
-                            <FiAlertTriangle
-                              size={20}
-                              className="text-amber-400"
-                            />
-                          )}
-                          Guardar e Atualizar Stock
-                        </button>
+
+                          // Se ainda há pendências, mostra o botão verde/preto original
+                          return (
+                            <button
+                              onClick={() =>
+                                confirmReceive(
+                                  shipment,
+                                  confItems,
+                                  validItemsForCheck
+                                )
+                              }
+                              className={`px-8 py-3.5 rounded-xl font-black text-sm transition-all shadow-lg flex items-center gap-3 cursor-pointer active:scale-95 ${
+                                isAllChecked
+                                  ? 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-emerald-500/30'
+                                  : 'bg-slate-800 text-white hover:bg-slate-900 shadow-slate-800/20'
+                              }`}
+                            >
+                              {isAllChecked ? (
+                                <FiCheckCircle size={20} />
+                              ) : (
+                                <FiAlertTriangle
+                                  size={20}
+                                  className="text-amber-400"
+                                />
+                              )}
+                              Guardar e Atualizar Stock
+                            </button>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>

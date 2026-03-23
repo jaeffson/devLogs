@@ -628,117 +628,76 @@ export function GeneralReportView({
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
-            {currentRecordsForReport.length > 0 ? (
-              currentRecordsForReport.map((record) => {
-                const patientName = resolvePatientName(record);
-                const farmaciaName = getFarmaciaName(record, distributors);
-                const deliveryDateFormatted = record.deliveryDate
-                  ? formatSafeDate(record.deliveryDate, false)
-                  : '-';
+       <tbody className="divide-y divide-gray-100">
+  {/* Remova qualquer .filter() que estivesse aqui antes do .map! O secretário precisa ver TUDO */}
+  {(selectedShipment?.items || selectedShipment?.medications || []).map((item, index) => {
+    
+    // 1. Captura as quantidades (Adapte os nomes das variáveis se o seu backend usar nomes diferentes)
+    const requested = item.requestedQuantity || item.quantity || 0;
+    const sent = item.sentQuantity || item.deliveredQuantity || item.enviado || 0;
+    
+    // 2. Inteligência para definir o Status e a Cor da Badge do Item automaticamente
+    let itemStatus = 'Pendente';
+    let badgeColor = 'bg-amber-100 text-amber-800 border-amber-200'; // Amarelo
+    
+    // Lógica Sênior: Se enviou tudo que pediu
+    if (sent >= requested && requested > 0) {
+      itemStatus = 'Enviado';
+      badgeColor = 'bg-emerald-100 text-emerald-800 border-emerald-200'; // Verde
+    } 
+    // Lógica Sênior: Se enviou algo, mas menos do que o pedido (Parcial)
+    else if (sent > 0 && sent < requested) {
+      itemStatus = 'Enviado Parcial';
+      badgeColor = 'bg-indigo-100 text-indigo-800 border-indigo-200'; // Azul/Indigo
+    } 
+    // Lógica Sênior: Se o sistema ou o farmacêutico marcou explicitamente como em falta
+    else if (item.status === 'Em Falta' || item.status === 'Falta' || item.outOfStock) {
+      itemStatus = 'Em Falta';
+      badgeColor = 'bg-rose-100 text-rose-800 border-rose-200'; // Vermelho
+    }
 
-                return (
-                  <tr
-                    key={record._id || record.id}
-                    onClick={() => setSelectedRecord(record)}
-                    className="hover:bg-blue-50/40 transition-colors group cursor-pointer"
-                  >
-                    <td className="p-4 text-sm font-bold text-gray-800 align-middle">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center font-bold text-xs group-hover:bg-blue-200 group-hover:text-blue-700 transition-colors">
-                          {patientName.charAt(0)}
-                        </div>
-                        {patientName}
-                      </div>
-                    </td>
-
-                    <td className="p-4 text-sm text-center align-middle text-gray-500 font-medium">
-                      {formatSafeDate(record.entryDate, false)}
-                    </td>
-
-                    {/* COLUNA DATA DE RECEBIMENTO (CORRIGIDA) */}
-                    <td className="p-4 text-sm text-center align-middle bg-blue-50/20">
-                      {record.status === 'Cancelado' ? (
-                        <span className="text-red-400 text-xs font-bold">
-                          CANCELADO
-                        </span>
-                      ) : record.deliveryDate ? (
-                        <span className="text-green-700 font-bold bg-green-50 px-2 py-1 rounded border border-green-100">
-                          {deliveryDateFormatted}
-                        </span>
-                      ) : (
-                        <span className="text-gray-300 text-xs italic">
-                          ---
-                        </span>
-                      )}
-                    </td>
-
-                    <td className="p-4 align-middle">
-                      <div className="flex flex-wrap gap-1.5">
-                        {Array.isArray(record.medications)
-                          ? record.medications.slice(0, 3).map((m, i) => {
-                              const medName =
-                                m.name ||
-                                getMedicationName(m.medicationId, medications);
-                              const medQtd = m.dosage || m.quantity || '';
-                              return (
-                                <span
-                                  key={i}
-                                  className="inline-flex items-center px-2 py-1 rounded-md border border-gray-200 bg-white text-gray-600 text-xs shadow-sm font-medium"
-                                >
-                                  {medName}{' '}
-                                  {medQtd && (
-                                    <b className="ml-1 text-gray-800">
-                                      ({medQtd})
-                                    </b>
-                                  )}
-                                </span>
-                              );
-                            })
-                          : '-'}
-                        {record.medications?.length > 3 && (
-                          <span className="text-xs text-gray-400 italic self-center">
-                            +{record.medications.length - 3} mais...
-                          </span>
-                        )}
-                      </div>
-                    </td>
-
-                    <td className="p-4 text-center align-middle">
-                      <span
-                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide border
-                            ${
-                              farmaciaName.includes('Campina')
-                                ? 'bg-indigo-50 text-indigo-700 border-indigo-100'
-                                : farmaciaName.includes('João')
-                                  ? 'bg-teal-50 text-teal-700 border-teal-100'
-                                  : 'bg-gray-100 text-gray-600 border-gray-200'
-                            }`}
-                      >
-                        {farmaciaName}
-                      </span>
-                    </td>
-
-                    <td className="p-4 text-center align-middle">
-                      <StatusBadge status={record.status} />
-                    </td>
-                  </tr>
-                );
-              })
-            ) : (
-              <tr>
-                <td
-                  colSpan="6"
-                  className="py-20 text-center text-gray-400 text-sm"
-                >
-                  <div className="flex flex-col items-center gap-2">
-                    <FiPackage size={40} className="text-gray-200" />
-                    Nenhum registro encontrado para os filtros selecionados.
-                  </div>
-                </td>
-              </tr>
-            )}
-          </tbody>
+    return (
+      <tr key={item._id || index} className="hover:bg-gray-50/80 transition-colors">
+        {/* NOME DO MEDICAMENTO */}
+        <td className="py-4 px-4">
+          <p className="font-bold text-gray-800">
+            {item.medicationName || item.medication?.name || item.name || 'Item não especificado'}
+          </p>
+        </td>
+        
+        {/* QUANTIDADE SOLICITADA NA RECEITA */}
+        <td className="py-4 px-4 text-center">
+          <span className="text-gray-500 font-medium">
+            {requested} un.
+          </span>
+        </td>
+        
+        {/* QUANTIDADE REALMENTE ENVIADA */}
+        <td className="py-4 px-4 text-center">
+          <span className={`font-black ${sent > 0 ? 'text-gray-900' : 'text-gray-300'}`}>
+            {sent} un.
+          </span>
+        </td>
+        
+        {/* BADGE VISUAL DE STATUS DO ITEM */}
+        <td className="py-4 px-4 text-center">
+          <span className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border ${badgeColor}`}>
+            {itemStatus}
+          </span>
+        </td>
+      </tr>
+    );
+  })}
+  
+  {/* Blindagem caso o pedido venha vazio da API */}
+  {!(selectedShipment?.items?.length || selectedShipment?.medications?.length) && (
+    <tr>
+      <td colSpan="4" className="py-8 text-center text-gray-400 font-medium italic">
+        Nenhum medicamento encontrado neste registro.
+      </td>
+    </tr>
+  )}
+</tbody>
         </table>
       </div>
 

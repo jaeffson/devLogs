@@ -15,14 +15,14 @@ export function AttendRecordModal({
   onConfirm,
   onClose,
   getPatientName,
-  medications, 
-  getMedicationName, 
+  medications,
+  getMedicationName,
   isSaving,
 }) {
-  const today = getLocalDateString(); 
-  
-  const recordId = record?._id; 
-  const [deliveryDate, setDeliveryDate] = useState(today); 
+  const today = getLocalDateString();
+
+  const recordId = record?._id;
+  const [deliveryDate, setDeliveryDate] = useState(today);
 
   const patientName =
     typeof getPatientName === 'function'
@@ -30,7 +30,7 @@ export function AttendRecordModal({
       : 'Paciente desconhecido';
 
   const handleConfirmClick = () => {
-    if (!isSaving && recordId && deliveryDate) { 
+    if (!isSaving && recordId && deliveryDate) {
       onConfirm(recordId, deliveryDate);
     } else if (!recordId || !deliveryDate) {
       alert('Erro: ID do registro ausente ou data de entrega inválida.');
@@ -51,10 +51,11 @@ export function AttendRecordModal({
       <div className="mb-6 space-y-4">
         <div className="bg-blue-50 border border-blue-100 rounded-lg p-4">
           <p className="text-sm text-gray-700">
-            <span className="font-semibold text-gray-900">Paciente:</span> {patientName}
+            <span className="font-semibold text-gray-900">Paciente:</span>{' '}
+            {patientName}
           </p>
         </div>
-        
+
         <div>
           <h4 className="font-semibold text-gray-900 mb-3 text-sm">
             Medicações Registradas:
@@ -63,31 +64,41 @@ export function AttendRecordModal({
             <ul className="space-y-2 max-h-40 overflow-y-auto">
               {record.medications.length > 0 ? (
                 record.medications.map((medItem, index) => (
-                  <li key={medItem.recordMedId || index} className="flex items-start gap-2 bg-gray-50 rounded-lg p-3 border border-gray-100 text-sm">
+                  <li
+                    key={medItem.recordMedId || index}
+                    className="flex items-start gap-2 bg-gray-50 rounded-lg p-3 border border-gray-100 text-sm"
+                  >
                     <span className="w-1.5 h-1.5 bg-green-500 rounded-full mt-1.5 flex-shrink-0"></span>
                     <span className="text-gray-800">
                       {/* --- CORREÇÃO: Usa o nome salvo se existir --- */}
-                      {medItem.name || (typeof getMedicationName === 'function' ? getMedicationName(medItem.medicationId, medications) : 'Medicação')}
-                      
+                      {medItem.name ||
+                        (typeof getMedicationName === 'function'
+                          ? getMedicationName(medItem.medicationId, medications)
+                          : 'Medicação')}
+
                       {/* --- CORREÇÃO: Mostra quantidade formatada --- */}
                       <span className="text-gray-500 ml-1 font-semibold">
                         (
-                          {medItem.dosage || 
-                           (medItem.quantity ? `${medItem.quantity} ${medItem.unit || ''}` : '') ||
-                           'Qtd não inf.'}
+                        {medItem.dosage ||
+                          (medItem.quantity
+                            ? `${medItem.quantity} ${medItem.unit || ''}`
+                            : '') ||
+                          'Qtd não inf.'}
                         )
                       </span>
                     </span>
                   </li>
                 ))
               ) : (
-                <li className="text-gray-500 italic text-sm bg-gray-50 rounded-lg p-3 border border-gray-100">Nenhuma medicação registrada.</li>
+                <li className="text-gray-500 italic text-sm bg-gray-50 rounded-lg p-3 border border-gray-100">
+                  Nenhuma medicação registrada.
+                </li>
               )}
             </ul>
           ) : (
             <p className="text-red-600 text-sm font-medium bg-red-50 rounded-lg p-3 border border-red-100">
               Erro: Dados de medicação indisponíveis.
-            </p> 
+            </p>
           )}
         </div>
       </div>
@@ -104,15 +115,14 @@ export function AttendRecordModal({
           value={deliveryDate}
           onChange={(e) => setDeliveryDate(e.target.value)}
           className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm font-medium transition-all bg-white"
-          max={today} 
+          max={today}
           disabled={isSaving}
           required
         />
-        
+
         <p className="text-xs text-gray-500 mt-2">
           ℹ️ Não é permitido selecionar datas futuras.
         </p>
-
       </div>
 
       <div className="flex justify-end gap-3 pt-6 border-t-2 border-gray-100">

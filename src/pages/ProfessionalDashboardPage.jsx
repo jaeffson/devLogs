@@ -261,9 +261,14 @@ export default function ProfessionalDashboardPage({
       return isPending && recordDate < thirtyDaysAgo;
     });
   }, [records]);
-  // ---------------------------------------------------
-
-  // NOVO: Estado para Modal de Nova Remessa
+ // =========================================================================
+  // FUNÇÃO AUXILIAR RECUPERADA (Cola isto antes do return do seu Dashboard!)
+  // =========================================================================
+  const getPatientNameById = (patientId) => {
+        if (!patients || patients.length === 0) return 'Paciente';
+    const patient = patients.find(p => p._id === patientId || p.id === patientId);
+    return patient ? patient.name : 'Paciente';
+  };
   const [isAddShipmentModalOpen, setIsAddShipmentModalOpen] = useState(false);
 
   const [editingPatient, setEditingPatient] = useState(null);

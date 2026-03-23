@@ -998,86 +998,187 @@ export default function ShipmentsPage() {
                   Detalhes dos Itens
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {selectedHistoryShipment.items.map((item, index) => (
-                    <div
-                      key={index}
-                      className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:border-indigo-200 transition-colors"
-                    >
-                      <div className="bg-slate-50 p-4 border-b border-slate-200 flex items-center gap-4">
-                        <div className="w-12 h-12 bg-white text-slate-700 rounded-full flex items-center justify-center font-black text-xl border border-slate-200 shadow-sm">
-                          {item.patientName.charAt(0).toUpperCase()}
+                  {selectedHistoryShipment.items.map((item, index) => {
+                    // 1. Contagem fiel aos status do backend
+                    let totalMeds = 0;
+                    let missingMeds = 0;
+                    let partialMeds = 0;
+                    let sentMeds = 0;
+                    let pendingMeds = 0;
+
+                    item.medications?.forEach((med) => {
+                      totalMeds++;
+                      const isFalta =
+                        med.status === 'falta' || med.unitPrice === -1;
+                      const isParcial = med.status === 'parcial';
+                      const isEnviado =
+                        med.status === 'enviado' ||
+                        parseFloat(med.unitPrice) > 0;
+
+                      if (isFalta) missingMeds++;
+                      else if (isParcial) partialMeds++;
+                      else if (isEnviado) sentMeds++;
+                      else pendingMeds++;
+                    });
+
+                    let cardClasses =
+                      'border-slate-200 hover:border-indigo-200';
+                    let headerClasses = 'bg-slate-50 border-slate-200';
+                    let badge = null;
+
+                    if (missingMeds === totalMeds && totalMeds > 0) {
+                      cardClasses = 'border-red-200 shadow-red-100/50';
+                      headerClasses = 'bg-red-50 border-red-100';
+                      badge = (
+                        <span className="ml-auto text-[10px] font-black uppercase text-red-600 bg-red-100 px-2 py-1 rounded-md border border-red-200">
+                          Falta Total
+                        </span>
+                      );
+                    } else if (
+                      partialMeds > 0 ||
+                      (missingMeds > 0 && sentMeds > 0)
+                    ) {
+                      cardClasses = 'border-amber-300 shadow-amber-100/50';
+                      headerClasses = 'bg-amber-50 border-amber-200';
+                      badge = (
+                        <span className="ml-auto text-[10px] font-black uppercase text-amber-700 bg-amber-100 px-2 py-1 rounded-md border border-amber-300">
+                          Pedido Parcial
+                        </span>
+                      );
+                    } else if (pendingMeds > 0) {
+                      cardClasses = 'border-slate-300 shadow-sm opacity-80';
+                      headerClasses = 'bg-slate-100';
+                      badge = (
+                        <span className="ml-auto text-[10px] font-black uppercase text-slate-500 bg-slate-200 px-2 py-1 rounded-md border border-slate-300">
+                          Pendente
+                        </span>
+                      );
+                    } else {
+                      badge = (
+                        <span className="ml-auto text-[10px] font-black uppercase text-emerald-700 bg-emerald-100 px-2 py-1 rounded-md border border-emerald-200">
+                          Completo
+                        </span>
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={index}
+                        className={`bg-white border rounded-2xl overflow-hidden shadow-sm transition-colors ${cardClasses}`}
+                      >
+                        <div
+                          className={`p-4 border-b flex items-center gap-4 ${headerClasses}`}
+                        >
+                          <div
+                            className={`w-12 h-12 rounded-full flex items-center justify-center font-black text-xl border shadow-sm ${missingMeds === totalMeds ? 'bg-red-100 text-red-700 border-red-200' : partialMeds > 0 ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-white text-slate-700 border-slate-200'}`}
+                          >
+                            {item.patientName.charAt(0).toUpperCase()}
+                          </div>
+                          <h4 className="font-black text-lg text-slate-800">
+                            {item.patientName}
+                          </h4>
+                          {badge}
                         </div>
-                        <h4 className="font-black text-lg text-slate-800">
-                          {item.patientName}
-                        </h4>
-                      </div>
-                      <div className="p-0">
-                        <table className="w-full text-left text-sm">
-                          <tbody className="divide-y divide-slate-100">
-                            {item.medications?.map((med, mIndex) => {
-                              const isMissing =
-                                med.status === 'falta' || med.unitPrice === -1;
-                              const isPriced = parseFloat(med.unitPrice) > 0;
-                              return (
-                                <tr
-                                  key={mIndex}
-                                  className={
-                                    isMissing
-                                      ? 'bg-red-50/50'
-                                      : 'hover:bg-slate-50'
-                                  }
-                                >
-                                  <td className="p-4 py-3">
-                                    <div className="font-bold text-slate-700">
-                                      {med.name}
-                                    </div>
-                                    <div className="text-xs text-slate-500 font-medium">
-                                      {med.quantity} {med.unit}{' '}
-                                      {med.observation
-                                        ? `• ${med.observation}`
-                                        : ''}
-                                    </div>
-                                  </td>
-                                  <td className="p-4 py-3 text-right">
-                                    {isMissing ? (
-                                      <span className="inline-block bg-red-100 text-red-700 px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider border border-red-200">
-                                        Em Falta
-                                      </span>
-                                    ) : isPriced ? (
-                                      <div className="flex flex-col items-end">
-                                        <span className="font-black text-slate-800">
-                                          {(
-                                            parseFloat(med.unitPrice) *
-                                            med.quantity
-                                          ).toLocaleString('pt-BR', {
-                                            style: 'currency',
-                                            currency: 'BRL',
-                                          })}
-                                        </span>
-                                        <span className="text-[10px] text-slate-400 font-bold">
-                                          {parseFloat(
-                                            med.unitPrice
-                                          ).toLocaleString('pt-BR', {
-                                            style: 'currency',
-                                            currency: 'BRL',
-                                          })}
-                                          /un
-                                        </span>
+
+                        <div className="p-0">
+                          <table className="w-full text-left text-sm">
+                            <tbody className="divide-y divide-slate-100">
+                              {item.medications?.map((med, mIndex) => {
+                                // Regras por item
+                                const isFalta =
+                                  med.status === 'falta' ||
+                                  med.unitPrice === -1;
+                                const isParcial = med.status === 'parcial';
+                                const isEnviado =
+                                  med.status === 'enviado' ||
+                                  parseFloat(med.unitPrice) > 0;
+                                const isPendente =
+                                  !isFalta && !isParcial && !isEnviado;
+
+                                let rowClass = 'hover:bg-slate-50';
+                                let statusTag = null;
+
+                                if (isFalta) {
+                                  rowClass = 'bg-red-50/50';
+                                  statusTag = (
+                                    <span className="text-red-600 text-xs font-black uppercase tracking-wider">
+                                      Em Falta
+                                    </span>
+                                  );
+                                } else if (isParcial) {
+                                  rowClass = 'bg-amber-50/50';
+                                  statusTag = (
+                                    <span className="text-amber-600 text-xs font-black uppercase tracking-wider">
+                                      Esperando o envio do fornecedor
+                                    </span>
+                                  );
+                                } else if (isPendente) {
+                                  rowClass = 'bg-slate-50/80';
+                                  statusTag = (
+                                    <span className="text-slate-400 text-xs font-black uppercase tracking-wider">
+                                      Pendente
+                                    </span>
+                                  );
+                                } else {
+                                  statusTag = (
+                                    <span className="text-emerald-600 text-xs font-black uppercase tracking-wider">
+                                      Enviado pelo fornecedor
+                                    </span>
+                                  );
+                                }
+
+                                return (
+                                  <tr key={mIndex} className={rowClass}>
+                                    <td className="p-4 py-3">
+                                      <div
+                                        className={`font-bold ${isPendente ? 'text-slate-500' : 'text-slate-700'}`}
+                                      >
+                                        {med.name}
                                       </div>
-                                    ) : (
-                                      <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                                        -
-                                      </span>
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
+                                      <div className="text-xs text-slate-500 font-medium mt-0.5">
+                                        Qtd: {med.quantity} {med.unit}{' '}
+                                        {med.observation
+                                          ? `• ${med.observation}`
+                                          : ''}
+                                      </div>
+                                    </td>
+                                    <td className="p-4 py-3 text-right">
+                                      <div className="flex flex-col items-end gap-1">
+                                        {statusTag}
+                                        {isEnviado &&
+                                          parseFloat(med.unitPrice) > 0 && (
+                                            <div className="flex flex-col items-end">
+                                              <span className="font-black text-slate-800 text-sm">
+                                                {(
+                                                  parseFloat(med.unitPrice) *
+                                                  med.quantity
+                                                ).toLocaleString('pt-BR', {
+                                                  style: 'currency',
+                                                  currency: 'BRL',
+                                                })}
+                                              </span>
+                                              <span className="text-[10px] text-slate-400 font-bold">
+                                                {parseFloat(
+                                                  med.unitPrice
+                                                ).toLocaleString('pt-BR', {
+                                                  style: 'currency',
+                                                  currency: 'BRL',
+                                                })}
+                                                /un
+                                              </span>
+                                            </div>
+                                          )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>

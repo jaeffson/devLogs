@@ -253,10 +253,10 @@ export default function PublicShipmentView() {
           setSenderName(draftData.senderName || '');
           setReadyBags(draftData.readyBags || {});
           setHasUnsavedChanges(true);
-          setIsLoadedFromOfflineDraft(true); 
+          setIsLoadedFromOfflineDraft(true);
         } else {
-                   if (isFirstLoad) {
-                    setShipment(null);
+          if (isFirstLoad) {
+            setShipment(null);
           }
         }
       } finally {
@@ -569,19 +569,16 @@ export default function PublicShipmentView() {
   // =========================================================================
   // FINALIZAÇÃO E ENVIo
   // =========================================================================
-  
+
   const handleConfirmOrderClick = () => {
-    
     if (!senderName.trim()) {
-      
       toast.error('Por favor, informe seu nome como responsável pelo ENVIO.', {
         icon: '👤',
         style: { borderRadius: '10px', background: '#333', color: '#fff' },
       });
       window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-      
+
       return;
-      
     }
 
     // PROTEÇÃO SÉNIOR: Se não houver internet, bloqueia o envio mas avisa que está tudo seguro

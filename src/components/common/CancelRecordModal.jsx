@@ -6,12 +6,6 @@ import { icons } from '../../utils/icons';
 // NOVO: Importa o ClipLoader para o spinner
 import { ClipLoader } from 'react-spinners'; 
 
-
-// Este modal recebe:
-// - record: O registro que está sendo cancelado
-// - onClose: A função para fechar o modal (ex: setCancelingRecord(null))
-// - onConfirm: A função que chama a API (ex: handleCancelRecordStatus)
-// - getPatientNameById: (Opcional, mas recomendado) A função para mostrar o nome do paciente
 export function CancelRecordModal({
   record,
   onClose,
