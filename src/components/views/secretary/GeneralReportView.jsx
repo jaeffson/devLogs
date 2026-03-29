@@ -628,76 +628,106 @@ export function GeneralReportView({
               </th>
             </tr>
           </thead>
-       <tbody className="divide-y divide-gray-100">
-  {/* Remova qualquer .filter() que estivesse aqui antes do .map! O secretário precisa ver TUDO */}
-  {(selectedShipment?.items || selectedShipment?.medications || []).map((item, index) => {
-    
-    // 1. Captura as quantidades (Adapte os nomes das variáveis se o seu backend usar nomes diferentes)
-    const requested = item.requestedQuantity || item.quantity || 0;
-    const sent = item.sentQuantity || item.deliveredQuantity || item.enviado || 0;
-    
-    // 2. Inteligência para definir o Status e a Cor da Badge do Item automaticamente
-    let itemStatus = 'Pendente';
-    let badgeColor = 'bg-amber-100 text-amber-800 border-amber-200'; // Amarelo
-    
-    // Lógica Sênior: Se enviou tudo que pediu
-    if (sent >= requested && requested > 0) {
-      itemStatus = 'Enviado';
-      badgeColor = 'bg-emerald-100 text-emerald-800 border-emerald-200'; // Verde
-    } 
-    // Lógica Sênior: Se enviou algo, mas menos do que o pedido (Parcial)
-    else if (sent > 0 && sent < requested) {
-      itemStatus = 'Enviado Parcial';
-      badgeColor = 'bg-indigo-100 text-indigo-800 border-indigo-200'; // Azul/Indigo
-    } 
-    // Lógica Sênior: Se o sistema ou o farmacêutico marcou explicitamente como em falta
-    else if (item.status === 'Em Falta' || item.status === 'Falta' || item.outOfStock) {
-      itemStatus = 'Em Falta';
-      badgeColor = 'bg-rose-100 text-rose-800 border-rose-200'; // Vermelho
-    }
+          <tbody className="divide-y divide-gray-100 text-sm">
+            {currentRecordsForReport.length > 0 ? (
+              currentRecordsForReport.map((record) => {
+                // Lógica para verificar se está vencido (mais de 30 dias pendente)
+                const isOverdue =
+                  record.status === 'Pendente' &&
+                  new Date().getTime() - new Date(record.entryDate).getTime() >
+                    30 * MS_IN_DAY;
 
-    return (
-      <tr key={item._id || index} className="hover:bg-gray-50/80 transition-colors">
-        {/* NOME DO MEDICAMENTO */}
-        <td className="py-4 px-4">
-          <p className="font-bold text-gray-800">
-            {item.medicationName || item.medication?.name || item.name || 'Item não especificado'}
-          </p>
-        </td>
-        
-        {/* QUANTIDADE SOLICITADA NA RECEITA */}
-        <td className="py-4 px-4 text-center">
-          <span className="text-gray-500 font-medium">
-            {requested} un.
-          </span>
-        </td>
-        
-        {/* QUANTIDADE REALMENTE ENVIADA */}
-        <td className="py-4 px-4 text-center">
-          <span className={`font-black ${sent > 0 ? 'text-gray-900' : 'text-gray-300'}`}>
-            {sent} un.
-          </span>
-        </td>
-        
-        {/* BADGE VISUAL DE STATUS DO ITEM */}
-        <td className="py-4 px-4 text-center">
-          <span className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border ${badgeColor}`}>
-            {itemStatus}
-          </span>
-        </td>
-      </tr>
-    );
-  })}
-  
-  {/* Blindagem caso o pedido venha vazio da API */}
-  {!(selectedShipment?.items?.length || selectedShipment?.medications?.length) && (
-    <tr>
-      <td colSpan="4" className="py-8 text-center text-gray-400 font-medium italic">
-        Nenhum medicamento encontrado neste registro.
-      </td>
-    </tr>
-  )}
-</tbody>
+                return (
+                  <tr
+                    key={record._id || record.id}
+                    onClick={() => setSelectedRecord(record)}
+                    className="hover:bg-blue-50/50 transition-colors cursor-pointer group"
+                  >
+                    {/* PACIENTE */}
+                    <td className="p-4">
+                      <div className="font-bold text-gray-800">
+                        {resolvePatientName(record)}
+                      </div>
+                      <div className="text-xs text-gray-400 font-mono">
+                        Ref:{' '}
+                        {String(record._id || record.id)
+                          .slice(-6)
+                          .toUpperCase()}
+                      </div>
+                    </td>
+
+                    {/* DATA DE ENTRADA */}
+                    <td className="p-4 text-center font-medium text-gray-600">
+                      {formatSafeDate(record.entryDate, false)}
+                    </td>
+
+                    {/* DATA DE RECEBIMENTO */}
+                    <td className="p-4 text-center font-medium bg-blue-50/30">
+                      {record.status === 'Cancelado' ? (
+                        <span className="text-red-500 font-bold">
+                          Cancelado
+                        </span>
+                      ) : record.deliveryDate ? (
+                        <span className="text-green-600 font-bold">
+                          {formatSafeDate(record.deliveryDate, false)}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </td>
+
+                    {/* MEDICAÇÕES (Mostra as 2 primeiras e um contador para o resto) */}
+                    <td className="p-4">
+                      <div className="flex flex-wrap gap-1">
+                        {record.medications?.slice(0, 2).map((m, i) => (
+                          <span
+                            key={i}
+                            className="inline-flex items-center px-2 py-1 rounded bg-gray-100 text-gray-700 text-[11px] border border-gray-200 font-medium"
+                          >
+                            {m.name ||
+                              getMedicationName(m.medicationId, medications)}
+                          </span>
+                        ))}
+                        {record.medications?.length > 2 && (
+                          <span className="inline-flex items-center px-2 py-1 rounded bg-blue-100 text-blue-700 text-[11px] font-bold border border-blue-200">
+                            +{record.medications.length - 2}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* ORIGEM / FARMÁCIA */}
+                    <td className="p-4 text-center text-gray-600 font-medium">
+                      {getFarmaciaName(record, distributors)}
+                    </td>
+
+                    {/* STATUS */}
+                    <td className="p-4 text-center">
+                      {isOverdue ? (
+                        <span className="px-3 py-1 rounded-full text-[10px] uppercase font-black tracking-wider bg-orange-100 text-orange-800 border border-orange-200">
+                          Vencido
+                        </span>
+                      ) : (
+                        <StatusBadge status={record.status} />
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
+            ) : (
+              <tr>
+                <td
+                  colSpan="6"
+                  className="py-12 text-center text-gray-400 font-medium bg-gray-50/50"
+                >
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <FiInfo size={24} className="text-gray-300" />
+                    Nenhum registro encontrado para estes filtros.
+                  </div>
+                </td>
+              </tr>
+            )}
+          </tbody>
         </table>
       </div>
 
