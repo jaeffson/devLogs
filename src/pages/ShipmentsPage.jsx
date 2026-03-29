@@ -969,12 +969,12 @@ export default function ShipmentsPage({ user }) {
                           title={
                             selectedHistoryShipment.receivedByName ||
                             selectedHistoryShipment.receivedBy?.name ||
-                            'Usuário'
+                            'Sistema'
                           }
                         >
                           {selectedHistoryShipment.receivedByName ||
                             selectedHistoryShipment.receivedBy?.name ||
-                            'Usuário'}
+                            'Sistema'}
                         </span>
                         <span className="text-[11px] font-bold text-emerald-600 mt-1.5 flex items-center gap-1">
                           <FiClock size={10} />{' '}
