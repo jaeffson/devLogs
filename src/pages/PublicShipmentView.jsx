@@ -153,15 +153,30 @@ export default function PublicShipmentView() {
           setFinished(true);
           localStorage.removeItem(DRAFT_KEY);
         } else {
-          const createdAt = new Date(shipmentData.createdAt || new Date());
-          const now = new Date();
-          const diffDays = Math.floor(
-            (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24)
-          );
-          const expired = diffDays >= 7;
-          setIsExpired(expired);
-          setDaysLeft(expired ? 0 : 7 - diffDays);
-          setFinished(expired);
+          const DAY = 24 * 60 * 60 * 1000;
+          const exp = shipmentData.linkExpiresAt
+            ? new Date(shipmentData.linkExpiresAt)
+            : shipmentData.closedAt
+              ? new Date(
+                  new Date(shipmentData.closedAt).getTime() + 7 * DAY
+                )
+              : null;
+          if (exp) {
+            const msLeft = exp.getTime() - Date.now();
+            const expired = msLeft <= 0;
+            setIsExpired(expired);
+            setDaysLeft(
+              expired
+                ? 0
+                : Math.max(1, Math.ceil(msLeft / DAY))
+            );
+            setFinished(expired);
+            if (expired) localStorage.removeItem(DRAFT_KEY);
+          } else {
+            setIsExpired(false);
+            setDaysLeft(7);
+            setFinished(false);
+          }
         }
 
         if (isFirstLoad && shipmentData.observations) {
@@ -239,6 +254,13 @@ export default function PublicShipmentView() {
           }
         }
       } catch (error) {
+        if (error.response?.status === 410) {
+          setIsExpired(true);
+          setFinished(true);
+          setShipment({ supplier: '', items: [] });
+          localStorage.removeItem(DRAFT_KEY);
+          return;
+        }
         // NOVO: FALLBACK OFFLINE SÉNIOR REVISADO
         if ((!navigator.onLine || !error.response) && draftData?.shipment) {
           toast.error(
@@ -649,6 +671,18 @@ export default function PublicShipmentView() {
         'Erro detalhado do Backend:',
         error.response?.data || error.message
       );
+      if (error.response?.status === 410) {
+        setIsExpired(true);
+        setFinished(true);
+        setShipment({ supplier: '', items: [] });
+        localStorage.removeItem(DRAFT_KEY);
+        toast.error(
+          error.response?.data?.message ||
+            'Este link expirou. Solicite um novo link à secretaria.'
+        );
+        closeConfirmation();
+        return;
+      }
       if (!navigator.onLine) {
         toast.error(
           'A ligação falhou durante o envio. Os seus dados estão a salvo, tente novamente.',

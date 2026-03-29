@@ -31,7 +31,41 @@ import CreateShipmentModal from '../components/common/CreateShipmentModal';
 import ShipmentSuccessModal from '../components/common/ShipmentSuccessModal';
 import { generateShipmentPDF } from '../utils/pdfGenerator';
 
-export default function ShipmentsPage() {
+const DAY_MS = 24 * 60 * 60 * 1000;
+const LINK_VALID_DAYS = 7;
+
+function getShipmentLinkExpiry(shipment) {
+  if (!shipment) return null;
+  if (shipment.linkExpiresAt) return new Date(shipment.linkExpiresAt);
+  if (shipment.closedAt)
+    return new Date(
+      new Date(shipment.closedAt).getTime() + LINK_VALID_DAYS * DAY_MS
+    );
+  return null;
+}
+
+function isShipmentLinkExpiredClient(shipment) {
+  const t = shipment?.accessToken;
+  if (!t || String(t).startsWith('usado_')) return true;
+  const exp = getShipmentLinkExpiry(shipment);
+  if (!exp) return false;
+  return Date.now() > exp.getTime();
+}
+
+function canRenewSupplierLink(shipment) {
+  if (
+    !shipment?.accessToken ||
+    String(shipment.accessToken).startsWith('usado_')
+  )
+    return false;
+  return [
+    'aguardando_fornecedor',
+    'aguardando_conferencia',
+    'parcial',
+  ].includes(shipment.status);
+}
+
+export default function ShipmentsPage({ user }) {
   // =========================================================================
   // 📦 ESTADOS GLOBAIS DA TELA
   // =========================================================================
@@ -54,6 +88,10 @@ export default function ShipmentsPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [itemToEdit, setItemToEdit] = useState(null);
   const [successModalData, setSuccessModalData] = useState(null);
+  const [renewingLink, setRenewingLink] = useState(false);
+
+  const canUserRenewLink =
+    user && (user.role === 'admin' || user.role === 'secretario');
 
   // =========================================================================
   // 🌟 FUNÇÕES DE TRATAMENTO DE DADOS
@@ -202,6 +240,35 @@ export default function ShipmentsPage() {
     toast.success('Link copiado!', {
       style: { borderRadius: '10px', background: '#333', color: '#fff' },
     });
+  };
+
+  const handleRenewSupplierLink = async () => {
+    if (!selectedHistoryShipment?._id || !canUserRenewLink) return;
+    setRenewingLink(true);
+    try {
+      const res = await shipmentService.renewLink(
+        selectedHistoryShipment._id
+      );
+      const data = res.data;
+      const updated = data.shipment;
+      if (updated) {
+        setSelectedHistoryShipment(updated);
+        setHistory((prev) =>
+          prev.map((s) => (s._id === updated._id ? updated : s))
+        );
+      }
+      toast.success(
+        data.message ||
+          'Link renovado. O fornecedor deve usar o novo endereço (validade 7 dias).'
+      );
+    } catch (error) {
+      const msg =
+        error.response?.data?.message ||
+        'Não foi possível renovar o link. Tente novamente.';
+      toast.error(msg);
+    } finally {
+      setRenewingLink(false);
+    }
   };
 
   const handleCloseShipment = async () => {
@@ -937,7 +1004,25 @@ export default function ShipmentsPage() {
                   </h2>
                 </div>
 
-                <div className="flex flex-wrap gap-3 w-full xl:w-auto">
+                <div className="flex flex-col gap-3 w-full xl:w-auto">
+                  {selectedHistoryShipment.status !== 'finalizado' &&
+                    canRenewSupplierLink(selectedHistoryShipment) &&
+                    getShipmentLinkExpiry(selectedHistoryShipment) && (
+                      <p
+                        className={`text-xs font-bold w-full ${
+                          isShipmentLinkExpiredClient(selectedHistoryShipment)
+                            ? 'text-amber-700'
+                            : 'text-slate-500'
+                        }`}
+                      >
+                        {isShipmentLinkExpiredClient(selectedHistoryShipment)
+                          ? 'Link expirado — o fornecedor não consegue aceder até renovar.'
+                          : `Validade do link até ${formatDateTime(
+                              getShipmentLinkExpiry(selectedHistoryShipment)
+                            )}`}
+                      </p>
+                    )}
+                  <div className="flex flex-wrap gap-3 w-full">
                   {selectedHistoryShipment.status !== 'finalizado' && (
                     <>
                       <a
@@ -956,6 +1041,21 @@ export default function ShipmentsPage() {
                       >
                         <FiCopy size={18} /> Copiar Link
                       </button>
+                      {canUserRenewLink &&
+                        canRenewSupplierLink(selectedHistoryShipment) && (
+                          <button
+                            type="button"
+                            onClick={handleRenewSupplierLink}
+                            disabled={renewingLink}
+                            className="flex-1 xl:flex-none flex items-center justify-center gap-2 bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-60 disabled:pointer-events-none px-5 py-3 rounded-xl shadow-md font-bold text-sm transition-transform active:scale-95 cursor-pointer"
+                          >
+                            <FiRefreshCw
+                              size={18}
+                              className={renewingLink ? 'animate-spin' : ''}
+                            />
+                            {renewingLink ? 'A renovar…' : 'Renovar link'}
+                          </button>
+                        )}
                     </>
                   )}
                   {selectedHistoryShipment.status ===
@@ -967,6 +1067,7 @@ export default function ShipmentsPage() {
                       <FiCheckSquare size={20} /> Iniciar Conferência
                     </a>
                   )}
+                  </div>
                 </div>
               </div>
 

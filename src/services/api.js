@@ -1,9 +1,12 @@
 // src/services/api.js
 import axios from 'axios';
 
-// 1. Definição da URL Base
+// URL base: em `vite` dev usa localhost se não houver .env (evita 404 na API de produção sem a rota nova)
 const apiUrl =
-  import.meta.env.VITE_API_URL || 'https://api.parari.medlogs.com.br/api';
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.DEV
+    ? 'http://localhost:5000/api'
+    : 'https://api.parari.medlogs.com.br/api');
 
 const api = axios.create({
   baseURL: apiUrl,
@@ -105,6 +108,8 @@ export const shipmentService = {
   removeItem: (itemId) => api.delete(`/shipments/items/${itemId}`),
   close: (data) => api.put('/shipments/close', data),
   cancel: (data) => api.delete('/shipments/cancel', { data }),
+  renewLink: (shipmentId) =>
+    api.post('/shipments/renew-link', { shipmentId }),
 };
 
 export default api;
