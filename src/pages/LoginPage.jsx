@@ -43,8 +43,32 @@ export default function LoginPage({ onLogin }) {
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotStatus, setForgotStatus] = useState({ type: '', message: '' });
-
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+  const handleForgotPassword = async (e) => {
+  e.preventDefault();
+  setForgotLoading(true);
+  setForgotStatus({ type: '', message: '' });
+
+  try {
+    await requestPasswordReset(forgotEmail);
+    setForgotStatus({
+      type: 'success',
+      message: 'As instruções para redefinição de senha foram enviadas para o seu e-mail.',
+    });
+    toast.success('E-mail de recuperação enviado!');
+  } catch (error) {
+    console.error('Erro na recuperação de senha:', error);
+    setForgotStatus({
+      type: 'error',
+      message:
+        error.response?.data?.message ||
+        'Não foi possível enviar o e-mail. Verifique se o endereço está correto.',
+    });
+  } finally {
+    setForgotLoading(false);
+  }
+};
 
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -416,7 +440,9 @@ export default function LoginPage({ onLogin }) {
         </div>
       </div>
 
-      {/* ========================================== */}
+      
+      {/* MODAL: ESQUECI A SENHA (REFINADO) */}
+     {/* ========================================== */}
       {/* MODAL: ESQUECI A SENHA (REFINADO) */}
       {/* ========================================== */}
       {isForgotOpen && (
@@ -451,6 +477,18 @@ export default function LoginPage({ onLogin }) {
                 <div className="bg-emerald-50 text-emerald-800 p-6 rounded-2xl flex flex-col items-center text-center gap-3 border border-emerald-100 animate-in fade-in slide-in-from-bottom-2">
                   <FiCheckCircle size={36} className="text-emerald-500" />
                   <p className="font-bold">{forgotStatus.message}</p>
+                  
+                  {/* --- BOTÃO DE VOLTAR ADICIONADO AQUI --- */}
+                  <button
+                    onClick={() => {
+                      setIsForgotOpen(false);
+                      setForgotEmail('');
+                      setForgotStatus({ type: '', message: '' });
+                    }}
+                    className="mt-4 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl transition-all"
+                  >
+                    Voltar ao Login
+                  </button>
                 </div>
               ) : (
                 <form onSubmit={handleForgotSubmit} className="space-y-5">

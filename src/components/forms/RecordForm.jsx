@@ -5,6 +5,7 @@ import { icons } from '../../utils/icons';
 import { ClipLoader } from 'react-spinners';
 import api from '../../services/api';
 import { addToSyncQueue } from '../../services/offlineStorage';
+import { getQuantityMultiplier, adaptRecordMedications } from '../../utils/recordAdapters';
 
 const quantityOptions = [
   '1cx (30cp)',
@@ -28,12 +29,7 @@ const quantityOptions = [
   '1tb',
 ];
 
-// Função auxiliar segura
-const getQuantityMultiplier = (quantityString) => {
-  if (!quantityString) return 1;
-  const match = String(quantityString).match(/^(\d+)/);
-  return match ? parseFloat(match[0]) : 1;
-};
+
 
 export default function RecordForm({
   patient,
@@ -48,16 +44,19 @@ export default function RecordForm({
   onNewMedication,
   addToast,
 }) {
-  const user = JSON.parse(localStorage.getItem('user'));
+  const [user] = useState(() => {
+    const storedUser = localStorage.getItem('user');
+    return storedUser ? JSON.parse(storedUser) : null;
+  });
   const [localPatient, setLocalPatient] = useState(patient || null);
   const [referenceDate, setReferenceDate] = useState('');
   const [observation, setObservation] = useState('');
-  const [fornecedor, setFornecedor] = useState(''); 
+  const [fornecedor, setFornecedor] = useState('');
 
   const [medications, setMedications] = useState([
     {
       medicationId: '',
-      savedName: '', // Novo campo para backup visual
+      savedName: '',
       quantity: quantityOptions[0],
       unitValue: '',
       value: '',
@@ -109,7 +108,7 @@ export default function RecordForm({
     fetchDistributors();
   }, []);
 
-  useEffect(() => {
+useEffect(() => {
     const today = getLocalDateString();
 
     if (record) {
@@ -124,48 +123,7 @@ export default function RecordForm({
       setLocalPatient(patient || null);
       setFarmaciaOrigin(record.farmacia || record.pharmacy || '');
 
-      const existingMeds =
-        record.medications?.map((m, i) => {
-          // --- CORREÇÃO 1: Normalização da Quantidade (Evita erro .trim()) ---
-          let rawQty = m.quantity;
-          if (typeof rawQty === 'number') rawQty = String(rawQty);
-          // Adiciona unidade se vier apenas número puro (opcional, melhora visual)
-          if (rawQty && !isNaN(rawQty) && m.unit) rawQty = `${rawQty} ${m.unit}`;
-          
-          const qty = rawQty && rawQty.trim() !== '' ? rawQty : quantityOptions[0];
-
-          // --- CORREÇÃO 2: Extração do ID e Nome (Resolve "Desconhecido") ---
-          let realId = '';
-          let realName = '';
-
-          // Se medicationId for um objeto (populado pelo backend), extraímos o _id e o nome
-          if (m.medicationId && typeof m.medicationId === 'object') {
-             realId = m.medicationId._id || m.medicationId.id;
-             realName = m.medicationId.name;
-          } else {
-             realId = m.medicationId; // É apenas a string ID
-          }
-
-          // Se não veio nome do populate, tentamos pegar o nome gravado no item (do nosso fix anterior)
-          if (!realName && m.name) realName = m.name;
-          // -------------------------------------------------------------------
-
-          const multiplier = getQuantityMultiplier(qty);
-          const totalVal = parseFloat(m.value) || 0;
-          const calculatedUnit =
-            multiplier > 0 && totalVal > 0
-              ? (totalVal / multiplier).toFixed(2)
-              : '';
-
-          return {
-            medicationId: realId || '',
-            savedName: realName || '', // Guardamos o nome para usar se o ID não for achado na lista
-            quantity: qty,
-            unitValue: calculatedUnit,
-            value: m.value || '',
-            tempId: m.recordMedId || m.id || `edit-${i}`,
-          };
-        }) || [];
+      const existingMeds = adaptRecordMedications(record.medications, quantityOptions[0]);
 
       setMedications(
         existingMeds.length > 0
@@ -286,12 +244,13 @@ export default function RecordForm({
     const currentMed = newMeds[index];
 
     if (field === 'medicationId') {
-        currentMed.medicationId = newValue;
-        // Atualiza o nome salvo também se encontrar na lista
-        const selected = medicationsList.find(m => (m._id || m.id) === newValue);
-        if (selected) currentMed.savedName = selected.name;
-    }
-    else if (field === 'quantity') {
+      currentMed.medicationId = newValue;
+      // Atualiza o nome salvo também se encontrar na lista
+      const selected = medicationsList.find(
+        (m) => (m._id || m.id) === newValue
+      );
+      if (selected) currentMed.savedName = selected.name;
+    } else if (field === 'quantity') {
       currentMed.quantity = newValue;
       const multiplier = getQuantityMultiplier(newValue);
       const uVal = parseFloat(currentMed.unitValue) || 0;
@@ -340,7 +299,11 @@ export default function RecordForm({
     const payload = {
       patientId: localPatient._id || localPatient.id,
       patientName: localPatient.name,
-      profissionalId: user?.id || user?._id || localStorage.getItem('userId') || 'offline-user',
+      profissionalId:
+        user?.id ||
+        user?._id ||
+        localStorage.getItem('userId') ||
+        'offline-user',
       profissionalName: user?.name || 'Profissional',
       farmacia: farmaciaOrigin,
       fornecedor: fornecedor,
@@ -349,7 +312,10 @@ export default function RecordForm({
       medications: validMeds.map((m) => ({
         medicationId: m.medicationId,
         // Envia o nome também para garantir consistência futura
-        name: m.savedName || medicationsList.find(ml => (ml._id || ml.id) === m.medicationId)?.name,
+        name:
+          m.savedName ||
+          medicationsList.find((ml) => (ml._id || ml.id) === m.medicationId)
+            ?.name,
         quantity: m.quantity,
         value: parseFloat(m.value) || 0,
       })),
@@ -586,7 +552,9 @@ export default function RecordForm({
                           {med.medicationId
                             ? medicationsList.find(
                                 (m) => (m._id || m.id) === med.medicationId
-                              )?.name || med.savedName || 'Desconhecido'
+                              )?.name ||
+                              med.savedName ||
+                              'Desconhecido'
                             : 'Selecione o medicamento...'}
                         </span>
                         <span className="text-gray-400 text-xs ml-2">▼</span>

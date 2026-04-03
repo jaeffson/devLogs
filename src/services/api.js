@@ -1,7 +1,5 @@
 // src/services/api.js
 import axios from 'axios';
-
-// URL base: em `vite` dev usa localhost se não houver .env (evita 404 na API de produção sem a rota nova)
 const apiUrl =
   import.meta.env.VITE_API_URL ||
   (import.meta.env.DEV
@@ -17,27 +15,18 @@ const api = axios.create({
 
 api.interceptors.request.use(
   (config) => {
-    let token = null;
-
-    // 1. Tenta pegar token solto
-    const rawToken = localStorage.getItem('token');
-    
-    // 2. Tenta pegar objeto de usuário
-    const storedUser = localStorage.getItem('user');
-
-    // LÓGICA DE EXTRAÇÃO 
-    if (rawToken) {
-      token = rawToken;
-    } else if (storedUser) {
-      try {
-        const parsedUser = JSON.parse(storedUser);
-        token = parsedUser.token || parsedUser.accessToken || parsedUser;
-      } catch (error) {
-        console.error('Erro ao ler JSON do usuário:', error);
+    let token = localStorage.getItem('token');
+    if (!token) {
+      const storedUser = localStorage.getItem('user');
+      if (storedUser) {
+        try {
+          const parsedUser = JSON.parse(storedUser);
+          token = parsedUser.token || parsedUser.accessToken || parsedUser;
+        } catch (error) {
+          console.error('Erro ao ler JSON do utilizador:', error);
+        }
       }
     }
-
-
 
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -45,17 +34,13 @@ api.interceptors.request.use(
 
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
-
 
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
-
       localStorage.removeItem('user');
       localStorage.removeItem('token');
 
@@ -108,8 +93,7 @@ export const shipmentService = {
   removeItem: (itemId) => api.delete(`/shipments/items/${itemId}`),
   close: (data) => api.put('/shipments/close', data),
   cancel: (data) => api.delete('/shipments/cancel', { data }),
-  renewLink: (shipmentId) =>
-    api.post('/shipments/renew-link', { shipmentId }),
+  renewLink: (shipmentId) => api.post('/shipments/renew-link', { shipmentId }),
 };
 
 export default api;

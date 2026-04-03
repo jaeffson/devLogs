@@ -24,6 +24,8 @@ export default function ShipmentConferencePage({ onGlobalUpdate }) {
   const [activeTab, setActiveTab] = useState('incoming');
   const [shipments, setShipments] = useState([]);
   const [loading, setLoading] = useState(true);
+  // 👤 Captura o utilizador logado para controlar permissões
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
 
   const [searchTerm, setSearchTerm] = useState('');
   const [patientSearchTerm, setPatientSearchTerm] = useState('');
@@ -141,7 +143,56 @@ export default function ShipmentConferencePage({ onGlobalUpdate }) {
       setLoading(false);
     }
   };
+  // ⚡ FUNÇÃO ADMIN: Força a finalização da remessa (Exceção de 7 dias)
+  const handleForceFinishAdmin = async (shipmentId) => {
+    const shipment = shipments.find(s => s._id === shipmentId);
+    if (!shipment) return;
 
+    setConfirmation({
+      isOpen: true,
+      title: 'Forçar Encerramento (Admin)',
+      message: 'Atenção: Você está encerrando esta remessa manualmente. Os itens que não foram conferidos constarão como não recebidos. Deseja continuar?',
+      confirmText: 'Sim, Forçar Encerramento',
+      isDestructive: false,
+      onConfirm: async () => {
+        setConfirmation({ isOpen: false });
+        const loadingToast = toast.loading('Encerrando remessa à força...');
+        
+        try {
+          
+          const payloadItems = shipment.items.map((item) => ({
+            _id: item._id,
+            patientName: item.patientName,
+            medications: item.medications.map((med) => {
+              const isPendente = !med.unitPrice || parseFloat(med.unitPrice) === 0;
+              const isFalta = med.unitPrice === -1 || med.status?.toLowerCase() === 'falta';
+              
+              if (isPendente || isFalta) {
+                return { ...med, receivedQuantity: 0, status: 'falta' };
+              }
+              return med; 
+            }),
+          }));
+
+    
+
+          await api.put(`/shipments/${shipmentId}/receive`, { 
+            items: payloadItems,
+            forceClose: true 
+          });
+          
+          toast.success('Remessa finalizada com sucesso!', { id: loadingToast });
+          
+          fetchShipments(); // Atualiza a tela
+          if (typeof onGlobalUpdate === 'function') onGlobalUpdate();
+          
+        } catch (error) {
+          console.error('Erro ao forçar finalização:', error);
+          toast.error('Erro ao finalizar remessa.', { id: loadingToast });
+        }
+      }
+    });
+  };
   const handleExpand = (shipmentId) => {
     if (expandedId === shipmentId) {
       setExpandedId(null);
@@ -565,14 +616,31 @@ export default function ShipmentConferencePage({ onGlobalUpdate }) {
                                 : 'Ocultar Conferidos'}
                             </button>
                           )}
+                          {/* Botão de Imprimir Existente */}
                           <button
-                            onClick={() =>
-                              generateShipmentPDF(shipment, 'conference')
-                            }
-                            className="bg-slate-800 text-white hover:bg-slate-900 px-5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors shadow-sm cursor-pointer active:scale-95"
+                            onClick={() => generateShipmentPDF(shipment)}
+                            className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl font-bold text-sm transition-colors cursor-pointer"
                           >
-                            <FiPrinter size={16} /> Imprimir Relatório
+                            <FiPrinter size={16} />
+                            <span className="hidden sm:inline">Imprimir</span>
                           </button>
+
+                          {/* 🛡️ NOVO BOTÃO: Forçar Finalização (Apenas Admin) */}
+                          {activeTab === 'incoming' &&
+                            currentUser?.role === 'admin' && (
+                              <button
+                                onClick={() =>
+                                  handleForceFinishAdmin(shipment._id)
+                                }
+                                className="flex items-center gap-2 px-4 py-2 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-xl font-bold text-sm transition-colors cursor-pointer border border-rose-100 ml-auto"
+                                title="Encerra a remessa à força se o prazo acabar"
+                              >
+                                <FiCheckCircle size={16} />
+                                <span className="hidden sm:inline">
+                                  Forçar Finalização (Admin)
+                                </span>
+                              </button>
+                            )}
                         </div>
                       </div>
                     )}
