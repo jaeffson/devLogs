@@ -1,7 +1,9 @@
 // src/pages/ResetPasswordPage.jsx
-import React, { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import api from '../services/api';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+// IMPORTANTE: Certifique-se de que a função `resetPassword` existe no seu api.js. 
+// Se ela se chamar de outra forma, ajuste a importação.
+import api from '../services/api'; 
 import {
   FiLock,
   FiCheckCircle,
@@ -37,32 +39,46 @@ const Icons = {
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      <polyline points="20 6 9 17 4 12" />
+      <path d="M20 6L9 17l-5-5" />
     </svg>
   ),
 };
 
 export default function ResetPasswordPage() {
-  const { token } = useParams();
   const navigate = useNavigate();
+  // 1. EXTRAI O TOKEN DA URL (ex: ?token=12345)
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get('token');
 
-  const [newPassword, setNewPassword] = useState('');
+  const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  
+  // Status: 'idle' | 'loading' | 'success' | 'error'
   const [status, setStatus] = useState('idle');
   const [errorMessage, setErrorMessage] = useState('');
 
+  // 2. VERIFICA SE O TOKEN EXISTE AO ABRIR A PÁGINA
+  useEffect(() => {
+    if (!token) {
+      setStatus('error');
+      setErrorMessage('Link de redefinição inválido ou expirado. Por favor, solicite um novo e-mail.');
+    }
+  }, [token]);
+
+  // 3. FUNÇÃO DE ENVIO
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    // 1. Validações Básicas
-    if (newPassword.length < 6) {
-      setErrorMessage('A senha deve ter no mínimo 6 caracteres.');
+    
+    // Validação básica
+    if (password !== confirmPassword) {
       setStatus('error');
+      setErrorMessage('As senhas não coincidem.');
       return;
     }
-    if (newPassword !== confirmPassword) {
-      setErrorMessage('As senhas não coincidem.');
+
+    if (password.length < 6) {
       setStatus('error');
+      setErrorMessage('A senha deve ter pelo menos 6 caracteres.');
       return;
     }
 
@@ -70,148 +86,140 @@ export default function ResetPasswordPage() {
     setErrorMessage('');
 
     try {
-      // 2. Envia para o Backend
+  
       await api.post('/auth/reset-password', {
-        token,
-        newPassword,
+        token: token,
+        newPassword: password
       });
 
       setStatus('success');
-
+      
       // Redireciona para o login após 3 segundos
       setTimeout(() => {
         navigate('/login');
       }, 3000);
+      
     } catch (error) {
-      console.error('Erro detalhado:', error); // Veja isso no console!
-
-      // Tenta pegar a mensagem específica enviada pelo backend
-      const msg =
-        error.response?.data?.message ||
-        'Erro ao redefinir senha. O link pode ter expirado.';
-
-      setErrorMessage(msg);
+      console.error('Erro ao redefinir a senha:', error);
       setStatus('error');
+      setErrorMessage(
+        error.response?.data?.message || 
+        'Ocorreu um erro ao redefinir a senha. O link pode ter expirado.'
+      );
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gray-100 font-sans relative overflow-hidden">
-      {/* Background Decorativo */}
-      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] bg-blue-100/40 rounded-full blur-[120px]"></div>
-      </div>
-
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden relative z-10 p-8 md:p-10 animate-fade-in-up">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-600 ring-4 ring-blue-50/50">
-            {status === 'success' ? <Icons.Check /> : <Icons.Key />}
-          </div>
-          <h2 className="text-2xl font-bold text-slate-800">Nova Senha</h2>
-          <p className="text-slate-500 mt-2 text-sm">
-            Crie uma senha forte para proteger sua conta.
-          </p>
-        </div>
-
-        {/* Status de Sucesso */}
-        {status === 'success' ? (
-          <div className="bg-green-50 border border-green-100 rounded-xl p-6 text-center animate-fade-in">
-            <FiCheckCircle size={40} className="text-green-500 mx-auto mb-3" />
-            <h3 className="text-lg font-bold text-green-800 mb-1">
-              Senha Alterada!
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100">
+        <div className="p-8">
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-5 text-blue-600 shadow-sm border border-blue-100">
+              <Icons.Key />
+            </div>
+            <h3 className="text-2xl font-black text-slate-900 tracking-tight">
+              Nova Senha
             </h3>
-            <p className="text-green-700 text-sm mb-4">
-              Sua senha foi atualizada com sucesso. Você será redirecionado para
-              o login.
+            <p className="text-slate-500 mt-2 text-sm font-medium">
+              Crie uma nova senha forte para acessar a sua conta Medlogs.
             </p>
-            <button
-              onClick={() => navigate('/login')}
-              className="text-green-700 font-bold hover:underline text-sm cursor-pointer"
-            >
-              Ir para Login agora
-            </button>
           </div>
-        ) : (
-          /* Formulário */
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Mensagem de Erro (Aparece aqui o motivo do 400) */}
-            {status === 'error' && (
-              <div className="p-3 bg-red-50 border-l-4 border-red-500 text-red-700 text-sm rounded flex items-center gap-2 animate-fade-in">
-                <FiAlertCircle className="shrink-0" />
-                <span>{errorMessage}</span>
+
+          {/* TELA DE SUCESSO */}
+          {status === 'success' ? (
+            <div className="bg-emerald-50 text-emerald-800 p-6 rounded-2xl flex flex-col items-center text-center gap-3 border border-emerald-100 animate-in fade-in slide-in-from-bottom-2">
+              <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 mb-2">
+                <FiCheckCircle size={24} />
               </div>
-            )}
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">
-                Nova Senha
-              </label>
-              <div className="relative group">
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors">
-                  <FiLock />
-                </div>
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none text-gray-800 placeholder:text-gray-400"
-                  placeholder="••••••••"
-                  required
-                  autoComplete="new-password" // <-- CORREÇÃO DO AVISO DOM
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">
-                Confirmar Senha
-              </label>
-              <div className="relative group">
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors">
-                  <FiLock />
-                </div>
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none text-gray-800 placeholder:text-gray-400"
-                  placeholder="••••••••"
-                  required
-                  autoComplete="new-password" // <-- CORREÇÃO DO AVISO DOM
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={status === 'loading'}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-blue-600/20 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer mt-4"
-            >
-              {status === 'loading' ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  <span>Salvando...</span>
-                </>
-              ) : (
-                <>
-                  <span>Redefinir Senha</span>
-                  <FiArrowRight />
-                </>
-              )}
-            </button>
-
-            <div className="text-center mt-4">
+              <h4 className="font-bold text-lg">Senha Redefinida!</h4>
+              <p className="text-sm">Sua senha foi alterada com sucesso. Redirecionando para o login...</p>
               <button
-                type="button"
                 onClick={() => navigate('/login')}
-                className="text-sm text-slate-400 hover:text-blue-600 transition-colors cursor-pointer"
+                className="mt-4 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl transition-all"
               >
-                Cancelar e voltar
+                Ir para o Login Agora
               </button>
             </div>
-          </form>
-        )}
+          ) : (
+            /* FORMULÁRIO DE NOVA SENHA */
+            <form onSubmit={handleSubmit} className="space-y-5">
+              
+              {/* MENSAGEM DE ERRO */}
+              {status === 'error' && (
+                <div className="text-red-700 text-sm font-bold bg-red-50 p-3.5 rounded-xl flex items-start gap-2 border border-red-100 animate-in fade-in">
+                  <FiAlertCircle className="mt-0.5 shrink-0" size={16} /> 
+                  <p>{errorMessage}</p>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Nova Senha
+                  </label>
+                  <div className="relative group">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-blue-600 transition-colors">
+                      <FiLock size={18} />
+                    </div>
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="block w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium text-slate-900 focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none"
+                      placeholder="••••••••"
+                      required
+                      disabled={status === 'loading' || !token}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Confirmar Nova Senha
+                  </label>
+                  <div className="relative group">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-blue-600 transition-colors">
+                      <Icons.Check />
+                    </div>
+                    <input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="block w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium text-slate-900 focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none"
+                      placeholder="••••••••"
+                      required
+                      disabled={status === 'loading' || !token}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={status === 'loading' || !token}
+                className="group w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-2xl transition-all shadow-xl shadow-blue-200 hover:shadow-blue-300 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer text-sm mt-6"
+              >
+                {status === 'loading' ? (
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <>
+                    Redefinir Senha <FiArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                  </>
+                )}
+              </button>
+            </form>
+          )}
+
+          <div className="text-center mt-6">
+            <button
+              type="button"
+              onClick={() => navigate('/login')}
+              className="text-sm font-semibold text-slate-400 hover:text-blue-600 transition-colors cursor-pointer"
+            >
+              Cancelar e voltar ao Login
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
